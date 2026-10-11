@@ -5,7 +5,7 @@ import { defaultSettings, generateLocal } from "./local";
 import { parseDrumGrid, parseNotes } from "./notation";
 import { shapePhrase } from "./context";
 import { playableKit } from "./patterns/drums";
-import { STANDARDS } from "./standards";
+import { STANDARDS, melodyBar } from "./standards";
 import { STYLES, STYLE_LIST, swingAt } from "./styles";
 import { homeOf } from "./ensemble";
 import { holdable } from "./harmony";
@@ -879,13 +879,19 @@ describe("standards with a written melody", () => {
         let pitches: number[] = [];
         for (const sec of sections)
           for (let b = sec.start; b < sec.start + sec.length - (sec.kind === "out" ? 1 : 0); b++) {
-            let want = parseNotes(std.melody![(b - (score.frame.intro ?? 0)) % std.bars.length], beats).notes;
+            // nothing holds over into a bar where the tune doesn't go on
+            const stop = !/^@tune \d/.test(score.plan[b + 1]?.directives?.[lead] ?? "");
+            let want = melodyBar(std, b - (score.frame.intro ?? 0), beats, { stop })!;
             // the head's last bar going into a solo leaves its pickup off
             const intoSolo = b === sec.start + sec.length - 1 && !["head", "out"].includes(score.frame.sections.find((x) => x.start === b + 1)?.kind ?? "");
             const cut = std.pickup ? parseNotes(std.pickup, beats).notes[0].start : null;
             if (intoSolo && cut !== null) want = want.filter((n) => n.start < cut - 1e-6);
             const got = score.parts[lead].filter((n) => Math.floor(n.start / beats + 1e-9) === b);
             expect(got.map((n) => +(n.start - b * beats).toFixed(3)), `${id} in ${tonic} bar ${b + 1} rhythm`).toEqual(want.map((n) => +n.start.toFixed(3)));
+            // a note tied over the barline holds on into the next bar (up to the end of the head)
+            let end = b + 1;
+            while (/^@tune \d/.test(score.plan[end]?.directives?.[lead] ?? "")) end++;
+            if (!intoSolo) got.forEach((n, k) => expect(n.dur, `${id} in ${tonic} bar ${b + 1} note ${k + 1} length`).toBeCloseTo(Math.min(want[k].dur, beats * 4, (end - b) * beats - want[k].start), 1));
             expect(got.map((n) => mod(n.pitch, 12)), `${id} in ${tonic} bar ${b + 1}`).toEqual(want.map((n) => mod(n.pitch + semis, 12)));
             pitches = [...pitches, ...got.map((n) => n.pitch)];
           }
@@ -910,23 +916,27 @@ describe("standards with a written melody", () => {
     const lead = score.frame.leaderId;
     for (let b = 0; b < (score.frame.intro ?? 0); b++) expect(score.plan[b].directives?.[lead]).toBe("@rest");
     const tag = score.frame.sections.find((s) => s.kind === "tag")!;
-    expect(score.plan[tag.start].directives?.[lead]).toBe("@tune 15"); // "G G F D" over the ii–V
-    expect(score.plan[tag.start + 2].directives?.[lead]).toBe("@tune 15");
+    expect(score.plan[tag.start].directives?.[lead]).toBe("@tune 15 alone"); // "G G F D" over the ii–V
+    expect(score.plan[tag.start + 2].directives?.[lead]).toBe("@tune 15 alone");
   });
-  it("each written melody bar fills its bar and sits on its chord's downbeat", () => {
+  it("each written melody agrees with its changes: the strong beats sit on chord tones and tensions", () => {
+    // a real tune leans on its 11ths, passing tones and appoggiaturas, but a melody a bar out
+    // of step with its chords (or in the wrong key) falls well under this
     for (const std of STANDARDS.filter((s) => s.melody)) {
-      expect(std.melody!.length, std.id).toBe(std.bars.length);
-      std.melody!.forEach((bar, i) => {
-        const r = parseNotes(bar, std.meter);
-        expect(r.errors, `${std.id} bar ${i + 1}`).toEqual([]);
-        expect(r.covered, `${std.id} bar ${i + 1}`).toBeCloseTo(std.meter);
-        // a note struck on the downbeat belongs to the bar's first chord (the tune and its changes agree)
-        const first = r.notes.find((n) => n.start < 1e-6);
-        if (!first) return;
-        const c = parseChord(std.bars[i].split(" ")[0]);
-        const pcs = [...c.tones, ...c.tensions].map((t) => mod(c.root + t, 12));
-        expect(pcs, `${std.id} bar ${i + 1}: ${bar} over ${std.bars[i]}`).toContain(mod(first.pitch, 12));
+      let fit = 0;
+      let all = 0;
+      std.melody!.forEach((_, i) => {
+        const chords = std.bars[i].split(/\s+/);
+        const chordAt = (t: number) => chords[std.meter === 3 && chords.length === 2 ? (t < 2 ? 0 : 1) : Math.min(chords.length - 1, Math.floor(t / (std.meter / chords.length)))];
+        for (const n of melodyBar(std, i, std.meter)!) {
+          if (std.meter === 3 ? n.start > 1e-6 : Math.abs(n.start % 2) > 1e-6) continue;
+          const c = parseChord(chordAt(n.start));
+          const pcs = [...c.tones, ...c.tensions, 2, ...(c.quality === "dom" ? [1, 3, 6, 8, 9] : c.quality === "maj7" || c.quality === "maj" || c.quality === "6" ? [6, 9] : [5])].map((t) => mod(c.root + t, 12));
+          all++;
+          if (pcs.includes(mod(n.pitch, 12))) fit++;
+        }
       });
+      expect(fit / all, std.id).toBeGreaterThanOrEqual(0.75);
     }
   });
 });

@@ -305,7 +305,8 @@ export function planLocal(frame: Frame, members: Member[], motif: Motif, rng: Rn
  * - sits out the intro, and plays the song's pickup ("Oh when the…") at the end of the bar
  *   before each head, whether that's the intro or the last bar of the solos;
  * - leaves the pickup off the head's last bar when a solo comes next, not the head again;
- * - on a tag, sings the song's own cadence bar over each ii–V, with short fills between.
+ * - on a tag, sings the song's own cadence bar over each ii–V, with short fills between;
+ * - holds nothing over the barline from the tune's last bar before something else.
  */
 function songLeader(frame: Frame, plan: BarPlan[], std: NonNullable<ReturnType<typeof getStandard>>): void {
   const lead = frame.leaderId;
@@ -336,6 +337,8 @@ function songLeader(frame: Frame, plan: BarPlan[], std: NonNullable<ReturnType<t
       if (bar.split(/\s+/).some((sym) => parseChord(sym).root === v && parseChord(sym).quality === "dom")) cadence = i;
     });
     if (cadence >= 0)
-      for (let b = tag.start; b < tag.start + tag.length && b < frame.bars - 1; b++) set(b, (b - tag.start) % 2 === 0 ? `@tune ${cadence + 1}` : "@line sparse");
+      for (let b = tag.start; b < tag.start + tag.length && b < frame.bars - 1; b++) set(b, (b - tag.start) % 2 === 0 ? `@tune ${cadence + 1} alone` : "@line sparse");
   }
+  const tune = (b: number) => /^@tune \d/.test(plan[b]?.directives?.[lead] ?? "");
+  for (let b = 0; b < frame.bars; b++) if (tune(b) && !tune(b + 1) && !/ (alone|stop)\b/.test(plan[b].directives![lead])) set(b, `${plan[b].directives![lead]} stop`);
 }

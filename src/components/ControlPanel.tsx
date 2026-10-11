@@ -14,10 +14,11 @@ import type { Sounds } from "@/audio/packs";
 import { keyAccess, useTroop } from "@/state/store";
 import { RoughBox, RoughButton } from "./ui/rough";
 
-/** The tune list, grouped by what you get: a song with its melody, jazz changes, pop chords, a groove. */
+/** The tune list, grouped by what you get: a standard and its head, a song, a jazz form, pop chords, a groove. */
 const TUNE_GROUPS: { label: string; has: (t: (typeof STANDARDS)[number]) => boolean }[] = [
-  { label: "Songs (the band plays the melody)", has: (t) => !!t.melody },
-  { label: "Jazz standards (the changes)", has: (t) => !t.melody && ["swing", "bossa"].includes(t.style) },
+  { label: "Jazz standards (the band plays the head)", has: (t) => !!t.melody && !t.publicDomain },
+  { label: "Songs (the band plays the melody)", has: (t) => !!t.melody && !!t.publicDomain },
+  { label: "Jazz forms (the changes)", has: (t) => !t.melody && ["swing", "bossa"].includes(t.style) },
   { label: "Pop progressions", has: (t) => !t.melody && t.style === "pop" },
   { label: "Grooves and grounds", has: (t) => !t.melody && !["swing", "bossa", "pop"].includes(t.style) },
 ];

@@ -187,11 +187,13 @@ function realizeRaw(ctx: BarCtx, text: string): DirectiveResult {
     case "tune": {
       // the standard's written melody, as written (in this key, in this player's register)
       // "@tune N": bar N; "@tune N cut": bar N without the pickup at its end (the head going
-      // into a solo); "@tune pickup": just the pickup, in the bar before the head comes in
+      // into a solo); "@tune N stop": bar N with nothing held over into the next bar (the tune stops
+      // there); "@tune N alone": bar N as written, its ties over the barlines left off (a tag going
+      // round on it); "@tune pickup": just the pickup, in the bar before the head comes in
       const std = getStandard(ctx.standard);
       const [slo, shi] = ctx.inst.solo ?? ctx.inst.sweet;
       const which = args[0] === "pickup" ? "pickup" : parseInt(args[0] ?? "", 10) - 1;
-      let notes = std ? tuneBar(std, which, ctx.key.tonic, ctx.beats, (slo + shi) / 2, ctx.inst.range) : null;
+      let notes = std ? tuneBar(std, which, ctx.key.tonic, ctx.beats, (slo + shi) / 2, ctx.inst.range, { alone: args.includes("alone"), stop: args.includes("stop") }) : null;
       const cutAt = std && args.includes("cut") ? pickupStart(std, ctx.beats) : null;
       if (notes && cutAt !== null) notes = notes.filter((n) => n.start < cutAt - 1e-6).map((n) => ({ ...n, dur: Math.min(n.dur, cutAt - n.start) }));
       if (notes && !notes.length && which !== "pickup") return done([]);

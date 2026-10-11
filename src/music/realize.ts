@@ -305,7 +305,7 @@ export function realize(o: RealizeOptions): RealizeResult {
     // behind a soloist the band plays under them, not just less: a touch softer too
     const underSolo = (ctx.section.kind === "solo" || ctx.section.kind === "trade") && !isFeaturedRole(ctx.role);
     const mix = (ROLE_MIX[ctx.role] ?? 1) * (underSolo ? 0.88 : 1);
-    for (const n of rel) parts[m.id].push({ ...n, start: n.start + bar * beats, dur: Math.min(n.dur, beats * 2), vel: n.vel * mix });
+    for (const n of rel) parts[m.id].push({ ...n, start: n.start + bar * beats, dur: Math.min(n.dur, beats * (n.written ? 4 : 2)), vel: n.vel * mix });
     if (ctx.role === "bass") bassByBar.set(bar, rel);
     return rel;
   };

@@ -39,7 +39,7 @@ export function motifForFrame(frame: Frame, members: Member[], rng = makeRng(1))
   const inst = INSTRUMENTS[leader?.instrument ?? "trumpet"];
   const firstChord = frame.chords[0][0].symbol;
   if (std?.motif) {
-    let m = motifFromText(std.motif, frame.meter.beats, firstChord, `${std.name} (public domain head)`);
+    let m = motifFromText(std.motif, frame.meter.beats, firstChord, `${std.name} (the head)`);
     let semis = mod(pcOf(frame.key.tonic) - pcOf(std.key.tonic), 12);
     if (semis > 6) semis -= 12;
     if (semis) m = transposeMotif(m, semis, frame.key);
