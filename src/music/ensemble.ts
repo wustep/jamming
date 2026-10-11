@@ -270,6 +270,34 @@ export function ensemble(o: EnsembleInput): EnsembleFix[] {
     }
   }
 
+  // ── 5. The bass doesn't strike a half step against a note someone is holding ──
+  // A pulse jumping up the octave onto the piano's held 7th (E3 against D#3 under Emaj7): the same
+  // note an octave away keeps the line's harmony and loses the rub.
+  for (const m of members) {
+    const inst = INSTRUMENTS[m.instrument];
+    if (inst.fn === "rhythm") continue;
+    for (const n of parts[m.id] ?? []) {
+      const bar = barOf(n.start);
+      if (!bars.has(bar) || plan[bar]?.roles[m.id] !== "bass" || n.written) continue;
+      const held: number[] = [];
+      const sounding: number[] = [];
+      for (const other of members) {
+        if (other.id === m.id || INSTRUMENTS[other.instrument].fn === "rhythm") continue;
+        for (const x of parts[other.id] ?? []) {
+          if (x.start > n.start + EPS || x.start + x.dur <= n.start + EPS) continue;
+          sounding.push(x.pitch);
+          if (x.dur >= HELD && x.start < n.start - EPS) held.push(x.pitch);
+        }
+      }
+      const rub = (ps: number[], p: number) => ps.some((h) => Math.abs(h - p) === 1 || Math.abs(h - p) === 13);
+      if (!rub(held, n.pitch)) continue;
+      const moved = [n.pitch - 12, n.pitch + 12].find((p) => p >= inst.range[0] && p <= inst.range[1] && !rub(sounding, p));
+      if (moved === undefined) continue;
+      note(bar, m.id, `${pitchName(n.pitch, flats)} rubbed against a held note; played an octave ${moved < n.pitch ? "down" : "up"}`);
+      n.pitch = moved;
+    }
+  }
+
   // tidy: a poly part may now hold the same pitch twice at one onset
   for (const m of members) {
     const ns = parts[m.id];

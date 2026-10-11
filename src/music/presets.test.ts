@@ -118,4 +118,29 @@ describe("artist presets", () => {
     expect(pairs).toBeGreaterThan(5000);
     expect(rubs / pairs, `${rubs} of ${pairs}`).toBeLessThan(0.0025);
   });
+
+  it("a minimalist's bass pulse doesn't strike a half step against a note someone is holding", () => {
+    // Elijah Fox: the cello's octave pulse used to land on E3 against the piano's held D#3 (84 in
+    // these takes). A walking or running bass keeps its passing tones; those aren't counted here.
+    for (const p of PRESETS.filter((x) => x.style === "minimal")) {
+      let rubs = 0;
+      for (const seed of [1, 2, 3, 4]) {
+        const score = takeOf(p, seed);
+        const beats = score.frame.meter.beats;
+        for (const m of score.members) {
+          for (const n of score.parts[m.id]) {
+            if (score.plan[Math.floor(n.start / beats + 1e-9)]?.roles[m.id] !== "bass" || n.written) continue;
+            for (const o of score.members) {
+              if (o.id === m.id || o.instrument === "drums") continue;
+              for (const x of score.parts[o.id]) {
+                const held = x.dur >= 0.95 && x.start < n.start - 1e-6 && x.start + x.dur > n.start + 1e-6;
+                if (held && (Math.abs(x.pitch - n.pitch) === 1 || Math.abs(x.pitch - n.pitch) === 13)) rubs++;
+              }
+            }
+          }
+        }
+      }
+      expect(rubs, p.id).toBe(0);
+    }
+  });
 });
