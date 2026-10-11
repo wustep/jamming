@@ -5,22 +5,26 @@ import { HARMONY_BOOKS } from "./harmony-books";
 import { ANIMALS, INSTRUMENTS } from "./instruments";
 import { defaultSettings, generateLocal } from "./local";
 import { FEELS } from "./playing";
-import { PRESETS } from "./presets";
+import { PRESET_GROUPS, PRESETS, searchPresets, type PresetId } from "./presets";
 import { STYLES } from "./styles";
-import { chordPcs, mod, parseChord } from "./theory";
-import type { Member, Score } from "./types";
+import { chordPcs, mod, parseChord, pcOf } from "./theory";
+import type { Member, NoteEvent, Score } from "./types";
 
 const bandOf = (p: (typeof PRESETS)[number]): Member[] => p.band.map((b) => ({ id: b.animal, animal: b.animal, name: ANIMALS[b.animal].name, instrument: b.instrument }));
 
 const takeOf = (p: (typeof PRESETS)[number], seed: number): Score => {
   const band = bandOf(p);
-  return generateLocal({ ...defaultSettings(band), style: p.style, feel: p.feel, harmony: p.harmony, preset: p.id, tempo: p.tempo, key: p.key, leaderId: band[0].id, soloists: p.soloists, seed, bars: 32 }, band).score;
+  return generateLocal({ ...defaultSettings(band), style: p.style, feel: p.feel, harmony: p.harmony, preset: p.id, tempo: p.tempo, key: p.key, meter: { beats: p.meter ?? 4 }, leaderId: band[0].id, soloists: p.soloists, seed, bars: 32 }, band).score;
 };
 
 describe("artist presets", () => {
   it("set a style, a feel, a book and sounds this build has, and a band that can play", () => {
     expect(new Set(PRESETS.map((p) => p.id)).size).toBe(PRESETS.length);
+    expect(new Set(PRESETS.map((p) => p.name)).size).toBe(PRESETS.length);
     for (const p of PRESETS) {
+      expect(PRESET_GROUPS.map((g) => g.id), p.id).toContain(p.group);
+      expect(p.tags.length, p.id).toBeGreaterThan(0);
+      expect([undefined, 3], p.id).toContain(p.meter);
       expect(STYLES[p.style], p.id).toBeTruthy();
       expect(FEELS[p.feel], p.id).toBeTruthy();
       expect(HARMONY_BOOKS[p.harmony], p.id).toBeTruthy();
@@ -43,7 +47,7 @@ describe("artist presets", () => {
   it("each plays a take in its own feel and changes, and a link to it plays the same take", () => {
     for (const p of PRESETS) {
       const band = bandOf(p);
-      const settings = { ...defaultSettings(band), style: p.style, feel: p.feel, harmony: p.harmony, preset: p.id, tempo: p.tempo, key: p.key, leaderId: band[0].id, soloists: p.soloists, seed: 11, bars: 32 };
+      const settings = { ...defaultSettings(band), style: p.style, feel: p.feel, harmony: p.harmony, preset: p.id, tempo: p.tempo, key: p.key, meter: { beats: p.meter ?? 4 }, leaderId: band[0].id, soloists: p.soloists, seed: 11, bars: 32 };
       const { score } = generateLocal(settings, band);
       expect(score.frame.feel ?? score.frame.style, p.id).toBe(p.feel === p.style ? p.style : p.feel);
       for (const m of band) expect(score.parts[m.id].length, `${p.id} ${m.instrument}`).toBeGreaterThan(0);
@@ -51,6 +55,166 @@ describe("artist presets", () => {
       expect(shared.settings).toMatchObject({ feel: p.feel, harmony: p.harmony, preset: p.id });
       expect(generateLocal({ ...defaultSettings(shared.members), ...shared.settings }, shared.members).score.parts).toEqual(score.parts);
     }
+  });
+
+
+  it("sit on every shelf of the picker, and a search finds them by name, tune or genre", () => {
+    for (const g of PRESET_GROUPS) expect(PRESETS.filter((p) => p.group === g.id).length, g.id).toBeGreaterThanOrEqual(3);
+    expect(searchPresets("").length).toBe(PRESETS.length);
+    expect(searchPresets("monk").map((p) => p.id)).toEqual(["monk"]);
+    expect(searchPresets("kind of blue").map((p) => p.id)).toEqual(["miles"]);
+    expect(searchPresets("Afrobeat").map((p) => p.id)).toEqual(["fela"]);
+    expect(searchPresets("waltz").map((p) => p.id)).toEqual(expect.arrayContaining(["evans", "hisaishi"]));
+    expect(searchPresets("nothing like this")).toEqual([]);
+  });
+
+  describe("bring their own figures, heard in the notes", () => {
+    const takes = (id: PresetId) => [1, 2, 3].map((seed) => takeOf(PRESETS.find((p) => p.id === id)!, seed));
+    const barOf = (s: Score, n: NoteEvent) => Math.floor(n.start / s.frame.meter.beats + 1e-9);
+    const posOf = (s: Score, n: NoteEvent) => Math.round((n.start - barOf(s, n) * s.frame.meter.beats) * 4) / 4;
+    /** Notes struck together, grouped by onset. */
+    const chordsOf = (notes: NoteEvent[]) => {
+      const by = new Map<number, NoteEvent[]>();
+      for (const n of notes) by.set(Math.round(n.start * 48), [...(by.get(Math.round(n.start * 48)) ?? []), n]);
+      return [...by.values()].filter((g) => g.length >= 3).map((g) => g.map((n) => n.pitch).sort((a, b) => a - b));
+    };
+    const roleIs = (s: Score, id: string, n: NoteEvent, ...roles: string[]) => roles.includes(s.plan[barOf(s, n)]?.roles[id] ?? "");
+    const share = (xs: boolean[]) => xs.filter(Boolean).length / Math.max(1, xs.length);
+
+    it("Bill Evans: rootless chords, five-note spreads when he comps, in three", () => {
+      let rootless = 0;
+      let all = 0;
+      let spreads = 0;
+      for (const s of takes("evans")) {
+        expect(s.frame.meter.beats).toBe(3);
+        const beats = s.frame.meter.beats;
+        const groups = new Map<number, NoteEvent[]>();
+        for (const n of s.parts.bear) groups.set(Math.round(n.start * 48), [...(groups.get(Math.round(n.start * 48)) ?? []), n]);
+        for (const g of groups.values()) {
+          if (g.length < 3) continue;
+          all++;
+          if (g.length >= 5) spreads++;
+          // the root is the bassist's: count the chords that leave it out
+          const t = g[0].start;
+          const bar = Math.floor(t / beats + 1e-9);
+          let sym = s.frame.chords[bar][0].symbol;
+          for (const c of s.frame.chords[bar]) if (c.beat <= t - bar * beats + 1e-6) sym = c.symbol;
+          if (!g.some((n) => mod(n.pitch, 12) === parseChord(sym).root)) rootless++;
+        }
+      }
+      expect(rootless / all, `${rootless} of ${all}`).toBeGreaterThan(0.6);
+      expect(spreads).toBeGreaterThan(20);
+    });
+
+    it("Monk: chords with a half step inside them, and whole-tone runs off the dominants", () => {
+      let crunch = 0;
+      let chords = 0;
+      let runs = 0;
+      for (const s of takes("monk")) {
+        for (const c of chordsOf(s.parts.bear)) {
+          chords++;
+          if (c.some((p, i) => i > 0 && p - c[i - 1] === 1)) crunch++;
+        }
+        for (const id of ["bear", "cat"]) {
+          const line = s.parts[id].filter((n) => roleIs(s, id, n, "lead", "solo") && n.pitch >= 55);
+          for (let i = 0; i + 3 < line.length; i++) if ([1, 2, 3].every((k) => line[i + k - 1].pitch - line[i + k].pitch === 2 && Math.abs(line[i + k].start - line[i + k - 1].start - 0.5) < 1e-6)) runs++;
+        }
+      }
+      expect(crunch / chords, `${crunch} of ${chords}`).toBeGreaterThan(0.3);
+      expect(runs).toBeGreaterThanOrEqual(5);
+    });
+
+    it("Miles: the bass riff, and the piano's two-chord answer on the and of 3 and on 4", () => {
+      for (const s of takes("miles")) {
+        const heads = s.plan.map((b, i) => (b.section.startsWith("Head") ? i : -1)).filter((i) => i >= 0);
+        expect(heads.length).toBeGreaterThan(4);
+        const answers = heads.filter((bar) => {
+          const at = (pos: number) => s.parts.bear.filter((n) => barOf(s, n) === bar && posOf(s, n) === pos).length >= 3;
+          return at(2.5) && at(3);
+        });
+        const riffs = heads.filter((bar) => s.parts.frog.filter((n) => barOf(s, n) === bar && n.start % 1 === 0.5).length >= 3);
+        expect(answers.length, s.frame.chords.map((b) => b[0].symbol).join(" ")).toBeGreaterThanOrEqual(heads.length / 2 - 1);
+        expect(riffs.length).toBeGreaterThanOrEqual(heads.length / 2 - 1);
+      }
+    });
+
+    it("son: a tumbao that skips the one and lands on 4, against a 2–3 clave", () => {
+      for (const s of takes("son")) {
+        const bars = s.plan.map((_, i) => i).filter((i) => i > 0 && s.plan[i].roles.frog === "bass" && i < s.frame.bars - 2);
+        const on = (bar: number, pos: number) => s.parts.frog.some((n) => barOf(s, n) === bar && posOf(s, n) === pos);
+        expect(share(bars.map((b) => on(b, 1.5) && on(b, 3)))).toBeGreaterThan(0.9);
+        expect(share(bars.map((b) => !on(b, 0)))).toBeGreaterThan(0.6);
+        const rim = s.parts.owl.filter((n) => n.pitch === 37);
+        const sides = new Set(s.plan.map((_, b) => rim.filter((n) => barOf(s, n) === b).length));
+        expect([...sides].filter((k) => k === 2 || k === 3).length).toBe(2);
+      }
+    });
+
+    it("Fela: the guitar chops sixteenths and the bass plays one riff all night", () => {
+      for (const s of takes("fela")) {
+        const groove = s.plan.map((_, i) => i).filter((i) => s.plan[i].roles.bear === "comp");
+        expect(share(groove.map((b) => s.parts.bear.filter((n) => barOf(s, n) === b && n.start % 0.5 !== 0).length >= 4))).toBeGreaterThan(0.8);
+        const rhythms = new Set(s.plan.map((_, b) => s.parts.frog.filter((n) => barOf(s, n) === b).map((n) => posOf(s, n)).join(",")).filter(Boolean));
+        expect(rhythms.size).toBeLessThanOrEqual(4);
+      }
+    });
+
+    it("Stevie: the clavinet plays sixteenths; Herbie: the synth-bass riff doesn't change", () => {
+      for (const s of takes("stevie")) {
+        const comp = s.parts.bear.filter((n) => roleIs(s, "bear", n, "comp"));
+        expect(share(comp.map((n) => n.start % 0.5 !== 0))).toBeGreaterThan(0.2);
+        expect(share(comp.map((n) => n.dur <= 0.25))).toBeGreaterThan(0.9);
+      }
+      for (const s of takes("herbie")) {
+        const rhythms = new Set(s.plan.map((_, b) => s.parts.frog.filter((n) => barOf(s, n) === b).map((n) => posOf(s, n)).join(",")).filter(Boolean));
+        expect(rhythms.size).toBeLessThanOrEqual(4);
+      }
+    });
+
+    it("Guaraldi's and Einaudi's left hands run in 8ths under their own tune", () => {
+      for (const id of ["guaraldi", "einaudi"] as const) {
+        for (const s of takes(id)) {
+          const lead = s.plan.map((_, i) => i).filter((i) => ["lead", "solo"].includes(s.plan[i].roles.bear) && i < s.frame.bars - 1);
+          // the left hand: everything under the tune's register, on the 8ths (Einaudi's tenth reaches E4)
+          const low = (b: number) => s.parts.bear.filter((n) => barOf(s, n) === b && n.pitch < 65 && n.start % 0.5 === 0).length;
+          expect(share(lead.map((b) => low(b) >= s.frame.meter.beats * 2 - 1)), id).toBeGreaterThan(0.8);
+        }
+      }
+    });
+
+    it("Satie and Hisaishi: a bass note on one, the chord after it, in three", () => {
+      for (const id of ["satie", "hisaishi"] as const) {
+        for (const s of takes(id)) {
+          expect(s.frame.meter.beats).toBe(3);
+          const comp = s.plan.map((_, i) => i).filter((i) => s.plan[i].roles.bear === "comp" && i < s.frame.bars - 1);
+          const ok = comp.map((b) => {
+            const ns = s.parts.bear.filter((n) => barOf(s, n) === b);
+            return ns.some((n) => posOf(s, n) === 0 && n.pitch < 52) && ns.filter((n) => posOf(s, n) === 1).length >= 3;
+          });
+          expect(share(ok), id).toBeGreaterThan(0.8);
+        }
+      }
+    });
+
+    it("Frahm: one note repeated; Sakamoto: bells in the key's pentatonic", () => {
+      for (const s of takes("frahm")) {
+        const bars = s.plan.map((_, i) => i).filter((i) => s.plan[i].roles.penguin === "comp" && i < s.frame.bars - 1);
+        const repeated = bars.map((b) => {
+          const ps = s.parts.penguin.filter((n) => barOf(s, n) === b).map((n) => n.pitch);
+          const most = Math.max(...ps.map((p) => ps.filter((q) => q === p).length));
+          return ps.length >= 6 && most >= ps.length - 2;
+        });
+        expect(share(repeated)).toBeGreaterThan(0.6);
+      }
+      for (const s of takes("sakamoto")) {
+        const t = pcOf(s.frame.key.tonic);
+        const pent = [0, 2, 4, 7, 9].map((i) => mod(t + i, 12));
+        const bells = s.parts.penguin.filter((n) => roleIs(s, "penguin", n, "comp"));
+        expect(bells.length).toBeGreaterThan(100);
+        // a few step aside for the tune (the ensemble's moves)
+        expect(share(bells.map((n) => pent.includes(mod(n.pitch, 12))))).toBeGreaterThan(0.9);
+      }
+    });
   });
 
   it("change the changes: a preset's book writes a different chart than the style's own", () => {
@@ -114,7 +278,7 @@ describe("artist presets", () => {
         }
       }
     }
-    // 18 of 17,281 are left where no free note was near (60 before legato quarters counted)
+    // 16 of 18,581 are left where no free note was near (60 before legato quarters counted)
     expect(pairs).toBeGreaterThan(5000);
     expect(rubs / pairs, `${rubs} of ${pairs}`).toBeLessThan(0.0025);
   });
@@ -173,7 +337,8 @@ describe("artist presets", () => {
         }
       }
     }
-    // 4 of 9,879 are left, Debussy's vibes where no free note was near (84 before)
+    // 6 of 20,468 are left where no free note was near: Debussy's vibes, and two of Hisaishi's
+    // waltz chords under the flute's held 11th (84 before)
     expect(chords).toBeGreaterThan(5000);
     expect(rubs, `${rubs} of ${chords}`).toBeLessThanOrEqual(6);
   });

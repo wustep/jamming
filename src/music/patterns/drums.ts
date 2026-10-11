@@ -3,6 +3,7 @@ import { ENDINGS } from "../ending";
 import { DRUM, drumPiece } from "../instruments";
 import { parseDrumGrid } from "../notation";
 import { hashString } from "../rng";
+import { sigGroove } from "./signatures";
 import type { NoteEvent } from "../types";
 
 type Grid = { base: string; light?: string; peak?: string };
@@ -291,7 +292,8 @@ export function groove(ctx: BarCtx): NoteEvent[] {
     : ctx.args.includes("peak") || ctx.texture === "peak"
       ? "peak"
       : "base";
-  let notes = parseDrumGrid(gridFor(ctx, which), ctx.beats).notes;
+  const own = ctx.feel.sig?.drums;
+  let notes = own ? sigGroove(ctx, own, which) : parseDrumGrid(gridFor(ctx, which), ctx.beats).notes;
   if (ctx.style.id === "swing") notes.push(...swingComping(ctx));
   if ((ctx.style.id === "funk" || ctx.style.id === "bossa" || ctx.style.id === "pop") && ctx.bassLine?.length) notes = lockKickToBass(notes, ctx.bassLine, ctx.beats);
 

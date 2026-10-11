@@ -9,18 +9,11 @@ import { lengthOptions } from "@/music/form";
 import { ANIMAL_LIST, ANIMALS, INSTRUMENT_LIST, INSTRUMENTS } from "@/music/instruments";
 import { STANDARDS, getStandard, searchStandards } from "@/music/standards";
 import { STYLE_LIST, STYLES } from "@/music/styles";
-import { PRESETS, getPreset, type PresetId } from "@/music/presets";
+import { PRESET_GROUPS, PRESETS, getPreset, searchPresets, type PresetId } from "@/music/presets";
 import type { AnimalId, InstrumentId, Member } from "@/music/types";
 import type { Sounds } from "@/audio/packs";
 import { keyAccess, useTroop } from "@/state/store";
 import { RoughBox, RoughButton } from "./ui/rough";
-
-/** The presets, by where they come from. */
-const PRESET_GROUPS: { label: string; ids: PresetId[] }[] = [
-  { label: "Jazz and song", ids: ["basie", "jobim", "ray", "laufey"] },
-  { label: "Piano and the concert hall", ids: ["bach", "chopin", "debussy"] },
-  { label: "Minimalism and film", ids: ["glass", "zimmer", "fox"] },
-];
 
 /** The tune list, grouped by what you get: a standard and its head, a song, a jazz form, pop chords, a groove. */
 const TUNE_GROUPS: { label: string; has: (t: (typeof STANDARDS)[number]) => boolean }[] = [
@@ -251,6 +244,86 @@ function TunePicker({ value, onChange }: { value: string | null; onChange: (id: 
   );
 }
 
+/**
+ * Play like an artist: a search over the shelves (name, tune, genre, instrument) and the list,
+ * grouped by shelf, the way the tune picker works. Picking one sets the style, the feel, the
+ * changes, the band, the tempo and the room; "nobody in particular" goes back to the style's own.
+ */
+function PresetPicker({ value, onPick, onClear }: { value: PresetId | null; onPick: (id: PresetId) => void; onClear: () => void }) {
+  const [query, setQuery] = useState("");
+  const listRef = useRef<HTMLSelectElement>(null);
+  const matches = searchPresets(query);
+  const searching = query.trim().length > 0;
+  const shown = (id: PresetId) => id === value || matches.some((p) => p.id === id);
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && searching && matches.length) {
+      e.preventDefault();
+      onPick(matches[0].id);
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      listRef.current?.focus();
+    } else if (e.key === "Escape" && query) {
+      e.preventDefault();
+      setQuery("");
+    }
+  };
+
+  return (
+    <div className="mt-xs">
+      <input
+        type="search"
+        className="sketch-input mb-xxs w-full"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder={`Play like one of ${PRESETS.length} artists: name, tune, genre…`}
+        aria-label="Search artists"
+        aria-controls="preset-list"
+        aria-describedby={searching ? "preset-search-status" : undefined}
+        autoComplete="off"
+        spellCheck={false}
+        enterKeyHint="go"
+      />
+      <select
+        id="preset-list"
+        ref={listRef}
+        className="sketch-select w-full"
+        value={value ?? ""}
+        onChange={(e) => (e.target.value ? onPick(e.target.value as PresetId) : onClear())}
+        aria-label="Play like an artist"
+      >
+        <option value="">Nobody in particular (the style as it is)</option>
+        {PRESET_GROUPS.map((g) => {
+          const here = PRESETS.filter((p) => p.group === g.id && shown(p.id));
+          return here.length ? (
+            <optgroup key={g.id} label={g.label}>
+              {here.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </optgroup>
+          ) : null;
+        })}
+      </select>
+      <div id="preset-search-status" role="status" aria-live="polite" className="mt-xxs text-s text-ink-soft">
+        {searching &&
+          (matches.length ? (
+            `${matches.length} of ${PRESETS.length} artists match · Enter picks ${matches[0].name}`
+          ) : (
+            <>
+              No artists match “{query.trim()}”.{" "}
+              <button type="button" className="text-action" onClick={() => setQuery("")}>
+                Clear search
+              </button>
+            </>
+          ))}
+      </div>
+    </div>
+  );
+}
+
 export function ControlPanel() {
   const s = useTroop((x) => x.settings);
   const members = useTroop((x) => x.members);
@@ -339,26 +412,7 @@ export function ControlPanel() {
           ))}
         </div>
         {/* an artist sets the style, the feel, the changes, the band, the tempo and the room at once */}
-        <label className="mt-xs flex items-center gap-xs text-m">
-          <span className="shrink-0 text-ink-soft">play like</span>
-          <select
-            className="sketch-select min-w-0 flex-1"
-            value={preset?.id ?? ""}
-            onChange={(e) => (e.target.value ? applyPreset(e.target.value as PresetId) : setStyle(s.style))}
-            aria-label="Play like an artist"
-          >
-            <option value="">nobody in particular</option>
-            {PRESET_GROUPS.map((g) => (
-              <optgroup key={g.label} label={g.label}>
-                {PRESETS.filter((p) => g.ids.includes(p.id)).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </label>
+        <PresetPicker value={preset?.id ?? null} onPick={applyPreset} onClear={() => setStyle(s.style)} />
       </Field>
 
       <Field>
