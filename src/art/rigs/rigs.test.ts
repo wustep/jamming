@@ -7,6 +7,7 @@ import { glitchesOf } from "../glitch";
 import { Motion } from "../motion";
 import { RIGS } from ".";
 import { rigTake } from "./take";
+import { auditTake, summarize } from "./audit";
 import { barX } from "./vibes";
 import { Bag, type Frame, type RigCtx } from "./types";
 
@@ -114,26 +115,37 @@ describe("rigs follow the notes frame by frame", () => {
     }
   });
 
-  it("no arms cross, reach too far or lie across the chest, and no paw teleports, for any instrument, soloing or comping", () => {
-    // what the art lab's "next glitch" stops on; drums crossed reaching for a hat under a crash,
-    // the bow jumped to the other end for a long note, the clarinet's lower hand reached across,
-    // the bassist's hand stretched over its head for the nut
+  it("nothing looks wrong, for any instrument, soloing or comping: arms, shakes, pops, clipping, and every note under its paw", () => {
+    // what the art lab's "next glitch" stops on (audit.ts). Found by it, and fixed: drums crossed
+    // reaching for a hat under a crash, and again when a ghost snare took the ride's arm; the bow
+    // jumped to the other end for a long note, and swung through the floor on every pizz; the
+    // clarinet's lower hand reached across; the bassist's hand stretched over its head for the
+    // nut; stick tips snapped round between drums; a keyboard paw flickered between an old key
+    // and a new one, and slid off the keyboard when it stopped mid-glide; horns and strings
+    // jolted at every breath; stopping paws, the slide and the bass shifted only after the note
     const found: string[] = [];
-    const runs: [StyleId, number | undefined][] = [
-      ["swing", undefined],
-      ["swing", STYLES.swing.tempo.max],
-      ["funk", undefined],
-      ["baroque", undefined],
-      ["ambient", STYLES.ambient.tempo.min],
+    const runs: [StyleId, number | undefined, number][] = [
+      ["swing", undefined, 3],
+      ["swing", undefined, 7],
+      ["swing", STYLES.swing.tempo.max, 3],
+      ["swing", STYLES.swing.tempo.min, 3],
+      ["funk", undefined, 3],
+      ["bossa", undefined, 3],
+      ["baroque", undefined, 3],
+      ["minimal", undefined, 3],
+      ["ambient", STYLES.ambient.tempo.min, 3],
     ];
     for (const inst of INSTRUMENT_LIST)
-      for (const [style, tempo] of runs)
+      for (const [style, tempo, seed] of runs)
         for (const solo of [false, true]) {
-          const { glitches } = perform(inst, style, 3, solo, false, tempo);
-          if (glitches.length) found.push(`${inst} ${style}${tempo ? ` ${tempo}` : ""}${solo ? " solo" : ""}: ${glitches.length} frames, ${glitches.slice(0, 3).map((g) => `${g.kinds.join("+")} @${g.beat}`).join(", ")}`);
+          const { issues, onsets } = auditTake(inst, style, { seed, solo, tempo });
+          // a mallet can miss a bar in a fast run, as the vibes test allows; nothing else may happen
+          const misses = issues.filter((i) => i.kind === "miss");
+          const shown = issues.filter((i) => i.kind !== "miss" || misses.length > onsets.length * 0.02);
+          if (shown.length) found.push(`${inst} ${style}${tempo ? ` ${tempo}` : ""} seed ${seed}${solo ? " solo" : ""}: ${summarize(shown).join(" | ")}`);
         }
     expect(found).toEqual([]);
-  }, 120_000);
+  }, 600_000);
 
   it("paws ease into and out of their moves rather than snapping to full speed", () => {
     // an exponential ease starts at full speed: a hand leapt 15–21 px in the first frame of a

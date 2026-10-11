@@ -1,7 +1,7 @@
 import { DRUM, drumPiece } from "@/music/instruments";
 import { L, S, ellipsePath, hash, mix } from "../sketch";
 import { type Pt, approach, clamp } from "../affine";
-import { type Frame, type Rig, type RigCtx, glide, hit, nextWhere, strokeLift, wobble } from "./types";
+import { type Frame, type Rig, type RigCtx, damp, glide, hit, nextWhere, strokeLift, wobble } from "./types";
 
 // A real (open-handed) kit seen from the front. Screen-left arm: hi-hat, crash, rack tom;
 // screen-right arm: ride, floor tom, snare — whichever arm is free takes the snare/tom.
@@ -221,8 +221,16 @@ export const drums: Rig = {
     // the other hand reaching across the kit for the hat (which crossed the arms).
     const crashAt = (t: number) => s.recent.some((o) => o.pitch === DRUM.crash && Math.abs(-o.age - t) < 0.025) || (s.upcoming ?? []).some((u) => u.pitch === DRUM.crash && Math.abs(u.inSec - t) < 0.025);
     const underCrash = (pitch: number, t: number) => pieceOf(pitch) === "hat" && crashAt(t);
-    for (let i = s.recent.length - 1; i >= 0; i--) {
-      const o = s.recent[i];
+    // Strokes at (nearly) the same moment go to their own arms first: the ride, hats, crash and
+    // floor tom have one arm each; the snare and rack tom take whichever is left. (A ghost snare a
+    // hair ahead of a ride stroke took the right arm, and the left reached across the kit to ride.)
+    const flex = (p: number) => {
+      const pc = pieceOf(p);
+      return pc === "snare" || pc === "tom" ? 1 : 0;
+    };
+    const together = <T extends { pitch: number }>(xs: T[], at: (x: T) => number) => [...xs].sort((a, b) => (Math.abs(at(a) - at(b)) < 0.03 ? flex(a.pitch) - flex(b.pitch) : at(a) - at(b)));
+    const recentInOrder = together([...s.recent].reverse(), (o) => -o.age);
+    for (const o of recentInOrder) {
       const piece = pieceOf(o.pitch);
       pieceAge[piece] = { age: o.age, vel: o.vel, pitch: o.pitch };
       // the kick and the pedal hi-hat are played by feet, not sticks
@@ -230,7 +238,7 @@ export const drums: Rig = {
       const arm = assign(piece, -o.age);
       last[arm] = { piece, age: o.age, vel: o.vel };
     }
-    for (const u of s.upcoming ?? (s.nextPitch !== null ? [{ pitch: s.nextPitch, inSec: s.nextOnsetIn, vel: 0.7 }] : [])) {
+    for (const u of together(s.upcoming ?? (s.nextPitch !== null ? [{ pitch: s.nextPitch, inSec: s.nextOnsetIn, vel: 0.7 }] : []), (x) => x.inSec)) {
       const piece = pieceOf(u.pitch);
       if (piece === "kick" || u.pitch === DRUM.hatPedal || underCrash(u.pitch, u.inSec)) continue;
       const arm = assign(piece, u.inSec);
@@ -256,7 +264,11 @@ export const drums: Rig = {
       glide(m, ky, rest.y, f.dt, 30000, 1400);
       const arc = Math.min(9, Math.hypot(m[kx + "V"] ?? 0, m[ky + "V"] ?? 0) * 0.012);
       const hand = { x: m[kx], y: m[ky] + target.hand.y - rest.y - arc };
-      const tip = { x: target.tip.x + (hand.x - target.hand.x), y: target.tip.y + (hand.y - target.hand.y) };
+      // the stick turns to its new drum with the wrist rather than snapping round in one frame
+      // (a long stick swung from the hat to the crash leapt its tip 80px); the stroke still lands
+      const ox = damp(m, "ox" + arm, target.tip.x - target.hand.x, f.dt, 0.035);
+      const oy = damp(m, "oy" + arm, target.tip.y - target.hand.y, f.dt, 0.035);
+      const tip = { x: hand.x + ox, y: hand.y + oy };
       c.bag.set("stick" + arm, "x1", hand.x);
       c.bag.set("stick" + arm, "y1", hand.y);
       c.bag.set("stick" + arm, "x2", tip.x);

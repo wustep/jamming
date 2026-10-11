@@ -13,14 +13,15 @@ const LO = 36;
 const HI = 96;
 const X0 = 24;
 const X1 = 216;
-const KEY_TOP = 197;
+export const KEY_TOP = 197;
 const KEY_BOT = 212;
 const BLACK_H = 9;
 const WHITE_COUNT = keyUnits(HI) - keyUnits(LO) + 1;
 const KW = (X1 - X0) / WHITE_COUNT;
 
 export function keyX(p: number): number {
-  const q = clamp(p, LO - 6, HI + 6);
+  // a note off the drawn keyboard is played at its end: reaching past it took the paw out of the picture
+  const q = clamp(p, LO, HI);
   return X0 + (keyUnits(q) - keyUnits(LO) + 0.5) * KW;
 }
 

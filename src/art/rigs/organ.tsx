@@ -14,16 +14,17 @@ const LO = 36;
 const HI = 96;
 const X0 = 26;
 const X1 = 214;
-const UPPER_TOP = 188;
-const LOWER_TOP = 202;
+export const UPPER_TOP = 188;
+export const LOWER_TOP = 202;
 const KEY_H = 10;
 const BLACK_H = 6;
 const WHITE_COUNT = keyUnits(HI) - keyUnits(LO) + 1;
 const KW = (X1 - X0) / WHITE_COUNT;
-const SPLIT = 60;
+export const ORGAN_SPLIT = 60;
+const SPLIT = ORGAN_SPLIT;
 
 export function organKeyX(p: number): number {
-  const q = clamp(p, LO - 6, HI + 6);
+  const q = clamp(p, LO, HI);
   return X0 + (keyUnits(q) - keyUnits(LO) + 0.5) * KW;
 }
 /** The manual a note is played on: the upper for the right hand, the lower for the left. */

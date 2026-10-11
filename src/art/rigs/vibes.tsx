@@ -216,7 +216,8 @@ export const vibes: Rig = {
     f.look.pedal = pedal;
     // the player walks along the bars toward where the mallets are, and leans the rest of the way
     const mid = (m.xL + m.xR) / 2 - 120;
-    f.look.shift = clamp(mid * 0.6, -26, 26);
+    // (far enough for a chord at the end of the bars: short of it, the far arm lay across the chest)
+    f.look.shift = clamp(mid * 0.7, -34, 34);
     f.look.lean = clamp(mid * 0.05, -5, 5);
     f.look.bliss = s.active.some((n) => n.durSec > 1.2 && n.progress > 0.2);
   },

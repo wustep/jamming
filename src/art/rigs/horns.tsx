@@ -88,6 +88,14 @@ function windCommon(c: RigCtx, f: Frame): Wind {
   return { blowing, pitch, lowered: m.lower, kick };
 }
 
+/**
+ * How far a horn rocks: more while it's blown, more again for the soloist, easing from one to the
+ * other. Switched at once, every breath between notes jolted the horn and both paws on it.
+ */
+function swayAmp(c: RigCtx, f: Frame, amp: number, soloLift = true): number {
+  return damp(c.mem, "swayA", amp * (soloLift && f.s.featured ? 1.6 : 1), f.dt, 0.4);
+}
+
 function keyDot(c: RigCtx, key: string, x: number, y: number, r = 3) {
   return <circle key={key} ref={c.bag.r(key)} cx={x} cy={y} r={r} fill={PEARL} stroke="#2c2a35" strokeWidth={1.1} />;
 }
@@ -190,13 +198,16 @@ export const trombone: Rig = {
     const w = windCommon(c, f);
     const m = c.mem;
     // the slide sets off for the next note as this one ends, and arrives with it
-    const next = f.s.nextOnsetIn < 0.12 && f.s.nextPitch !== null ? f.s.nextPitch : null;
+    // (but not before this note has sounded: in a fast line the next is due almost at once)
+    const heard = (f.s.active[0]?.age ?? Infinity) > 0.05;
+    const next = heard && f.s.nextOnsetIn < 0.12 && f.s.nextPitch !== null ? f.s.nextPitch : null;
     const aim = next ?? w.pitch;
     const pos = aim !== null ? tromboneSlide(aim) : m.pos ?? 1;
     if (aim !== null) m.pos = pos;
     const lw = w.lowered;
     // horn down, slide closed (locked in first, as players rest it); a shift speeds up and lands
-    glide(m, "slide", (pos - 1) * SLIDE_STEP * (1 - lw), f.dt, 9000, 700);
+    // quick enough to cross six positions in the time a fast line gives it
+    glide(m, "slide", (pos - 1) * SLIDE_STEP * (1 - lw), f.dt, 24000, 900);
     c.bag.tf("slide", `translate(${m.slide.toFixed(2)} 0)`);
     const local = chain(tr(c.mouth.x + lw * 2, c.mouth.y + lw * 30), rot(6 + lw * 40 + w.kick));
     const toWorld = placeInst(c, f, local);
@@ -242,7 +253,7 @@ export const sax: Rig = {
   update(c, f) {
     const w = windCommon(c, f);
     const lw = w.lowered;
-    const sway = Math.sin(f.t * 1.5) * (w.blowing ? 3 : 1) * (f.s.featured ? 1.6 : 1);
+    const sway = Math.sin(f.t * 1.5) * swayAmp(c, f, w.blowing ? 3 : 1);
     const local = chain(tr(c.mouth.x + lw * 6, c.mouth.y + lw * 10), rot(sway * 0.6 + lw * 10 - w.kick * 0.8));
     const toWorld = placeInst(c, f, local);
     const fg = w.pitch !== null ? woodwind(w.pitch + 14, 74) : null;
@@ -292,7 +303,7 @@ export const clarinetRig: Rig = {
   update(c, f) {
     const w = windCommon(c, f);
     const lw = w.lowered;
-    const sway = Math.sin(f.t * 1.3) * (w.blowing ? 2.5 : 0.8) * (f.s.featured ? 1.6 : 1);
+    const sway = Math.sin(f.t * 1.3) * swayAmp(c, f, w.blowing ? 2.5 : 0.8);
     // Higher notes: the bell lifts a little, like players do.
     const m = c.mem;
     const lift = w.pitch !== null ? clamp((w.pitch - 70) * 0.5, -4, 10) : 0;
@@ -347,7 +358,7 @@ export const flute: Rig = {
     const m = c.mem;
     const tilt = w.pitch !== null ? clamp((w.pitch - 78) * 0.25, -4, 5) : 0;
     m.ft = (m.ft ?? 0) + (tilt - (m.ft ?? 0)) * approach(f.dt, 0.2);
-    const sway = Math.sin(f.t * 1.2) * (w.blowing ? 2 : 0.6);
+    const sway = Math.sin(f.t * 1.2) * swayAmp(c, f, w.blowing ? 2 : 0.6, false);
     const local = chain(tr(c.mouth.x + 2, c.mouth.y + 1 + lw * 22), rot(-10 + m.ft + sway - lw * 25 - w.kick * 0.8));
     const toWorld = placeInst(c, f, local);
     const fg = w.pitch !== null ? woodwind(w.pitch, 74) : null;

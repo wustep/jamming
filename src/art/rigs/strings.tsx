@@ -14,6 +14,15 @@ const STRING = "#efe6cf";
 const HAIR = "#f6efdc";
 const BOW = "#5a3418";
 
+/** Seconds before a note the stopping hand sets off for it, so it's there when the note sounds. */
+const SHIFT_AHEAD = 0.07;
+
+/**
+ * Has the note under the stopping finger been heard long enough to leave it? In a fast run the
+ * next note is due almost at once: leaving straight away, a sixteenth was never stopped at all.
+ */
+const heardOut = (n: { age: number; durSec: number } | null) => !n || n.age > Math.min(0.04, n.durSec * 0.5);
+
 function norm(x: number, y: number): Pt {
   const l = Math.hypot(x, y) || 1;
   return { x: x / l, y: y / l };
@@ -75,8 +84,8 @@ interface BowGeo {
   bowLen: number;
   /** Where the bowing hand plucks string i (pizz), in local coords. */
   pluck: (i: number) => Pt;
-  /** World direction the tucked bow points while plucking. */
-  park: Pt;
+  /** How far (degrees) the bow turns from its bowing line while the hand plucks: negative lifts the tip. */
+  parkTurn: number;
   place: (c: RigCtx, f: Frame) => Mat;
 }
 
@@ -99,7 +108,8 @@ function bowedUpdate(geo: BowGeo, c: RigCtx, f: Frame) {
   const W = chain(f.M, local);
   const n = lead(f);
   const next = f.s.nextOnsetIn < 0.12 ? f.s.nextPitch : null;
-  const pitch = n ? n.pitch : next;
+  // the shift to the next note starts just before it, not once the last one has stopped
+  const pitch = next !== null && f.s.nextOnsetIn < SHIFT_AHEAD && heardOut(n) ? next : n ? n.pitch : next;
   const pos = pitch !== null ? stringFor(pitch, geo.open) : null;
   if (pos) {
     m.str = pos.string;
@@ -154,7 +164,9 @@ function bowedUpdate(geo: BowGeo, c: RigCtx, f: Frame) {
   const pl = geo.pluck(Math.round(m.strS));
   const pluck = ap(W, pl.x, pl.y + flick);
   const bowHand = { x: arcoFrog.x + (pluck.x - arcoFrog.x) * pz, y: arcoFrog.y + (pluck.y - arcoFrog.y) * pz };
-  const dn = norm(u.x + (geo.park.x - u.x) * pz, u.y + (geo.park.y - u.y) * pz);
+  // plucking, the bow stays in the palm pointing the way it bowed, its tip lifted off the strings:
+  // turned round to tuck it away, it swung through the floor on every switch to pizz
+  const dn = rotV(u, geo.parkTurn * pz);
   const perp = { x: dn.y, y: -dn.x };
   const frog = { x: bowHand.x - dn.x * 4 * pz, y: bowHand.y - dn.y * 4 * pz };
   const tip = { x: frog.x + dn.x * geo.bowLen, y: frog.y + dn.y * geo.bowLen };
@@ -210,10 +222,12 @@ const VIOLIN: BowGeo = {
   tilt: -16,
   bowLen: 98,
   pluck: (i) => ({ x: 0, y: 2.4 - i * 1.6 }),
-  park: norm(-0.86, 0.5),
+  parkTurn: -25,
   place: (c, f) => {
     const m = c.mem;
-    const sway = Math.sin(f.t * 1.4) * (f.s.active.length ? 2 : 0.6);
+    // it rocks more while it sings, easing between the two (switched at once, every gap between
+    // notes jolted the violin and the stopping paw with it)
+    const sway = Math.sin(f.t * 1.4) * damp(m, "swayA", f.s.active.length ? 2 : 0.6, f.dt, 0.4);
     return chain(tr(c.mouth.x + 27, c.mouth.y + 19), rot(-28 + sway + (m.strS ?? 1) * 0.8), scl(1.15));
   },
 };
@@ -272,8 +286,9 @@ const VC_TILT = 17;
 const VC_ENDPIN: Pt = { x: 110, y: 251 };
 const VC_BOW = 100;
 
-function vcPlace(f: Frame): Mat {
-  const sway = Math.sin(f.t * 1.1) * (f.s.active.length ? 1.1 : 0.35);
+function vcPlace(c: RigCtx, f: Frame): Mat {
+  // more sway while it plays, eased between (switched at once, gaps between notes jolted it)
+  const sway = Math.sin(f.t * 1.1) * damp(c.mem, "swayA", f.s.active.length ? 1.1 : 0.35, f.dt, 0.4);
   const th = VC_TILT + sway;
   const r = (th * Math.PI) / 180;
   // pivot on the endpin so swaying never lifts it off the floor
@@ -360,7 +375,7 @@ export const cello: Rig = {
   },
   update(c, f) {
     const m = c.mem;
-    const local = vcPlace(f);
+    const local = vcPlace(c, f);
     c.bag.tf("inst", attr(local));
     const W = chain(f.M, local);
     const s = f.s;
@@ -371,7 +386,8 @@ export const cello: Rig = {
     // or, just before it, the next one (a whole double-stop, both strings)
     const soon = (s.upcoming ?? (s.nextPitch !== null ? [{ pitch: s.nextPitch, inSec: s.nextOnsetIn, vel: 0.7 }] : [])).filter((u) => u.inSec < 0.12);
     const upcoming = soon.filter((u) => u.inSec - soon[0].inSec < 0.03).map((u) => u.pitch);
-    const pitches = group.length ? group.map((a) => a.pitch) : upcoming;
+    // the shift to the next note (or double-stop) starts just before it, not once the last one stops
+    const pitches = upcoming.length && soon[0].inSec < SHIFT_AHEAD && heardOut(longestOf(group)) ? upcoming : group.length ? group.map((a) => a.pitch) : upcoming;
     const stops = vcStops(pitches);
     if (stops.length) {
       m.s0 = stops[0].string;
@@ -439,11 +455,9 @@ export const cello: Rig = {
     const pluck = ap(W, VC.sx(str, py) - 3 + flick, py + flick * 0.25);
 
     const hand = { x: arcoFrog.x + (pluck.x - arcoFrog.x) * pz, y: arcoFrog.y + (pluck.y - arcoFrog.y) * pz };
-    // the bow: on the string (arco) or held in the palm pointing down-left (pizz)
-    const parkDir = { x: -0.86, y: 0.5 };
-    const dirX = u.x + (parkDir.x - u.x) * pz;
-    const dirY = u.y + (parkDir.y - u.y) * pz;
-    const dn = norm(dirX, dirY);
+    // the bow: on the string (arco), or held in the palm with its tip lifted off the strings
+    // (pizz); turned round to tuck it away, it swung through the floor on every switch
+    const dn = rotV(u, -25 * pz);
     const frog = { x: hand.x - dn.x * 4 * pz, y: hand.y - dn.y * 4 * pz };
     const tip = { x: frog.x + dn.x * VC_BOW, y: frog.y + dn.y * VC_BOW };
     const bp = { x: dn.y, y: -dn.x };
@@ -558,7 +572,8 @@ export const bass: Rig = {
     c.bag.tf("inst", attr(local));
     const W = chain(f.M, local);
     const n = lead(f);
-    const next = f.s.nextOnsetIn < 0.15 ? f.s.nextPitch : null;
+    // set off for the next note ahead of it, but only once this one has been plucked and heard
+    const next = f.s.nextOnsetIn < 0.15 && (!n || n.age > 0.05) ? f.s.nextPitch : null;
     const pitch = next ?? (n ? n.pitch : null);
     if (pitch !== null) {
       const p = stringFor(pitch, OPEN.bass);
@@ -652,7 +667,12 @@ export const guitar: Rig = {
       }
     });
     // Fretting hand: average fret of what's sounding (or about to).
-    const pitches = f.s.active.length ? f.s.active.map((a) => a.pitch) : f.s.nextOnsetIn < 0.12 && f.s.nextPitch !== null ? [f.s.nextPitch] : [];
+    const soonNext = f.s.nextOnsetIn < 0.12 && f.s.nextPitch !== null ? [f.s.nextPitch] : [];
+    // the newest notes only: one still letting go under a new one pulled the hand back for a frame
+    const newest = f.s.active.length ? Math.min(...f.s.active.map((a) => a.age)) : 0;
+    const fretted = f.s.active.filter((a) => a.age - newest < 0.03).map((a) => a.pitch);
+    const youngest = f.s.active.find((a) => a.age - newest < 0.03) ?? null;
+    const pitches = soonNext.length && f.s.nextOnsetIn < SHIFT_AHEAD && heardOut(youngest) ? soonNext : fretted.length ? fretted : soonNext;
     if (pitches.length) {
       let sum = 0;
       for (const p of pitches) sum += Math.min(stringFor(p, OPEN.guitar).semis, 12);
@@ -685,7 +705,36 @@ export const guitar: Rig = {
       const ring = f.s.active.length && Math.min(sAge, pAge) < 1.5 ? hit(Math.min(sAge, pAge), 0.3) : 0;
       c.bag.tf("str" + i, ring > 0.03 ? `translate(0 ${(Math.sin(f.t * 90 + i) * ring * 0.6).toFixed(2)})` : "");
     }
-    f.look.lean = -2 + Math.sin(f.t * 1.3) * (f.s.active.length ? 1.5 : 0.5);
+    f.look.lean = -2 + Math.sin(f.t * 1.3) * damp(m, "swayA", f.s.active.length ? 1.5 : 0.5, f.dt, 0.4);
     f.look.bliss = f.s.featured && f.s.active.some((a) => a.durSec > 0.8);
+  },
+};
+
+/**
+ * Where the stopping paw belongs for a single `pitch`, in the instrument's own coordinates (the
+ * same geometry the rigs draw with), or null on an open string, which needs no finger. The audit
+ * checks the paw is there when the note sounds.
+ */
+export const STOP_AT: Record<"violin" | "cello" | "bass" | "guitar", (pitch: number) => Pt | null> = {
+  violin: (p) => {
+    const s = stringFor(p, OPEN.violin);
+    return s.semis > 0 ? VIOLIN.stop(s.string, s.semis) : null;
+  },
+  cello: (p) => {
+    const s = stringFor(p, OPEN.cello);
+    if (s.semis <= 0) return null;
+    const y = VC.nut + (VC.bridge - VC.nut) * stopFrac(s.semis);
+    return { x: VC.sx(s.string, y) + 7, y };
+  },
+  bass: (p) => {
+    const s = stringFor(p, OPEN.bass);
+    if (s.semis <= 0) return null;
+    const y = CB.nut + (CB.bridge - CB.nut) * stopFrac(s.semis) + 7;
+    return { x: CB.sx(s.string, y) + 8, y };
+  },
+  guitar: (p) => {
+    const s = stringFor(p, OPEN.guitar);
+    if (s.semis <= 0) return null;
+    return { x: GTR_NUT - (GTR_NUT - GTR_BRIDGE) * stopFrac(Math.max(0.5, Math.min(s.semis, 12))), y: 7 };
   },
 };

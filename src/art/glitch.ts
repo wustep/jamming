@@ -68,3 +68,39 @@ export function glitchesOf(
   if (Math.max(acrossBy("L", now.L, sh), acrossBy("R", now.R, sh)) > ACROSS_PX) out.push("across");
   return out;
 }
+
+// ─── Over a few frames ───────────────────────────────────────────────────────
+
+/** Frames a shake is looked for over. */
+export const SHAKE_WINDOW = 6;
+/**
+ * A paw turning round four times within SHAKE_WINDOW frames, moving more than this a frame on
+ * average, is shaking. A string player's vibrato over a string crossing is up to about 1.8.
+ */
+export const SHAKE_PX = 2;
+/** A paw darting farther than this sideways and straight back within three frames flickers. */
+export const FLICKER_PX = 5;
+
+/**
+ * A paw shaking: back and forth again and again along `path` (one point a frame, oldest first).
+ * Only real steps (over half a pixel) turn round: a paw carried along by a slide twitches less.
+ */
+export function shake(path: Pt[]): { flips: number; mean: number } | null {
+  const v = path.slice(1).map((q, j) => ({ x: q.x - path[j].x, y: q.y - path[j].y }));
+  const real = (d: Pt) => Math.hypot(d.x, d.y) > 0.5;
+  let flips = 0;
+  for (let j = 1; j < v.length; j++) if (real(v[j]) && real(v[j - 1]) && v[j].x * v[j - 1].x + v[j].y * v[j - 1].y < 0) flips++;
+  const mean = v.reduce((a, d) => a + Math.hypot(d.x, d.y), 0) / Math.max(1, v.length);
+  return flips >= 4 && mean > SHAKE_PX ? { flips, mean } : null;
+}
+
+/**
+ * A paw darting sideways and straight back: over four frames it goes out more than FLICKER_PX and
+ * ends where it began. (A keystroke goes down and up, not sideways.) Returns how far it went.
+ */
+export function flicker(path: Pt[]): number | null {
+  if (path.length < 4) return null;
+  const x0 = path[0].x;
+  const far = Math.max(Math.abs(path[1].x - x0), Math.abs(path[2].x - x0));
+  return far > FLICKER_PX && Math.abs(path[3].x - x0) < 1.5 ? far : null;
+}

@@ -369,7 +369,8 @@ export class Motion {
   settle(look: Look, dt: number) {
     const k = approach(dt, 0.12);
     this.lean += (clamp(look.lean, -8, 8) - this.lean) * k;
-    this.shift += (clamp(look.shift ?? 0, -26, 26) - this.shift) * approach(dt, 0.18);
+    // a step along the instrument (the vibist walks to the far end of the bars for a low chord)
+    this.shift += (clamp(look.shift ?? 0, -34, 34) - this.shift) * approach(dt, 0.13);
     if (look.pedal !== undefined) this.pedal = this.pedal < 0 ? look.pedal : this.pedal + (look.pedal - this.pedal) * approach(dt, 0.03);
     this.dip += (clamp(look.dip, 0, 6) - this.dip) * approach(dt, 0.05);
     this.cheeks += (look.cheeks - this.cheeks) * approach(dt, 0.05);

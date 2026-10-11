@@ -22,17 +22,25 @@ export function playKeys(c: RigCtx, f: Frame, keyX: (pitch: number) => number, h
   const m = c.mem;
   let leanSum = 0;
   let leanW = 0;
-  // a note just over the split that was struck with a chord below it is the left hand's: a
-  // left-hand voicing that reaches middle C doesn't hold the right hand down there
+  // a note just over the split that was struck with a chord below it, within reach of it, is the
+  // left hand's: a left-hand voicing that reaches middle C doesn't hold the right hand down there
   const split = hands.find((h) => h.key === "R")?.lo ?? Infinity;
   const handPitch = (n: { pitch: number; age: number }) => {
-    if (n.pitch < split || n.pitch > split + 2) return n.pitch;
     const low = s.active.reduce((lo, m) => (Math.abs(m.age - n.age) < 0.02 ? Math.min(lo, m.pitch) : lo), n.pitch);
-    return low < split - 4 ? low : n.pitch;
+    // and the top of a low chord too wide for the left hand (a final chord's bass note and its
+    // voicing a twelfth above) is the right hand's
+    if (n.pitch < split) return n.pitch - low > 16 ? split : n.pitch;
+    if (n.pitch > split + 2) return n.pitch;
+    // only within a tenth of the chord's bottom (a jazz left hand's stretch); wider than that,
+    // one paw can't span it
+    return low < split - 4 && n.pitch - low <= 16 ? low : n.pitch;
   };
   for (const h of hands) {
     const inHand = (p: number) => p >= h.lo && p <= h.hi;
-    const act = s.active.filter((n) => inHand(handPitch(n)));
+    // a note about to let go doesn't hold the paw: in a legato line the paw has already moved on
+    // to the next key, and pulling it back to the old one for its last frame made it shake
+    const all = s.active.filter((n) => inHand(handPitch(n)));
+    const act = all.filter((n) => (1 - n.progress) * n.durSec > 0.07 || n.age < 0.06);
     const last = s.recent.find((o) => inHand(o.pitch));
     // this hand's own next note (or chord), not just the part's next onset
     const nx = nextWhere(s, inHand);
@@ -50,9 +58,12 @@ export function playKeys(c: RigCtx, f: Frame, keyX: (pitch: number) => number, h
       target = (lo + hi) / 2;
       spread = clamp((hi - lo) / 16, 1, 2.4);
     } else if (act.length) {
+      // the paw sits over the newest notes it struck; older ones still ringing stay down on the
+      // keyboard but don't pull it back (that made it bounce between the old key and the new)
+      const newest = Math.min(...act.map((n) => n.age));
       let lo = Infinity;
       let hi = -Infinity;
-      for (const n of act) {
+      for (const n of act.filter((a) => a.age - newest < 0.03)) {
         const x = keyX(n.pitch);
         lo = Math.min(lo, x);
         hi = Math.max(hi, x);
@@ -65,20 +76,26 @@ export function playKeys(c: RigCtx, f: Frame, keyX: (pitch: number) => number, h
     if (m[kx] === undefined) m[kx] = h.home;
     if (m[ks] === undefined) m[ks] = 1;
     // to a note: quick but eased in and out; with nothing to play, a slow drift toward home
-    if (target === null) damp(m, kx, m[kx] * 0.85 + h.home * 0.15, f.dt, 0.6);
+    // (toward home itself, and without the speed it was still braking with: a paw that stopped
+    // playing mid-glide kept sliding, off the end of the keyboard and out of the picture)
+    if (target === null) {
+      if ((m[kx + "V"] ?? 0) * (h.home - m[kx]) < 0) m[kx + "V"] = 0;
+      damp(m, kx, h.home, f.dt, 1.2);
+    }
     else glide(m, kx, target, f.dt, 26000, 1500);
-    m[ks] += (spread - m[ks]) * approach(f.dt, 0.05);
+    // the paw opens for a wide chord as it lands (any slower and the outer keys go down unplayed)
+    m[ks] += (spread - m[ks]) * approach(f.dt, spread > m[ks] ? 0.015 : 0.05);
     const lastAge = last ? last.age : Infinity;
     const nextIn = nx ? nx.inSec : Infinity;
     // A stroke from the wrist: the paw comes down into the keys and lands on the note, stays
     // down while it's held, and rebounds after. Legato (still holding when the next comes) is
     // a smaller lift: a change of fingers, not of hand.
-    const holding = act.length > 0;
+    const holding = all.length > 0;
     const WIN = 0.12;
     let up = holding ? 0 : Math.min(1, lastAge / 0.08);
     if (nextIn < WIN) up = holding ? 0.5 * Math.sin(Math.PI * (1 - nextIn / WIN)) : Math.min(up, nextIn / WIN);
     const depth = 2 + 3 * (last?.vel ?? 0.5);
-    const resting = act.length === 0 && lastAge > 0.6 && nextIn > 0.6;
+    const resting = all.length === 0 && lastAge > 0.6 && nextIn > 0.6;
     // traveling far, the hand lifts in an arc over the keys
     const arc = Math.min(8, Math.abs(m[kx + "V"] ?? 0) * 0.01);
     const y = damp(m, "hy" + h.key, h.top + 4 + depth * (1 - up) - 6 * up - arc - (resting ? 3 : 0), f.dt, 0.012);
