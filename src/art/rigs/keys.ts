@@ -46,7 +46,12 @@ export function playKeys(c: RigCtx, f: Frame, keyX: (pitch: number) => number, h
     const nx = nextWhere(s, inHand);
     let target: number | null = null;
     let spread = 1;
-    if (nx && nx.inSec < 0.22 && (act.length === 0 || nx.inSec < 0.08)) {
+    // the paw's last stroke letting go (or gone) frees it: what still rings from it or from before
+    // (the bottom of Chopin's 6ths, a chord under a melody note) doesn't call the paw back for the
+    // frames before the next note; it darted toward the leftover and back
+    const stroke = last ? s.recent.filter((o) => inHand(handPitch(o)) && Math.abs(o.age - last.age) < 0.03) : [];
+    const freed = act.length > 0 && stroke.some((o) => !act.some((a) => a.pitch === o.pitch && Math.abs(a.age - o.age) < 0.03));
+    if (nx && nx.inSec < 0.22 && (act.length === 0 || freed || nx.inSec < 0.08)) {
       let lo = keyX(nx.pitch);
       let hi = lo;
       for (const u of s.upcoming ?? []) {

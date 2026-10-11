@@ -12,6 +12,7 @@ import { SHAKE_WINDOW, flicker, glitchesOf, shake, type Glitch } from "@/art/gli
 import { DoodleDefs } from "@/art/DoodleDefs";
 import { rigTake } from "@/art/rigs/take";
 import { STYLES } from "@/music/styles";
+import { PRESETS, getPreset, type PresetId } from "@/music/presets";
 
 const BPM = 108;
 const BARS = 64;
@@ -198,26 +199,36 @@ function fmt(beat: number, frameBeats: number, perBar: number) {
 function ArtLab() {
   // ?speed=0.25&beat=12&inst=guitar,cello&paused=1&row=1&feat=3 for deterministic screenshots:
   // paused holds the playing pose at that beat (add &stopped=1 for the band at rest).
-  // &style=funk&tempo=120&seed=4 plays real takes from the local engine instead of the lab's phrases.
+  // &style=funk&tempo=120&seed=4 plays real takes from the local engine instead of the lab's phrases;
+  // &preset=chopin seats that preset's band, each playing their part of its own take.
   const q = useSearchParams();
+  const [preset, setPreset] = useState<PresetId | null>(() => getPreset(q.get("preset"))?.id ?? null);
   const row = !!q.get("row");
   const [playing, setPlaying] = useState(() => !q.get("paused"));
   const [stopped, setStopped] = useState(() => !!q.get("stopped"));
   const [insts, setInsts] = useState<InstrumentId[]>(() => {
-    const list = (q.get("inst") ?? "").split(",").filter((x): x is InstrumentId => (INSTRUMENT_LIST as string[]).includes(x));
+    const p = getPreset(q.get("preset"));
+    const list = p ? p.band.map((b) => b.instrument) : (q.get("inst") ?? "").split(",").filter((x): x is InstrumentId => (INSTRUMENT_LIST as string[]).includes(x));
     return [...list, ...DEFAULT_INSTRUMENTS.slice(list.length)].slice(0, ANIMAL_LIST.length);
   });
   const [featured, setFeatured] = useState<number>(() => (q.get("feat") !== null ? Number(q.get("feat")) : 3));
   const [speed, setSpeed] = useState(() => Number(q.get("speed")) || 1);
-  const [music, setMusic] = useState<"lab" | StyleId>(() => (STYLE_IDS as string[]).includes(q.get("style") ?? "") ? (q.get("style") as StyleId) : "lab");
+  const [music, setMusic] = useState<"lab" | StyleId>(() => getPreset(q.get("preset"))?.style ?? ((STYLE_IDS as string[]).includes(q.get("style") ?? "") ? (q.get("style") as StyleId) : "lab"));
   const [tempo, setTempo] = useState<number | null>(() => Number(q.get("tempo")) || null);
   const [seed, setSeed] = useState(() => Number(q.get("seed")) || 3);
   const sprites = useRef<(SpriteHandle | null)[]>([]);
   const parts = useMemo(() => insts.map((i, k) => fakePart(i, k + 1)), [insts]);
   // a style: each musician plays a real take of their instrument (the soloist's take has them solo)
   const takes = useMemo(
-    () => (music === "lab" ? null : insts.map((inst, i) => rigTake(inst, music, { seed, tempo: tempo ?? undefined, solo: featured === i }))),
-    [music, insts, seed, tempo, featured],
+    () => {
+      if (music === "lab") return null;
+      // the preset's own players (its band, in its style); anyone else plays the default band's take
+      const p = getPreset(preset);
+      const own = (inst: InstrumentId) => (p && p.style === music && p.band.some((b) => b.instrument === inst) ? p.id : undefined);
+      const at = tempo ?? (p && p.style === music ? p.tempo : undefined); // one clock for everyone
+      return insts.map((inst, i) => rigTake(inst, music, { seed, tempo: at, solo: featured === i, preset: own(inst) }));
+    },
+    [music, insts, seed, tempo, featured, preset],
   );
   const SPB = takes ? takes[0].spb : 60 / BPM;
   const FRAME_BEATS = 1 / FPS / SPB;
@@ -389,12 +400,33 @@ function ArtLab() {
             ))}
           </select>
         </label>
+        <label className="text-l">
+          play like{" "}
+          <select
+            value={preset ?? ""}
+            onChange={(e) => {
+              const p = getPreset(e.target.value);
+              setPreset(p?.id ?? null);
+              if (!p) return;
+              setMusic(p.style);
+              setTempo(null);
+              setInsts((cur) => [...p.band.map((b) => b.instrument), ...cur.slice(p.band.length)]);
+            }}
+          >
+            <option value="">nobody</option>
+            {PRESETS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
         {music !== "lab" && (
           <>
             <label className="text-l">
               tempo{" "}
               <select value={tempo ?? ""} onChange={(e) => setTempo(Number(e.target.value) || null)}>
-                <option value="">default ({STYLES[music].tempo.default})</option>
+                <option value="">default ({getPreset(preset)?.style === music ? getPreset(preset)!.tempo : STYLES[music].tempo.default})</option>
                 {[STYLES[music].tempo.min, STYLES[music].tempo.max].map((b) => (
                   <option key={b} value={b}>
                     {b} bpm

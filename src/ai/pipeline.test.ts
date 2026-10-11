@@ -160,6 +160,22 @@ describe("the opening phrase", () => {
     expect(firstRound.some((c) => c.agent !== leader)).toBe(true);
     expect(score.plan.length).toBe(score.frame.bars);
   });
+
+  it("a standard's written head is ready to play before the jam ends, and the band writes under it", async () => {
+    // nobody writes the head (the leader plays the melody as written), so the featured phase
+    // finishes at once; the band's opening phrase must still land, or playback waits for it all
+    installFakeFetch(40);
+    const settings = { ...defaultSettings(band), mode: "improviser" as const, standard: "blue-bossa", key: { tonic: "C", mode: "minor" as const }, style: "bossa" as const, tempo: 130, bars: 16, soloists: ["bear"] };
+    const h = hooks("t-standard");
+    const ctl = startImproviser(settings, band, h);
+    const ready: number[] = [];
+    h.onScore = () => void ready.push(ctl.readyBars());
+    const score = await ctl.promise;
+    expect(score.frame.standard).toBe("blue-bossa");
+    expect(ready.find((n) => n > 0), `ready bars as phrases landed: ${ready.join(", ")}`).toBe(4);
+    const firstBars = useDebug.getState().calls.filter((c) => c.runId === "t-standard" && c.label === "bars 1-4");
+    expect(firstBars.length).toBeGreaterThan(0);
+  });
 });
 
 describe("when the count-off call fails", () => {

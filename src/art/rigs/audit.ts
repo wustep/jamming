@@ -1,5 +1,6 @@
 import { applyFeel, pocketOf } from "@/audio/feel";
 import { DRUM } from "@/music/instruments";
+import type { PresetId } from "@/music/presets";
 import type { InstrumentId, StyleId } from "@/music/types";
 import { type Mat, type Pt, ap, chain } from "../affine";
 import { clarinet, tromboneSlide, trumpetValves, woodwind } from "../fingering";
@@ -102,8 +103,8 @@ function heldPoints(a: Attrs): Pt[] {
   return out;
 }
 
-export function auditTake(inst: InstrumentId, style: StyleId, opts: { seed?: number; solo?: boolean; tempo?: number; frames?: boolean } = {}) {
-  const { score, id, spb, beats, frames: fc } = rigTake(inst, style, { seed: opts.seed ?? 3, solo: opts.solo, tempo: opts.tempo });
+export function auditTake(inst: InstrumentId, style: StyleId, opts: { seed?: number; solo?: boolean; tempo?: number; frames?: boolean; preset?: PresetId } = {}) {
+  const { score, id, spb, beats, frames: fc } = rigTake(inst, style, { seed: opts.seed ?? 3, solo: opts.solo, tempo: opts.tempo, preset: opts.preset });
   const pocket = pocketOf(score, id);
   const onsets = [...score.parts[id]]
     .map((n) => ({ t: applyFeel(n.start, score.swing) * spb + pocket(n), pitch: n.pitch, dur: n.dur * spb, art: n.art }))
