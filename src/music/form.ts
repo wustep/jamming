@@ -3,7 +3,6 @@ import { reharmonize } from "./reharm";
 import { INSTRUMENTS } from "./instruments";
 import { makeRng } from "./rng";
 import { getStandard } from "./standards";
-import { STYLES } from "./styles";
 import { mod, parseChord, pcOf, romanToChord, transposeChordSymbol, keyPrefersFlats } from "./theory";
 import type { ChordChange, Frame, Member, Role, Section, TroopSettings } from "./types";
 
@@ -163,7 +162,6 @@ export function buildFrame(input: TroopSettings, members: Member[]): Frame {
   const std = getStandard(input.standard);
   // a standard keeps its own mode (Autumn Leaves is minor in any key); only the tonic moves
   const settings = std ? { ...input, key: { ...input.key, mode: std.key.mode } } : input;
-  const style = STYLES[settings.style];
   const beats = std ? std.meter : settings.meter.beats;
   const rng = makeRng(settings.seed).fork("frame");
   const requested = std ? snapLength(std.id, settings.bars) : Math.max(4, Math.round(settings.bars));
