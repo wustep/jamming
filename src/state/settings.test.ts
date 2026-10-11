@@ -43,4 +43,17 @@ describe("the takes list", () => {
     await useTroop.getState().generate();
     expect(useTroop.getState().takes[0].label).toBe("Bossa Nova sketch");
   });
+
+  it("names an original played like an artist after the artist", async () => {
+    useTroop.getState().applyPreset("basie");
+    await useTroop.getState().generate();
+    expect(useTroop.getState().takes[0].label).toBe("Count Basie sketch");
+    useTroop.getState().setStandard("autumn"); // a swing tune keeps the preset; the tune names it
+    await useTroop.getState().generate();
+    expect(useTroop.getState().takes[0].label).toBe("Autumn Leaves sketch");
+    useTroop.getState().setStyle("swing"); // picking a style drops the preset
+    useTroop.getState().setStandard(null);
+    await useTroop.getState().generate();
+    expect(useTroop.getState().takes[0].label).toBe("Swing sketch");
+  });
 });
