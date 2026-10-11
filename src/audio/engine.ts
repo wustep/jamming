@@ -18,6 +18,7 @@ import {
   type Sounds,
 } from "./packs";
 import { tuneRoom } from "./room";
+import { articulate, feelOf, metricLift, type PlayingFeel } from "@/music/playing";
 import { CountingStorage } from "./storage";
 
 // Playback engine: smplr sampled instruments driven by our own lookahead scheduler on the
@@ -82,6 +83,9 @@ interface Track {
   lastOpenHat: number;
   /** Where this player sits against the beat, per note (seconds; see pocketOf). */
   pocket: (n: NoteEvent) => number;
+  /** How the chart is played: touch, note lengths, how loose the time is (see playing.ts). */
+  feel: PlayingFeel;
+  beats: number;
 }
 
 type SmplrNote = Exclude<Parameters<Smplr["start"]>[0], string | number>;
@@ -656,6 +660,8 @@ export class TroopAudio {
         lastStart: -Infinity,
         lastOpenHat: -Infinity,
         pocket: pocketOf(score, m.id),
+        feel: feelOf({ style: score.frame?.style ?? "swing", feel: score.frame?.feel }),
+        beats: beatsPerBar(score),
       };
     });
   }
@@ -685,6 +691,8 @@ export class TroopAudio {
         lastStart,
         lastOpenHat: old?.lastOpenHat ?? -Infinity,
         pocket: pocketOf(score, m.id),
+        feel: feelOf({ style: score.frame?.style ?? "swing", feel: score.frame?.feel }),
+        beats: beatsPerBar(score),
       };
     });
   }
@@ -992,7 +1000,7 @@ export class TroopAudio {
 
     // Humanise (deterministic per note).
     const tight = isDrum && (note.pitch === 36 || note.pitch === 38 || note.pitch === 37);
-    const timingAmt = isDrum ? (tight ? 0.002 : 0.005) : 0.008;
+    const timingAmt = isDrum ? (tight ? 0.002 : 0.005) : track.feel.looseness;
     let time = when + track.pocket(note) + jitter(timingAmt, id, note.start, note.pitch, "t");
     if (time < now) {
       if (now - time > 0.08) {
@@ -1008,7 +1016,9 @@ export class TroopAudio {
     // the one place an accent is lifted (parts mark accents without pre-boosting them)
     if (note.art === "accent") vel = Math.min(1, vel * 1.12 + 0.08);
     if (note.art === "ghost") vel = ghostVel(vel);
-    vel *= 1 + jitter(0.06, id, note.start, note.pitch, "v");
+    // the metre leans on the downbeat as hard as the feel does (the drummer has their own accents)
+    if (!isDrum) vel *= metricLift(track.feel, note.start - Math.floor(note.start / track.beats + 1e-9) * track.beats, track.beats);
+    vel *= 1 + jitter(isDrum ? 0.06 : track.feel.humanize, id, note.start, note.pitch, "v");
     vel = clamp(vel, 0.02, 1);
 
     try {
@@ -1029,7 +1039,7 @@ export class TroopAudio {
         inst.start({ note: sample, velocity: Math.round(1 + vel * 126), time });
       } else {
         const span = this.sec(applyFeel(note.start + Math.max(0.01, note.dur), swing)) - this.sec(applyFeel(note.start, swing));
-        let dur = Math.max(0.03, span);
+        let dur = articulate(track.feel, note.dur, Math.max(0.03, span), note.art);
         if (note.art === "staccato") dur *= 0.5;
         if (note.art === "pizz") dur = Math.min(dur, 0.9);
         if (note.art === "legato") dur *= 1.06;

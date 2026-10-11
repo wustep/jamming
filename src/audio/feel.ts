@@ -1,4 +1,5 @@
 import { INSTRUMENTS } from "@/music/instruments";
+import { feelOf, rubatoSec } from "@/music/playing";
 import type { NoteEvent, Score } from "@/music/types";
 
 // Pure timing helpers. Charts are written on a straight grid; swing is applied here at
@@ -140,11 +141,16 @@ export function pocketOf(score: Score, memberId: string): (n: NoteEvent) => numb
   const fn = m ? INSTRUMENTS[m.instrument]?.fn : undefined;
   const style = score.frame?.style;
   const beats = score.frame?.meter?.beats || 4;
-  if (!fn || !style || !POCKET[style]) return () => 0;
+  if (!fn || !style) return () => 0;
+  // the feel's rubato: the whole band leans ahead and back together, so it stays tight
+  const feel = feelOf({ style, feel: score.frame.feel });
+  const spb = 60 / (score.frame.tempo || 120);
+  const rubato = feel.rubato === "even" ? () => 0 : (n: NoteEvent) => rubatoSec(feel, n.start, beats, spb);
+  if (!POCKET[style]) return rubato;
   return (n) => {
     const role = score.plan?.[Math.floor(n.start / beats + 1e-9)]?.roles[memberId];
     const featured = role === "lead" || role === "solo" || role === "trade";
-    return pocketSec(style, role === "bass" ? "bass" : fn, n.pitch, n.art, featured, score.frame.tempo);
+    return pocketSec(style, role === "bass" ? "bass" : fn, n.pitch, n.art, featured, score.frame.tempo) + rubato(n);
   };
 }
 

@@ -1,6 +1,7 @@
 import type { Harm, Harmony } from "./harmony";
 import type { InstrumentDef } from "./instruments";
 import type { Rng } from "./rng";
+import type { PlayingFeel } from "./playing";
 import type { StyleDef } from "./styles";
 import { parseChord, type Chord } from "./theory";
 import type { Dynamic, KeySig, Member, Motif, NoteEvent, Role, Section, Texture } from "./types";
@@ -63,6 +64,8 @@ export interface BarCtx {
   standard: string | null;
   keyPcs: number[];
   style: StyleDef;
+  /** How it's played (touch and a line's habits). */
+  feel: PlayingFeel;
   section: Section;
   barInSection: number;
   phraseEnd: boolean;

@@ -1,3 +1,4 @@
+import { feelOf, playLine } from "./playing";
 import { DYNAMIC_ENERGY, newMemory, type BarCtx, type PlayerMemory } from "./context";
 import { realizeDirective } from "./directives";
 import { styleDynamic } from "./ending";
@@ -159,6 +160,7 @@ export function makeBarCtx(
     standard: frame.standard,
     keyPcs: keyScale(frame.key),
     style,
+    feel: feelOf({ style: frame.style, feel: frame.feel }),
     section,
     barInSection,
     phraseEnd: (barInSection + 1) % 4 === 0 || bar === section.start + section.length - 1,
@@ -297,7 +299,17 @@ export function realize(o: RealizeOptions): RealizeResult {
     }
     for (const i of res.issues) issues.push({ bar, member: m.id, detail: i });
     const inside = res.notes.filter((n) => n.start >= -1e-6 && n.start < beats - 1e-6);
-    const rel = arrange(inside, ctx);
+    let rel = arrange(inside, ctx);
+    // a featured player's own line takes the feel's habits (pushes, dotted pairs, accent groups);
+    // a keyboard soloist's left hand, the bass and the comping are left alone
+    // (a head coming back replays what was played, as it was)
+    if (isFeaturedRole(ctx.role) && ctx.inst.fn !== "rhythm" && ctx.inst.fn !== "bass" && !/^@(head|tune)\b/.test(directive)) {
+      const alone = (n: NoteEvent) => !rel.some((x) => x !== n && Math.abs(x.start - n.start) < 1e-6);
+      const line = ctx.inst.fn === "melodic" ? rel : rel.filter((n) => alone(n) && n.pitch >= 55);
+      const rest = rel.filter((n) => !line.includes(n));
+      const played = playLine(line, ctx.feel, { bar, beats, seed: `${o.seed}:${m.id}`, straight: ctx.style.swing <= 0.55 });
+      rel = [...played, ...rest].sort((a, b) => a.start - b.start);
+    }
     if (inside.length < res.notes.length) issues.push({ bar, member: m.id, detail: `${res.notes.length - inside.length} notes outside the bar dropped` });
     if (res.kind !== "rest" && rel.length === 0 && directive !== "@rest") {
       // silence where the plan asked for sound is fine for rests, suspicious otherwise

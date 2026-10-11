@@ -4,6 +4,8 @@
 // Time is measured in beats (quarter notes) from the start of the chart.
 // Bars are 0-indexed internally and 1-indexed anywhere a human or model sees them.
 
+import type { FeelId } from "./playing";
+
 export type InstrumentId =
   | "piano"
   | "bass"
@@ -197,6 +199,8 @@ export interface TroopSettings {
   phraseBars: number; // improviser: bars per conversational round
   /** How hard swung 8ths lean (swing and New Orleans; absent = the style's own). */
   swingFeel?: SwingFeel;
+  /** How it's played (touch, rubato, a line's habits; see playing.ts). Absent = the style's own. */
+  feel?: FeelId;
 }
 
 export type SwingFeel = "light" | "medium" | "hard";
@@ -208,6 +212,8 @@ export interface Frame {
   tempo: number;
   key: KeySig;
   style: StyleId;
+  /** The playing feel, when the chart picked one other than its style's. */
+  feel?: FeelId;
   standard: string | null;
   sections: Section[];
   chords: ChordChange[][]; // per bar

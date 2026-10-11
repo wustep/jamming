@@ -394,6 +394,7 @@ export function buildFrame(input: TroopSettings, members: Member[]): Frame {
     tempo: settings.tempo,
     key: settings.key,
     style: settings.style,
+    ...(settings.feel && settings.feel !== settings.style ? { feel: settings.feel } : {}),
     standard: std?.id ?? null,
     sections,
     chords,

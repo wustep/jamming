@@ -216,7 +216,8 @@ export function comp(ctx: BarCtx): NoteEvent[] {
 }
 
 function compCore(ctx: BarCtx, second: boolean): NoteEvent[] {
-  const sparse = ctx.args.includes("sparse") || ctx.texture === "sparse";
+  // a feel that keeps its ostinato only lightens a sparse bar; the figure keeps its speed
+  const sparse = !ctx.feel.ostinato && (ctx.args.includes("sparse") || ctx.texture === "sparse");
   const busy = ctx.args.includes("busy") || ctx.texture === "peak";
   // the second comper takes a different cell than the first
   const pickCell = <T,>(cells: T[]) => cells[(hashString(`${ctx.seed}:${ctx.member.id}:${ctx.bar}`) + (second ? 1 : 0)) % cells.length];
@@ -264,7 +265,8 @@ function compCore(ctx: BarCtx, second: boolean): NoteEvent[] {
  * in the style's comping rhythm, low in the tenor register so they sit under the lead.
  */
 export function pizz(ctx: BarCtx): NoteEvent[] {
-  const sparse = ctx.args.includes("sparse") || ctx.texture === "sparse";
+  // a feel that keeps its ostinato only lightens a sparse bar; the figure keeps its speed
+  const sparse = !ctx.feel.ostinato && (ctx.args.includes("sparse") || ctx.texture === "sparse");
   const busy = ctx.args.includes("busy") || ctx.texture === "peak";
   const pick = <T,>(cells: T[]) => cells[hashString(`${ctx.seed}:${ctx.member.id}:pizz:${ctx.bar}`) % cells.length];
   let hits: Hit[];
@@ -315,7 +317,8 @@ export function pizz(ctx: BarCtx): NoteEvent[] {
  * pulsing 8ths (busy), or quarters with a push on the "and" of 4 into the next chord.
  */
 export function pulse(ctx: BarCtx): NoteEvent[] {
-  const sparse = ctx.args.includes("sparse") || ctx.texture === "sparse";
+  // a feel that keeps its ostinato only lightens a sparse bar; the figure keeps its speed
+  const sparse = !ctx.feel.ostinato && (ctx.args.includes("sparse") || ctx.texture === "sparse");
   const busy = ctx.args.includes("busy") || ctx.texture === "peak";
   const hits: Hit[] = [];
   if (sparse) for (let b = 0; b < ctx.beats; b += 2) hits.push({ pos: b, dur: 1.9 });
