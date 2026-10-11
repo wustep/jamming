@@ -310,6 +310,46 @@ export function ensemble(o: EnsembleInput): EnsembleFix[] {
     }
   }
 
+  // ── 6. A chord isn't struck a half step against a note another player is still holding ──
+  // Two compers voice the same chord differently: Jobim's piano anticipates G13 with its 7th (F4)
+  // on the & of 2, and the guitar's own voicing strikes the 13th (E4) on 3 under it. Neither is
+  // held a full beat against the other, so pass 4 doesn't hear it. The later chord leaves the note
+  // out when it has notes to spare, or takes the nearest one that doesn't rub. A comper gives way
+  // to the soloist's own chord struck with it, too.
+  const dropped = new Set<NoteEvent>();
+  for (const m of members) {
+    const inst = INSTRUMENTS[m.instrument];
+    if (!inst.poly || inst.fn === "rhythm" || inst.fn === "bass") continue;
+    const notes = parts[m.id];
+    if (!notes?.length) continue;
+    for (const n of notes) {
+      const bar = barOf(n.start);
+      const role = plan[bar]?.roles[m.id];
+      if (!bars.has(bar) || n.written || (role !== "comp" && role !== "pad") || o.lead.get(bar)?.id === m.id) continue;
+      const held: number[] = [];
+      const sounding: number[] = [];
+      for (const { id, x } of byBar.get(bar) ?? []) {
+        if (x === n || dropped.has(x) || x.start > n.start + EPS || x.start + x.dur <= n.start + EPS) continue;
+        sounding.push(x.pitch);
+        // struck before it, or with it by the soloist (the piano's left hand under its own solo)
+        const before = x.start < n.start - EPS || o.lead.get(bar)?.id === id;
+        if (id !== m.id && before && x.dur >= HELD && x.start + x.dur - n.start >= 0.25) held.push(x.pitch);
+      }
+      if (!held.some((h) => Math.abs(h - n.pitch) === 1 || Math.abs(h - n.pitch) === 13)) continue;
+      const chord = notes.filter((x) => Math.abs(x.start - n.start) < EPS && !dropped.has(x));
+      if (chord.length >= 3) {
+        dropped.add(n);
+        note(bar, m.id, `left ${pitchName(n.pitch, flats)} out of the chord (a half step from a held note)`);
+        continue;
+      }
+      const alt = freePitch(n.pitch, sounding, homeOf(harmony, n), style, inst.range[0], ceilingFor(m, n));
+      if (alt === null) continue;
+      note(bar, m.id, `${pitchName(n.pitch, flats)} rubbed against a held note; moved to ${pitchName(alt, flats)}`);
+      n.pitch = alt;
+    }
+    if (dropped.size) parts[m.id] = notes.filter((x) => !dropped.has(x));
+  }
+
   // tidy: a poly part may now hold the same pitch twice at one onset
   for (const m of members) {
     const ns = parts[m.id];

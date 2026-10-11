@@ -143,4 +143,38 @@ describe("artist presets", () => {
       expect(rubs, p.id).toBe(0);
     }
   });
+
+  it("a comping chord isn't struck a half step against a note another player is still holding", () => {
+    // Jobim: the piano anticipates G13 with its 7th (F4) and the guitar's own voicing strikes the
+    // 13th (E4) under it; or the guitar comps against the soloing piano's left hand
+    let rubs = 0;
+    let chords = 0;
+    for (const p of PRESETS) {
+      for (const seed of [1, 2, 3, 4]) {
+        const score = takeOf(p, seed);
+        const beats = score.frame.meter.beats;
+        const planOf = (t: number) => score.plan[Math.floor(t / beats + 1e-9)];
+        for (const m of score.members) {
+          if (!INSTRUMENTS[m.instrument].poly || INSTRUMENTS[m.instrument].fn === "rhythm") continue;
+          for (const n of score.parts[m.id]) {
+            const role = planOf(n.start)?.roles[m.id];
+            if ((role !== "comp" && role !== "pad") || n.written) continue;
+            chords++;
+            for (const o of score.members) {
+              if (o.id === m.id || o.instrument === "drums") continue;
+              const soloing = planOf(n.start)?.roles[o.id] === "solo";
+              for (const x of score.parts[o.id]) {
+                const before = x.start < n.start - 1e-6 || (soloing && Math.abs(x.start - n.start) < 1e-6);
+                const held = x.dur >= 0.95 && before && x.start + x.dur - n.start >= 0.25;
+                if (held && (Math.abs(x.pitch - n.pitch) === 1 || Math.abs(x.pitch - n.pitch) === 13)) rubs++;
+              }
+            }
+          }
+        }
+      }
+    }
+    // 4 of 9,879 are left, Debussy's vibes where no free note was near (84 before)
+    expect(chords).toBeGreaterThan(5000);
+    expect(rubs, `${rubs} of ${chords}`).toBeLessThanOrEqual(6);
+  });
 });
