@@ -155,6 +155,11 @@ function save(s: Saved) {
 }
 
 /** Keep settings coherent with the band (leader/soloists must exist, leader can't be the drummer). */
+/** What a take is of, for the takes list: the tune when it's a standard, else the style. */
+function tuneOf(settings: TroopSettings): string {
+  return getStandard(settings.standard)?.name ?? STYLES[settings.style].name;
+}
+
 function reconcile(settings: TroopSettings, members: Member[]): TroopSettings {
   const ids = new Set(members.map((m) => m.id));
   const leaderOk = (id: string) => ids.has(id) && members.find((m) => m.id === id)?.instrument !== "drums";
@@ -235,7 +240,7 @@ export const useTroop = create<TroopState>((set, get) => {
     if (get().playing) get().stop();
     const settings = reconcile({ ...defaultSettings(shared.members), ...shared.settings }, shared.members);
     const { score } = generateLocal(settings, shared.members);
-    const take: Take = { id: score.id, score, label: `Shared · ${STYLES[settings.style].name}`, engine: "local", createdAt: Date.now() };
+    const take: Take = { id: score.id, score, label: `Shared · ${tuneOf(settings)}`, engine: "local", createdAt: Date.now() };
     set((s) => ({ current: score, isSketch: false, takes: addTake(s.takes, take), chat: [], sharedArrival: { takeId: take.id } }));
     saveTakes(get().takes);
     void troopAudio.prepare(score.members, { sounds: get().sounds, notesHint: notesHintFromScore(score) });
@@ -495,7 +500,7 @@ export const useTroop = create<TroopState>((set, get) => {
       // No key: the stub band plays a fresh local take.
       if (!canThink(st)) {
         const { score } = generateLocal(settings, members);
-        const take: Take = { id: score.id, score, label: `${STYLES[settings.style].name} sketch`, engine: "local", createdAt: Date.now() };
+        const take: Take = { id: score.id, score, label: `${tuneOf(settings)} sketch`, engine: "local", createdAt: Date.now() };
         set((s) => ({ current: score, isSketch: false, takes: addTake(s.takes, take), chat: [], readyBars: null, autopilotBars: [] }));
         saveTakes(get().takes);
         void get().play();
@@ -518,7 +523,7 @@ export const useTroop = create<TroopState>((set, get) => {
       void troopAudio.unlock().catch(() => {});
       void troopAudio.prepare(members, { sounds: st.sounds });
 
-      const label = `${STYLES[settings.style].name} · ${settings.mode === "composer" ? "composed" : "jammed"}`;
+      const label = `${tuneOf(settings)} · ${settings.mode === "composer" ? "composed" : "jammed"}`;
       let cutShort: Take | null = null;
       const hooks: PipelineHooks = {
         runId,

@@ -33,3 +33,14 @@ describe("a preset, then a tune", () => {
     expect(s.harmony).toBeUndefined();
   });
 });
+
+describe("the takes list", () => {
+  it("names a standard's take after the tune, not just its style", async () => {
+    useTroop.getState().setStandard("blue-bossa");
+    await useTroop.getState().generate(); // no key: a local sketch
+    expect(useTroop.getState().takes[0].label).toBe("Blue Bossa sketch");
+    useTroop.getState().setStandard(null);
+    await useTroop.getState().generate();
+    expect(useTroop.getState().takes[0].label).toBe("Bossa Nova sketch");
+  });
+});
