@@ -471,7 +471,9 @@ export function startImproviser(settings: TroopSettings, members: Member[], hook
     // `featured`: the featured phase this band doesn't wait to hear (the opening head, see below).
     const accompanimentPhase = async (pi: number, featured?: Promise<void>) => {
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-      if (stage[pi] !== (featured ? "none" : "featured")) return; // autopilot took it (or nobody was featured and it was realized already)
+      // autopilot took it. Alongside the featured phase it may be "featured" already: with nobody
+      // writing (a written head, an intro) that phase finishes before this one starts
+      if (stage[pi] === "done" || (!featured && stage[pi] !== "featured")) return;
       const bars = phrases[pi];
       const last = frame.bars - 1;
       const prevBars = pi > 0 ? phrases[pi - 1] : [];
