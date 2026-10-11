@@ -17,24 +17,29 @@ import { CountingStorage } from "./storage";
 // One open sampled instrument per animal. Each instrument has a fallback chain; the first
 // pack that actually delivers samples wins. Packs are swappable without touching the engine.
 
-export type PianoPack = "salamander" | "splendid" | "soundfont" | "wurlitzer" | "cp80";
+export type PianoPack = "salamander" | "splendid" | "soundfont" | "wurlitzer" | "cp80" | "harpsichord";
 export type DrumKit = "acoustic" | "lm2";
 export type Room = "dry" | "club" | "hall";
+/** What the string machine plays: the string ensemble or the choir. */
+export type PadVoice = "strings" | "choir";
 
 /** How the band sounds in this browser: the piano and drum samples, the room, the count-in. */
 export interface Sounds {
   piano: PianoPack;
   drums: DrumKit;
   room: Room;
+  /** The string pad's voice. */
+  pad: PadVoice;
   /** A bar of clicks before a take from the top. */
   countIn: boolean;
 }
 
-export const DEFAULT_SOUNDS: Sounds = { piano: "salamander", drums: "acoustic", room: "club", countIn: true };
+export const DEFAULT_SOUNDS: Sounds = { piano: "salamander", drums: "acoustic", room: "club", pad: "strings", countIn: true };
 
-export const PIANO_PACKS: PianoPack[] = ["salamander", "splendid", "soundfont", "wurlitzer", "cp80"];
+export const PIANO_PACKS: PianoPack[] = ["salamander", "splendid", "soundfont", "wurlitzer", "cp80", "harpsichord"];
 export const DRUM_KITS: DrumKit[] = ["acoustic", "lm2"];
 export const ROOMS: Room[] = ["dry", "club", "hall"];
+export const PAD_VOICES: PadVoice[] = ["strings", "choir"];
 
 /** Each instrument's reverb send (REVERB_SEND) is scaled by the room. */
 export const ROOM_SEND: Record<Room, number> = { dry: 0.3, club: 1, hall: 2.2 };
@@ -47,6 +52,7 @@ export function readSounds(raw: unknown, legacyPiano?: unknown): Sounds {
     piano: PIANO_PACKS.includes(piano as PianoPack) ? (piano as PianoPack) : DEFAULT_SOUNDS.piano,
     drums: DRUM_KITS.includes(o.drums as DrumKit) ? (o.drums as DrumKit) : DEFAULT_SOUNDS.drums,
     room: ROOMS.includes(o.room as Room) ? (o.room as Room) : DEFAULT_SOUNDS.room,
+    pad: PAD_VOICES.includes(o.pad as PadVoice) ? (o.pad as PadVoice) : DEFAULT_SOUNDS.pad,
     countIn: typeof o.countIn === "boolean" ? o.countIn : DEFAULT_SOUNDS.countIn,
   };
 }
@@ -486,6 +492,7 @@ export function packChain(instrument: InstrumentId, sounds: Sounds = DEFAULT_SOU
       if (sounds.piano === "splendid") return [splendid, sf];
       if (sounds.piano === "wurlitzer") return [epiano("WurlitzerEP200", "gs:wurlitzer"), soundfont("electric_piano_1", "MusyngKite"), sf];
       if (sounds.piano === "cp80") return [epiano("CP80", "gs:cp80"), soundfont("electric_grand_piano", "MusyngKite"), sf];
+      if (sounds.piano === "harpsichord") return [soundfont("harpsichord", "MusyngKite"), soundfont("harpsichord", "FluidR3_GM"), sf];
       return [salamander, splendid, sf];
     }
     case "bass":
@@ -494,6 +501,10 @@ export function packChain(instrument: InstrumentId, sounds: Sounds = DEFAULT_SOU
       return sounds.drums === "lm2" ? [lm2] : [acousticKit, lm2];
     case "vibes":
       return [vibes, soundfont("vibraphone", "MusyngKite"), soundfont("vibraphone", "FluidR3_GM")];
+    case "pad": {
+      const voice = sounds.pad === "choir" ? "choir_aahs" : "string_ensemble_1";
+      return [soundfont(voice, "MusyngKite"), soundfont(voice, "FluidR3_GM")];
+    }
     default: {
       const name = SOUNDFONT_NAME[instrument];
       return [soundfont(name, "MusyngKite"), soundfont(name, "FluidR3_GM")];
@@ -514,6 +525,8 @@ const SOUNDFONT_NAME: Record<InstrumentId, string> = {
   cello: "cello",
   guitar: "acoustic_guitar_nylon",
   vibes: "vibraphone",
+  organ: "drawbar_organ",
+  pad: "string_ensemble_1",
 };
 
 /**
@@ -536,7 +549,25 @@ export const DEFAULT_VOLUME: Record<InstrumentId, number> = {
   cello: 102,
   guitar: 104,
   vibes: 63,
+  organ: 84,
+  pad: 96,
 };
+
+/**
+ * The string pad's two voices sit 9 dB apart out of the box (the string ensemble is hot, the
+ * choir quiet); each is matched to the horns on a held note.
+ */
+export const PAD_VOLUME: Record<PadVoice, number> = { strings: 62, choir: 104 };
+
+/** The harpsichord soundfont runs 3 dB over Salamander on the same line. */
+export const HARPSICHORD_VOLUME = 89;
+
+/** An instrument's volume with these sounds (the pad's depends on its voice, the keys on their pack). */
+export function instrumentVolume(instrument: InstrumentId, sounds: Sounds): number {
+  if (instrument === "pad") return PAD_VOLUME[sounds.pad];
+  if (instrument === "piano" && sounds.piano === "harpsichord") return HARPSICHORD_VOLUME;
+  return DEFAULT_VOLUME[instrument];
+}
 
 /** Reverb send per instrument. */
 export const REVERB_SEND: Record<InstrumentId, number> = {
@@ -552,6 +583,8 @@ export const REVERB_SEND: Record<InstrumentId, number> = {
   cello: 0.16,
   guitar: 0.14,
   vibes: 0.2,
+  organ: 0.14,
+  pad: 0.24,
 };
 
 /** Instruments whose notes decay on their own; they get a little extra ring. */

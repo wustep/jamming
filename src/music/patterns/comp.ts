@@ -6,6 +6,9 @@ import type { NoteEvent } from "../types";
 import { strideBass } from "./bass";
 import { bassNote, voiceChord, type VoicingFamily } from "./voicing";
 
+/** A keyboard player with a left hand free for the bass (the string pad only holds chords). */
+export const twoHanded = (ctx: Pick<BarCtx, "inst">) => ctx.inst.id === "piano" || ctx.inst.id === "organ";
+
 function compRange(ctx: BarCtx): [number, number] {
   switch (ctx.inst.id) {
     case "guitar":
@@ -15,7 +18,10 @@ function compRange(ctx: BarCtx): [number, number] {
     case "cello":
       return [41, 69];
     case "piano":
+    case "organ":
       return [50, 77];
+    case "pad":
+      return [52, 79];
     default:
       return [Math.max(ctx.inst.range[0], 48), Math.min(ctx.inst.range[1], 79)];
   }
@@ -348,7 +354,7 @@ export function stride(ctx: BarCtx): NoteEvent[] {
   }
   const out: NoteEvent[] = [];
   const vel = velFor(ctx, 0.62);
-  const bassPart = ctx.inst.id === "piano" ? strideBass(ctx) : [];
+  const bassPart = twoHanded(ctx) ? strideBass(ctx) : [];
   if (ctx.hasBass) bassPart.forEach((n) => (n.vel *= 0.7));
   out.push(...bassPart);
   const offs = ctx.beats === 3 ? [1, 2] : [1, 3];
@@ -427,7 +433,7 @@ export function prelude(ctx: BarCtx): NoteEvent[] {
   for (let g = 0; g < ctx.beats; g += groupLen) {
     const hm = harmAt(ctx, g);
     const c = hm.chord;
-    const bass = ctx.inst.id === "piano" && !ctx.hasBass ? bassNote(c, 43, 55, ctx.mem.lastPitch) : null;
+    const bass = twoHanded(ctx) && !ctx.hasBass ? bassNote(c, 43, 55, ctx.mem.lastPitch) : null;
     const v = voiceChord(c, "triad", 60, 79, ctx.mem.lastVoicing, hm);
     ctx.mem.lastVoicing = v;
     if (bass !== null) {
@@ -473,7 +479,7 @@ export function pad(ctx: BarCtx): NoteEvent[] {
     const fam = ctx.peerIndex >= 1 ? "shell" : ctx.style.voicing === "rootless" ? "open" : ctx.style.voicing;
     const v = voice(ctx, harmAt(ctx, s.start), fam, s.start);
     out.push(...chordHit(v, s.start, dur, vel * (ctx.peerIndex >= 1 ? 0.8 : 1), "legato"));
-    if (!ctx.hasBass && ctx.inst.id === "piano") out.push(...leftHand(ctx, s.start, dur, vel));
+    if (!ctx.hasBass && twoHanded(ctx)) out.push(...leftHand(ctx, s.start, dur, vel));
     ctx.mem.padHeldUntil = holdOver ? ctx.start + ctx.beats * 2 : -1;
   }
   return out;

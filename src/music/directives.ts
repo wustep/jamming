@@ -168,6 +168,9 @@ function realizeRaw(ctx: BarCtx, text: string): DirectiveResult {
     }
   }
 
+  // the string machine holds the harmony whatever the comping figure would have been
+  if (ctx.inst.id === "pad" && ["comp", "stride", "arp", "prelude", "continuo", "shimmer", "pizz", "arco", "bossa", "funk", "riff"].includes(name)) return done(comp.pad(c));
+
   switch (name) {
     case "head": {
       // the tune comes back: replay the leader's notes from that bar
@@ -227,18 +230,18 @@ function realizeRaw(ctx: BarCtx, text: string): DirectiveResult {
         issues.push(`@motif ${bar2}: the statement has no bar ${offset + 2}; playing bar ${offset + 1}`);
         notes = realizeMotifBar(c, ops, offset);
       }
-      if (ctx.inst.id === "piano") notes.push(...pianoSoloLeftHand(c));
+      if (comp.twoHanded(ctx)) notes.push(...pianoSoloLeftHand(c));
       return done(notes);
     }
     case "answer": {
       const notes = lines.answer(c);
-      if (ctx.inst.id === "piano") notes.push(...pianoSoloLeftHand(c));
+      if (comp.twoHanded(ctx)) notes.push(...pianoSoloLeftHand(c));
       return done(notes);
     }
     case "line":
     case "solo": {
       const notes = lines.line(c);
-      if (ctx.inst.id === "piano") notes.push(...pianoSoloLeftHand(c));
+      if (comp.twoHanded(ctx)) notes.push(...pianoSoloLeftHand(c));
       return done(notes);
     }
     case "walk":

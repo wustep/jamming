@@ -35,6 +35,8 @@ const ABBR: Record<string, string> = {
   cello: "Vc.",
   guitar: "Gtr.",
   vibes: "Vib.",
+  organ: "Org.",
+  pad: "Str.",
 };
 
 export type ClefName = "treble" | "bass" | "tenor" | "percussion";

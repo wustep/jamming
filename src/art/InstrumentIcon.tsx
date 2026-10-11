@@ -118,6 +118,27 @@ function icon(i: InstrumentId): ReactNode {
           <circle cx={29.5} cy={15} r={3} fill="#3b5bab" stroke={INK} strokeWidth={0.8} />
         </>
       );
+    case "organ":
+      // a drawbar console: the wooden cabinet, two manuals, the drawbars on top
+      return (
+        <>
+          <S d={rectPath(4, 12, 40, 30, 3)} ink={WOOD_INK} base="#c98a52" hatch="#a8693a" gap={2.6} {...o} />
+          <L d="M12 8 V15 M17 6 V15 M22 9 V15 M27 7 V15 M32 10 V15" ink={INK} seed={s + 1} w={1.6} />
+          <path d="M8 20 h32 v5 h-32 Z M8 28 h32 v5 h-32 Z" fill="#fffdf4" stroke={INK} strokeWidth={1} />
+          <path d="M11 20 v3 M15 20 v3 M23 20 v3 M27 20 v3 M35 20 v3 M11 28 v3 M15 28 v3 M23 28 v3 M27 28 v3 M35 28 v3" stroke={INK} strokeWidth={1.6} />
+        </>
+      );
+    case "pad":
+      // a string machine on its stand, its keys under a row of sliders
+      return (
+        <>
+          <S d={rectPath(3, 14, 42, 18, 3)} ink={INK} base="#e7e1f2" hatch="#b9b0cf" gap={2.6} {...o} />
+          <path d="M7 24 h34 v6 h-34 Z" fill="#fffdf4" stroke={INK} strokeWidth={0.9} />
+          <path d="M11 24 v3.5 M15 24 v3.5 M23 24 v3.5 M27 24 v3.5 M35 24 v3.5" stroke={INK} strokeWidth={1.5} />
+          <L d="M10 17 v4 M16 18 v3 M22 16 v5 M28 18 v3 M34 17 v4" ink={RED} seed={s + 1} w={1.6} />
+          <L d="M12 32 L34 46 M36 32 L14 46" ink={INK} seed={s + 2} w={1.6} />
+        </>
+      );
   }
 }
 

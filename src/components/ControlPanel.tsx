@@ -546,6 +546,9 @@ export function ControlPanel() {
                   <option value="wurlitzer">Wurlitzer</option>
                   <option value="cp80">Yamaha CP80</option>
                 </optgroup>
+                <optgroup label="Early keyboard">
+                  <option value="harpsichord">Harpsichord</option>
+                </optgroup>
               </select>
             </div>
             <div>
@@ -561,6 +564,13 @@ export function ControlPanel() {
                 <option value="dry">Dry (close up)</option>
                 <option value="club">Club</option>
                 <option value="hall">Hall (big and wet)</option>
+              </select>
+            </div>
+            <div>
+              <Label>String pad</Label>
+              <select className="sketch-select w-full" value={sounds.pad} onChange={(e) => setSounds({ pad: e.target.value as Sounds["pad"] })} aria-label="String pad voice">
+                <option value="strings">String ensemble</option>
+                <option value="choir">Choir</option>
               </select>
             </div>
             <label className="flex cursor-pointer items-center gap-xs self-end pb-xxs text-m" title="A bar of clicks before a take from the top">

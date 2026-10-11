@@ -1,4 +1,4 @@
-// The eight troop animals, drawn on a shared canonical layout so any
+// The troop's animals, drawn on a shared canonical layout so any
 // instrument pose can be composed with any animal.
 //
 // viewBox 0 0 240 260, ground at y≈246, character centred on x=120.
@@ -451,7 +451,136 @@ function sheep(): AnimalArt {
   };
 }
 
-const BUILDERS: Record<AnimalId, () => AnimalArt> = { bear, frog, owl, fox, cat, bunny, elephant, penguin, sheep };
+function raccoon(): AnimalArt {
+  const a: AnimalId = "raccoon";
+  const { ink, fill } = ANIMALS[a];
+  const white = "#f6f3ec";
+  const mask = "#33313a";
+  const ring = "#4a4852";
+  return {
+    back: null,
+    // a big bushy tail with dark rings
+    tail: {
+      node: (
+        <>
+          <S d="M150 226 C182 232 210 210 206 178 C204 160 192 150 182 154 C188 172 182 200 148 212 Z" ink={ink} base={tint(fill, 0.3)} hatch={fill} seed={sd(a, "tail")} />
+          <S d="M201 174 C199 162 191 154 183 155 C185 161 186 166 186 172 C192 174 197 175 201 174 Z" ink={ink} base={ring} seed={sd(a, "tip")} w={1.4} />
+          <L d="M190 186 C196 186 202 186 205 190 M186 200 C192 201 199 202 203 205 M176 213 C182 216 189 218 194 219" ink={ring} seed={sd(a, "rings")} w={4.2} />
+        </>
+      ),
+      pivot: { x: 152, y: 220 },
+      kind: "bushy",
+    },
+    body: bodyAndFeet(a, ink, fill, "#d9d8dd"),
+    feet: "#2f2d35",
+    paw: "#3a3842",
+    ears: [
+      {
+        node: (
+          <>
+            <S d="M74 92 C66 70 74 52 92 56 C100 60 104 72 102 80 Z" ink={ink} base={tint(fill, 0.3)} hatch={fill} seed={sd(a, "el")} />
+            <S d="M80 84 C76 72 80 63 89 64 C94 67 96 72 95 78 Z" ink={ink} base="#5c5a66" seed={sd(a, "eli")} w={1} />
+          </>
+        ),
+        pivot: { x: 90, y: 84 },
+        kind: "stiff",
+      },
+      {
+        node: (
+          <>
+            <S d="M166 92 C174 70 166 52 148 56 C140 60 136 72 138 80 Z" ink={ink} base={tint(fill, 0.3)} hatch={fill} seed={sd(a, "er")} />
+            <S d="M160 84 C164 72 160 63 151 64 C146 67 144 72 145 78 Z" ink={ink} base="#5c5a66" seed={sd(a, "eri")} w={1} />
+          </>
+        ),
+        pivot: { x: 150, y: 84 },
+        kind: "stiff",
+      },
+    ],
+    head: (
+      <>
+        <S d={ellipsePath(120, 110, 56, 47)} ink={ink} base={tint(fill, 0.3)} hatch={fill} seed={sd(a, "head")} />
+        {/* white brows and cheeks around the bandit mask */}
+        <S d="M70 104 C78 84 104 82 120 92 C136 82 162 84 170 104 C164 98 150 94 140 96 C132 98 126 102 120 104 C114 102 108 98 100 96 C90 94 76 98 70 104 Z" ink={mix(ink, white, 0.3)} base={white} seed={sd(a, "brow")} w={1.3} />
+        <S d="M72 108 C80 98 96 96 108 104 C114 108 116 116 112 122 C104 126 88 126 78 120 C74 117 72 112 72 108 Z" ink={mask} base={mask} seed={sd(a, "ml")} w={1.2} />
+        <S d="M168 108 C160 98 144 96 132 104 C126 108 124 116 128 122 C136 126 152 126 162 120 C166 117 168 112 168 108 Z" ink={mask} base={mask} seed={sd(a, "mr")} w={1.2} />
+        <S d="M100 128 C104 120 136 120 140 128 C142 140 132 150 120 150 C108 150 98 140 100 128 Z" ink={mix(ink, white, 0.3)} base={white} seed={sd(a, "muz")} w={1.4} />
+        <L d="M120 82 V98" ink={mask} seed={sd(a, "stripe")} w={3} />
+      </>
+    ),
+    front: <S d={ellipsePath(120, 128, 6, 4.5)} ink={PENCIL} base={PENCIL} seed={sd(a, "nose")} w={1.2} />,
+    // white pupils' rings so the eyes read inside the mask
+    face: { eyes: [{ x: 98, y: 110 }, { x: 142, y: 110 }], eyeR: 5.5, sclera: 8, mouth: { x: 120, y: 139 }, mouthStyle: "w", blush: [{ x: 86, y: 130 }, { x: 154, y: 130 }] },
+  };
+}
+
+function deer(): AnimalArt {
+  const a: AnimalId = "deer";
+  const { ink, fill } = ANIMALS[a];
+  const cream = "#fbf1e0";
+  const inner = "#f2b8a8";
+  return {
+    back: null,
+    tail: { node: <S d={ellipsePath(162, 214, 9, 11)} ink={ink} base={cream} hatch="#ead9bd" seed={sd(a, "tail")} gap={3} w={1.5} />, pivot: { x: 155, y: 216 }, kind: "puff" },
+    body: (
+      <>
+        {bodyAndFeet(a, ink, fill, cream)}
+        {/* fawn spots across the shoulders */}
+        {(
+          [
+            [92, 178],
+            [100, 168],
+            [146, 176],
+            [140, 166],
+            [88, 194],
+            [154, 192],
+          ] as const
+        ).map(([x, y], i) => (
+          <S key={i} d={ellipsePath(x, y, 3.6, 2.8)} ink={mix(ink, cream, 0.5)} base={cream} seed={sd(a, "sp" + i)} w={1} />
+        ))}
+      </>
+    ),
+    feet: "#4a2c16",
+    paw: "#5a3a20",
+    // long ears held out to the sides
+    ears: [
+      {
+        node: (
+          <g transform="rotate(-28 82 86)">
+            <S d={ellipsePath(70, 82, 26, 11)} ink={ink} base={tint(fill, 0.3)} hatch={fill} seed={sd(a, "el")} />
+            <S d={ellipsePath(68, 82, 16, 5.5)} ink={mix(ink, inner, 0.5)} base={inner} seed={sd(a, "eli")} w={1} />
+          </g>
+        ),
+        pivot: { x: 92, y: 90 },
+        kind: "flap",
+      },
+      {
+        node: (
+          <g transform="rotate(28 158 86)">
+            <S d={ellipsePath(170, 82, 26, 11)} ink={ink} base={tint(fill, 0.3)} hatch={fill} seed={sd(a, "er")} />
+            <S d={ellipsePath(172, 82, 16, 5.5)} ink={mix(ink, inner, 0.5)} base={inner} seed={sd(a, "eri")} w={1} />
+          </g>
+        ),
+        pivot: { x: 148, y: 90 },
+        kind: "flap",
+      },
+    ],
+    head: (
+      <>
+        {/* little velvet nubs where antlers would grow */}
+        <S d="M100 72 C98 62 102 56 106 58 C110 60 110 68 108 74 Z" ink={ink} base="#c49a6c" hatch="#a87b4c" seed={sd(a, "nl")} w={1.3} />
+        <S d="M140 72 C142 62 138 56 134 58 C130 60 130 68 132 74 Z" ink={ink} base="#c49a6c" hatch="#a87b4c" seed={sd(a, "nr")} w={1.3} />
+        {/* a gentle egg of a head, narrowing to the muzzle */}
+        <S d="M120 66 C88 66 70 88 72 112 C74 138 98 156 120 156 C142 156 166 138 168 112 C170 88 152 66 120 66 Z" ink={ink} base={tint(fill, 0.3)} hatch={fill} seed={sd(a, "head")} />
+        <S d={ellipsePath(120, 136, 19, 15)} ink={mix(ink, cream, 0.35)} base={cream} seed={sd(a, "muz")} w={1.4} />
+        <L d="M104 88 q-6 6 -4 14 M136 88 q6 6 4 14" ink={mix(ink, fill, 0.4)} seed={sd(a, "brow")} w={1.1} />
+      </>
+    ),
+    front: <S d={ellipsePath(120, 129, 7, 5)} ink={PENCIL} base="#3a2418" seed={sd(a, "nose")} w={1.3} />,
+    face: { eyes: [{ x: 101, y: 110 }, { x: 139, y: 110 }], eyeR: 6, mouth: { x: 120, y: 141 }, mouthStyle: "w", blush: [{ x: 90, y: 128 }, { x: 150, y: 128 }] },
+  };
+}
+
+const BUILDERS: Record<AnimalId, () => AnimalArt> = { bear, frog, owl, fox, cat, bunny, elephant, penguin, sheep, raccoon, deer };
 const artCache = new Map<AnimalId, AnimalArt>();
 
 export function animalArt(a: AnimalId): AnimalArt {

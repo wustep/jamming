@@ -1,6 +1,8 @@
 import type { InstrumentId } from "@/music/types";
 import type { Rig } from "./types";
 import { piano } from "./piano";
+import { organ } from "./organ";
+import { pad } from "./pad";
 import { drums } from "./drums";
 import { vibes } from "./vibes";
 import { clarinetRig, flute, sax, trombone, trumpet } from "./horns";
@@ -19,4 +21,6 @@ export const RIGS: Record<InstrumentId, Rig> = {
   cello,
   bass,
   guitar,
+  organ,
+  pad,
 };

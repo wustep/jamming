@@ -4,7 +4,7 @@ import { INSTRUMENTS } from "@/music/instruments";
 import { applyFeel, beatAt, beatToSeconds, ghostVel, jitter, pocketOf, secAt, spbAt, type TempoMap } from "./feel";
 import {
   DECAYING,
-  DEFAULT_VOLUME,
+  instrumentVolume,
   REVERB_SEND,
   lm2Sample,
   packChain,
@@ -377,7 +377,7 @@ export class TroopAudio {
     members.forEach((m, i) => {
       const k = seen.get(m.instrument) ?? 0;
       seen.set(m.instrument, k + 1);
-      const pack = m.instrument === "piano" ? this.sounds.piano : m.instrument === "drums" ? this.sounds.drums : "default";
+      const pack = m.instrument === "piano" ? this.sounds.piano : m.instrument === "drums" ? this.sounds.drums : m.instrument === "pad" ? this.sounds.pad : "default";
       const key = `${m.instrument}:${pack}#${k}`;
       this.memberEntry.set(m.id, key);
       for (const e of [this.entries.get(key), this.entries.get(`${key}|pizz`)]) if (e) e.used = used;
@@ -436,7 +436,7 @@ export class TroopAudio {
           destination: this.master,
           scheduler: this.scheduler,
           storage,
-          volume: entry.key.endsWith("|pizz") ? PIZZ_VOLUME : DEFAULT_VOLUME[entry.instrument],
+          volume: entry.key.endsWith("|pizz") ? PIZZ_VOLUME : instrumentVolume(entry.instrument, this.sounds),
           pan: 0,
           notes: hint,
           onProgress: (loaded, total) => {

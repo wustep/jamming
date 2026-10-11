@@ -16,7 +16,9 @@ export type InstrumentId =
   | "violin"
   | "cello"
   | "guitar"
-  | "vibes";
+  | "vibes"
+  | "organ"
+  | "pad";
 
 export type AnimalId =
   | "bear"
@@ -27,7 +29,9 @@ export type AnimalId =
   | "cat"
   | "elephant"
   | "penguin"
-  | "sheep";
+  | "sheep"
+  | "raccoon"
+  | "deer";
 
 export type StyleId =
   | "pop"

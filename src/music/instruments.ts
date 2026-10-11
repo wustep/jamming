@@ -40,6 +40,10 @@ export const INSTRUMENTS: Record<InstrumentId, InstrumentDef> = {
   cello: { id: "cello", name: "Cello", fn: "melodic", range: [36, 81], sweet: [43, 72], clef: "bass", notationShift: 0, poly: true, sustain: true, bassCapable: true, bowed: true, solo: [50, 77] },
   guitar: { id: "guitar", name: "Guitar", fn: "chordal", range: [40, 84], sweet: [48, 76], solo: [52, 79], clef: "treble", notationShift: 12, poly: true, sustain: false },
   vibes: { id: "vibes", name: "Vibraphone", fn: "chordal", range: [53, 89], sweet: [60, 84], solo: [60, 86], clef: "treble", notationShift: 0, poly: true, sustain: false },
+  // A drawbar organ: comps like the keys, but every chord holds as long as the key is down.
+  organ: { id: "organ", name: "Organ", fn: "chordal", range: [36, 96], sweet: [48, 84], solo: [58, 88], clef: "grand", notationShift: 0, poly: true, sustain: true },
+  // A string machine (string ensemble, or the choir): it holds the harmony under the band.
+  pad: { id: "pad", name: "String Pad", fn: "chordal", range: [36, 96], sweet: [48, 79], solo: [60, 86], clef: "grand", notationShift: 0, poly: true, sustain: true },
 };
 
 export const INSTRUMENT_LIST: InstrumentId[] = [
@@ -55,6 +59,8 @@ export const INSTRUMENT_LIST: InstrumentId[] = [
   "cello",
   "guitar",
   "vibes",
+  "organ",
+  "pad",
 ];
 
 export interface AnimalDef {
@@ -107,10 +113,12 @@ export const ANIMALS: Record<AnimalId, AnimalDef> = {
   bunny: { id: "bunny", name: "Clover", species: "rabbit", ink: "#b0546f", fill: "#f4c4cf", defaultInstrument: "violin", persona: "lyrical, quick, sings long lines, loves a sequence", taste: { openers: { "@motif seq -1": 4, "@motif up 2": 1, "@motif ornament": 1 }, density: 1, answers: 0.6 } },
   elephant: { id: "elephant", name: "Tuck", species: "elephant", ink: "#4f6b7d", fill: "#a8c3d2", defaultInstrument: "trombone", persona: "big-hearted, plays riffs and pads, a good listener", taste: { openers: { "@motif rhythm": 2, "@motif frag 3": 2, "@motif aug": 1 }, density: 0, answers: 0.9 } },
   penguin: { id: "penguin", name: "Pip", species: "penguin", ink: "#22303c", fill: "#54697a", defaultInstrument: "vibes", persona: "precise, sparkly, plays shimmering patterns, a bit nerdy", taste: { openers: { "@motif retro": 2, "@motif invert": 2, "@motif ornament": 2 }, density: 1, answers: 0.5 } },
+  raccoon: { id: "raccoon", name: "Rocco", species: "raccoon", ink: "#3f3f46", fill: "#9a9aa3", defaultInstrument: "organ", persona: "a late-night gospel organist: rich chords, a swell when the band lifts, and a sly smear up into the top note", taste: { openers: { "@motif rhythm": 2, "@motif up 2": 2, "@motif ornament": 1 }, density: 0, answers: 0.8 } },
+  deer: { id: "deer", name: "Fern", species: "deer", ink: "#7a4a26", fill: "#d39a62", defaultInstrument: "pad", persona: "dreamy and unhurried; holds long chords under everyone, and when she solos it's slow singing lines", taste: { openers: { "@motif aug": 3, "@motif seq -1": 1, "@motif invert": 1 }, density: -1, answers: 0.7 } },
   sheep: { id: "sheep", name: "Olive", species: "sheep", ink: "#5a4636", fill: "#d9c7a3", defaultInstrument: "cello", persona: "gentle and lyrical, lives in the tenor register; sings long bowed lines and sneaky countermelodies, and plucks a warm pizzicato when the groove needs it", taste: { openers: { "@motif aug": 3, "@motif seq -1": 1, "@motif invert": 1 }, density: -1, answers: 0.7 } },
 };
 
-export const ANIMAL_LIST: AnimalId[] = ["bear", "frog", "owl", "fox", "cat", "bunny", "elephant", "penguin", "sheep"];
+export const ANIMAL_LIST: AnimalId[] = ["bear", "frog", "owl", "fox", "cat", "bunny", "elephant", "penguin", "sheep", "raccoon", "deer"];
 
 export function defaultMembers(): Member[] {
   return (["bear", "frog", "owl", "fox"] as AnimalId[]).map((a) => ({

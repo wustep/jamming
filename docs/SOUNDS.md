@@ -11,8 +11,9 @@ Every sound the band plays is a free sample set, streamed through [smplr](https:
 | LinnDrum (LM-2) | drum kit option, acoustic kit fallback, count-in click | [smpldsnds/drum-machines](https://github.com/smpldsnds/drum-machines) | Public domain, per that repository |
 | Double bass, pizzicato | bass | D. Smolken's 1958 Rubner bass, via [sfzinstruments/dsmolken.double-bass](https://github.com/sfzinstruments/dsmolken.double-bass) | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | Vibraphone, soft mallets | vibes | [VCSL](https://github.com/sgossner/VCSL) | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
-| MusyngKite soundfont | horns, strings, guitar, pizzicato, fallbacks | [gleitz/midi-js-soundfonts](https://github.com/gleitz/midi-js-soundfonts) | [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) |
+| MusyngKite soundfont | horns, strings, guitar, pizzicato, fallbacks; the harpsichord (piano option), the drawbar organ, and the string pad's string ensemble and choir | [gleitz/midi-js-soundfonts](https://github.com/gleitz/midi-js-soundfonts) | [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) |
 | FluidR3 GM soundfont | last-resort fallbacks | [gleitz/midi-js-soundfonts](https://github.com/gleitz/midi-js-soundfonts) | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/us/) |
+| Soundfont loop points | sustained voices (violin, cello, horns, flute, organ, string pad, choir) | [goldst.dev/midi-js-soundfonts](https://goldst.dev/midi-js-soundfonts/), smplr's default source; where it has none (the MusyngKite trombone and clarinet, the string ensemble and choir in both kits) our own, found by `scripts/soundfont-loops.py` and served from `public/soundfont-loops/` | Loop offsets only (no audio) |
 
 The credit line at the bottom of the app names each set, which covers the attribution the CC BY sets ask for.
 
@@ -21,8 +22,13 @@ The credit line at the bottom of the app names each set, which covers the attrib
 The packs differ by up to 16 dB out of the box, so each one is level-matched:
 
 - Per-instrument volumes (`DEFAULT_VOLUME`) were measured in the browser playing the same line.
+- The string pad's two voices sit 9 dB apart (`PAD_VOLUME`), and the harpsichord runs 3 dB over Salamander (`HARPSICHORD_VOLUME`); both were matched on a held note and a line against the trumpet and the grand.
 - The electric pianos are normalized about 15 dB hotter than Salamander (C4, mezzo), so they play at `EPIANO_VOLUME`.
 - VCSL records its drum layers at their natural level: a snare's softest tap peaks 27 dB under its hardest. smplr also scales by velocity, so each layer is trimmed onto one curve, from −13 dBFS for the softest layer up to −1 dBFS for the hardest. The peaks were measured from the decoded samples and are written next to each piece in `ACOUSTIC_KIT`.
+
+## Held notes
+
+The MIDI.js samples run about three seconds, so a whole note at a slow tempo would cut out. The bowed, blown and held voices load loop points (`SUSTAINED` and `loopSource` in `src/audio/packs.ts`): MusyngKite first, FluidR3 as the fallback, each with its own loops. The string pad and the choir have no published loops; `scripts/soundfont-loops.py` decodes each note, finds the sustain from the envelope, and picks a rising zero crossing at each end whose waveform matches. Rerun it (macOS, needs `afconvert`) if a sample set changes.
 
 ## Notation fonts
 
