@@ -22,9 +22,17 @@ export function playKeys(c: RigCtx, f: Frame, keyX: (pitch: number) => number, h
   const m = c.mem;
   let leanSum = 0;
   let leanW = 0;
+  // a note just over the split that was struck with a chord below it is the left hand's: a
+  // left-hand voicing that reaches middle C doesn't hold the right hand down there
+  const split = hands.find((h) => h.key === "R")?.lo ?? Infinity;
+  const handPitch = (n: { pitch: number; age: number }) => {
+    if (n.pitch < split || n.pitch > split + 2) return n.pitch;
+    const low = s.active.reduce((lo, m) => (Math.abs(m.age - n.age) < 0.02 ? Math.min(lo, m.pitch) : lo), n.pitch);
+    return low < split - 4 ? low : n.pitch;
+  };
   for (const h of hands) {
     const inHand = (p: number) => p >= h.lo && p <= h.hi;
-    const act = s.active.filter((n) => inHand(n.pitch));
+    const act = s.active.filter((n) => inHand(handPitch(n)));
     const last = s.recent.find((o) => inHand(o.pitch));
     // this hand's own next note (or chord), not just the part's next onset
     const nx = nextWhere(s, inHand);

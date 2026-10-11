@@ -14,8 +14,6 @@ export interface StyleDef {
   swing: number;
   tempo: { min: number; max: number; default: number };
   key: { tonic: string; mode: "major" | "minor" };
-  /** Roman-numeral progressions per mode, one entry per bar ("ii7 V7" = two chords in a bar). */
-  progressions: { major: string[][]; minor: string[][] };
   /** Default directive per function per section kind. */
   section: Record<SectionKind, Partial<Record<InstrumentFunction | "melodic-support", string>>>;
   /** Average notes per beat for improvised lines (the line feel itself lives in phrase.ts). */
@@ -42,17 +40,6 @@ export const STYLES: Record<StyleId, StyleDef> = {
     swing: 0.66,
     tempo: { min: 90, max: 240, default: 160 },
     key: { tonic: "Bb", mode: "major" },
-    progressions: {
-      major: [
-        ["Imaj7", "vi7", "ii7", "V7", "Imaj7", "VI7", "ii7", "V7"],
-        ["ii7", "V7", "Imaj7", "Imaj7", "ii7", "V7", "iii7 VI7", "ii7 V7"],
-        ["Imaj7", "IV7", "iii7", "VI7", "ii7", "V7", "Imaj7 vi7", "ii7 V7"],
-      ],
-      minor: [
-        ["i7", "iv7", "ii7b5", "V7", "i7", "VI7", "ii7b5", "V7"],
-        ["i7", "i7", "iv7", "iv7", "bVI7", "V7", "i7", "ii7b5 V7"],
-      ],
-    },
     section: {
       intro: { bass: "@two", chordal: "@comp sparse", rhythm: "@groove light", melodic: "@rest" },
       head: { bass: "@walk", chordal: "@comp", rhythm: "@groove", melodic: "@guide", "melodic-support": "@guide" },
@@ -84,16 +71,6 @@ export const STYLES: Record<StyleId, StyleDef> = {
     swing: 0.5,
     tempo: { min: 100, max: 150, default: 128 },
     key: { tonic: "C", mode: "minor" },
-    progressions: {
-      major: [
-        ["Imaj7", "Imaj7", "II7", "II7", "ii7", "V7", "Imaj7", "V7"],
-        ["Imaj7", "vi7", "ii7", "V7", "iii7", "VI7", "ii7", "V7"],
-      ],
-      minor: [
-        ["i7", "i7", "iv7", "iv7", "ii7b5", "V7", "i7", "i7"],
-        ["i7", "iv7", "bVII7", "bIIImaj7", "bVImaj7", "ii7b5", "V7", "i7"],
-      ],
-    },
     section: {
       intro: { bass: "@bossa", chordal: "@comp", rhythm: "@groove light", melodic: "@rest" },
       head: { bass: "@bossa", chordal: "@comp", rhythm: "@groove", melodic: "@pad", "melodic-support": "@pad" },
@@ -124,16 +101,6 @@ export const STYLES: Record<StyleId, StyleDef> = {
     swing: 0.5,
     tempo: { min: 85, max: 120, default: 102 },
     key: { tonic: "E", mode: "minor" },
-    progressions: {
-      major: [
-        ["I7", "I7", "IV7", "I7", "bVII7", "IV7", "I7", "V7"],
-        ["I7", "I7", "I7", "I7", "IV7", "IV7", "I7", "I7"],
-      ],
-      minor: [
-        ["i7", "i7", "i7", "i7", "IV7", "IV7", "i7", "i7"],
-        ["i7", "i7", "bVII7", "IV7", "i7", "i7", "bVI7", "V7"],
-      ],
-    },
     section: {
       intro: { bass: "@funk", chordal: "@rest", rhythm: "@groove", melodic: "@rest" },
       head: { bass: "@funk", chordal: "@comp", rhythm: "@groove", melodic: "@riff", "melodic-support": "@riff" },
@@ -163,18 +130,6 @@ export const STYLES: Record<StyleId, StyleDef> = {
     swing: 0.5,
     tempo: { min: 70, max: 140, default: 100 },
     key: { tonic: "C", mode: "major" },
-    progressions: {
-      major: [
-        ["I", "V", "vi", "IV", "I", "V", "vi", "IV"],
-        ["vi", "IV", "I", "V", "vi", "IV", "I", "V"],
-        ["I", "vi", "IV", "V", "I", "vi", "IV", "V"],
-        ["I", "IV", "vi", "V", "I", "IV", "V", "I"],
-      ],
-      minor: [
-        ["i", "VI", "III", "VII", "i", "VI", "III", "VII"],
-        ["i", "iv", "VI", "V", "i", "iv", "VI", "V"],
-      ],
-    },
     section: {
       intro: { bass: "@pump", chordal: "@pulse sparse", rhythm: "@groove light", melodic: "@rest" },
       head: { bass: "@pump", chordal: "@pulse", rhythm: "@groove", melodic: "@pad", "melodic-support": "@harmony" },
@@ -217,17 +172,6 @@ export const STYLES: Record<StyleId, StyleDef> = {
     swing: 0.6,
     tempo: { min: 90, max: 200, default: 132 },
     key: { tonic: "F", mode: "major" },
-    progressions: {
-      major: [
-        ["I", "I", "I", "I", "I", "I", "V7", "V7"],
-        ["I", "I7", "IV", "iv", "I", "V7", "I", "I"],
-        ["I", "VI7", "II7", "V7", "I", "VI7", "II7 V7", "I"],
-      ],
-      minor: [
-        ["i", "i", "iv", "iv", "i", "V7", "i", "V7"],
-        ["i", "iv", "i", "V7", "i", "iv", "V7", "i"],
-      ],
-    },
     section: {
       intro: { bass: "@two", chordal: "@stride", rhythm: "@groove", melodic: "@riff" },
       head: { bass: "@two", chordal: "@stride", rhythm: "@groove", melodic: "@counter", "melodic-support": "@counter" },
@@ -257,16 +201,6 @@ export const STYLES: Record<StyleId, StyleDef> = {
     swing: 0.5,
     tempo: { min: 100, max: 160, default: 132 },
     key: { tonic: "A", mode: "minor" },
-    progressions: {
-      major: [
-        ["I", "I", "vi", "vi", "IV", "IV", "V", "V"],
-        ["Imaj7", "Imaj7", "IVmaj7", "IVmaj7", "Imaj7", "Imaj7", "vi7", "vi7"],
-      ],
-      minor: [
-        ["i", "i", "VI", "VI", "III", "III", "VII", "VII"],
-        ["i", "i", "iv", "iv", "VI", "VI", "V", "V"],
-      ],
-    },
     section: {
       intro: { bass: "@pedal", chordal: "@arp", rhythm: "@groove light", melodic: "@rest" },
       head: { bass: "@pedal", chordal: "@arp", rhythm: "@groove", melodic: "@riff", "melodic-support": "@arp" },
@@ -296,16 +230,6 @@ export const STYLES: Record<StyleId, StyleDef> = {
     swing: 0.5,
     tempo: { min: 70, max: 130, default: 96 },
     key: { tonic: "D", mode: "minor" },
-    progressions: {
-      major: [
-        ["I", "V", "vi", "iii", "IV", "I", "IV", "V7"],
-        ["I", "IV", "V", "I", "vi", "ii", "V7", "I"],
-      ],
-      minor: [
-        ["i", "iv", "VII", "III", "VI", "ii7b5", "V7", "i"],
-        ["i", "V7", "i", "iv", "VII7", "III", "V7", "i"],
-      ],
-    },
     section: {
       intro: { bass: "@baroque", chordal: "@prelude", rhythm: "@rest", melodic: "@rest" },
       head: { bass: "@baroque", chordal: "@prelude", rhythm: "@groove light", melodic: "@canon", "melodic-support": "@harmony" },
@@ -335,17 +259,6 @@ export const STYLES: Record<StyleId, StyleDef> = {
     swing: 0.5,
     tempo: { min: 56, max: 90, default: 72 },
     key: { tonic: "D", mode: "major" },
-    progressions: {
-      major: [
-        ["Imaj7", "Imaj7", "IVmaj7", "IVmaj7", "vi7", "vi7", "IVmaj7", "Vsus"],
-        ["Isus", "Isus", "bVIImaj7", "bVIImaj7", "IVmaj7", "IVmaj7", "Isus", "Isus"],
-        ["vi9", "vi9", "IVmaj7", "IVmaj7", "Imaj7", "Imaj7", "Vsus", "Vsus"],
-      ],
-      minor: [
-        ["i9", "i9", "bVImaj7", "bVImaj7", "iv9", "iv9", "bVIImaj7", "Vsus"],
-        ["i9", "i9", "bIIImaj7", "bIIImaj7", "bVImaj7", "bVImaj7", "bVIImaj7", "bVIImaj7"],
-      ],
-    },
     section: {
       intro: { bass: "@pedal", chordal: "@pad", rhythm: "@groove light", melodic: "@rest" },
       head: { bass: "@pedal", chordal: "@shimmer", rhythm: "@groove", melodic: "@pad", "melodic-support": "@pad" },

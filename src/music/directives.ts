@@ -48,9 +48,11 @@ function pianoSoloLeftHand(ctx: BarCtx): NoteEvent[] {
   const out: NoteEvent[] = [];
   const vel = velFor(ctx, 0.45);
   for (const s of chordSpans(ctx)) {
-    const v = voiceChord(s.chord, "shell", 43, 62, ctx.mem.lastVoicing);
+    // a step low down is mud (a sus shell's 4th against its 5th): the lower note keeps it open
+    const v = [...voiceChord(s.chord, "shell", 43, 62, ctx.mem.lastVoicing)].sort((a, b) => a - b);
+    const clear = v.filter((p, i) => i === 0 || !(p - v[i - 1] <= 2 && v[i - 1] < 52));
     const pos = s.start + (ctx.style.swing > 0.55 && ctx.rng.chance(0.5) ? 0.5 : 0);
-    for (const p of v) out.push({ pitch: p, start: pos, dur: Math.min(1.2, s.end - pos), vel });
+    for (const p of clear) out.push({ pitch: p, start: pos, dur: Math.min(1.2, s.end - pos), vel });
   }
   return out;
 }

@@ -340,10 +340,11 @@ export function transposeChordSymbol(symbol: string, semis: number, flats: boole
  * Tokens like "ii7", "V7", "Imaj7", "vi7", "bVII7", "iv", "V7/ii".
  */
 export function romanToChord(token: string, key: KeySig): string {
-  const flats = keyPrefersFlats(key);
   const tonic = pcOf(key.tonic);
   const m = /^(b|#)?(VII|VI|V|IV|III|II|I|vii|vi|v|iv|iii|ii|i)(.*)$/.exec(token);
   if (!m) return token;
+  // a flattened degree is spelled flat (bVII in C is Bb, not A#), a sharpened one sharp
+  const flats = m[1] === "b" ? true : m[1] === "#" ? false : keyPrefersFlats(key);
   const numerals = ["I", "II", "III", "IV", "V", "VI", "VII"];
   const deg = numerals.indexOf(m[2].toUpperCase());
   const majorSteps = [0, 2, 4, 5, 7, 9, 11];

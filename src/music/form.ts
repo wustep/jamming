@@ -1,3 +1,4 @@
+import { bookOf, buildTune } from "./harmony-books";
 import { reharmonize } from "./reharm";
 import { INSTRUMENTS } from "./instruments";
 import { makeRng } from "./rng";
@@ -200,7 +201,8 @@ export function buildFrame(input: TroopSettings, members: Member[]): Frame {
       barTexts[total - 1] = last[0];
     }
   } else {
-    const prog = rng.pick(style.progressions[settings.key.mode]);
+    // the tune's eight bars, built in four-bar phrases from the style's (or the chart's) harmony book
+    const prog = buildTune(bookOf(settings), settings.key.mode, rng.fork("book"));
     const toText = (bar: string) =>
       bar
         .split(/\s+/)

@@ -4,6 +4,7 @@
 // Time is measured in beats (quarter notes) from the start of the chart.
 // Bars are 0-indexed internally and 1-indexed anywhere a human or model sees them.
 
+import type { BookId } from "./harmony-books";
 import type { FeelId } from "./playing";
 
 export type InstrumentId =
@@ -201,6 +202,8 @@ export interface TroopSettings {
   swingFeel?: SwingFeel;
   /** How it's played (touch, rubato, a line's habits; see playing.ts). Absent = the style's own. */
   feel?: FeelId;
+  /** The harmony book a free chart's changes are built from (harmony-books.ts). Absent = the style's own. */
+  harmony?: BookId;
 }
 
 export type SwingFeel = "light" | "medium" | "hard";
