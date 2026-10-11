@@ -28,6 +28,9 @@ function compRange(ctx: BarCtx): [number, number] {
 }
 
 function family(ctx: BarCtx): VoicingFamily {
+  // an artist's own chord shapes (Evans's spreads, Monk's crunch, the So What chord)
+  const own = ctx.feel.sig?.voicing;
+  if (own) return ctx.inst.id === "guitar" && own === "evans" ? "rootless" : own;
   if (ctx.inst.id === "guitar" && ctx.style.voicing === "rootless") return "shell";
   return ctx.style.voicing;
 }

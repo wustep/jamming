@@ -1,7 +1,7 @@
 import type { Harm } from "../harmony";
 import { mod, type Chord } from "../theory";
 
-export type VoicingFamily = "rootless" | "triad" | "open" | "quartal" | "shell";
+export type VoicingFamily = "rootless" | "triad" | "open" | "quartal" | "shell" | "evans" | "monk" | "sowhat";
 
 function rootlessForms(c: Chord): number[][] {
   const alt9 = c.tensions.includes(13) ? 13 : c.tensions.includes(15) ? 15 : 14;
@@ -101,6 +101,103 @@ function quartalForms(c: Chord): number[][] {
   }
 }
 
+/**
+ * Bill Evans's two-handed spreads: the left hand on the 3rd and 7th (or 7th and 3rd), the right
+ * hand a 9th-and-up cluster above it, five notes over an octave and a half, no root.
+ */
+function evansForms(c: Chord): number[][] {
+  switch (c.quality) {
+    case "maj7":
+      return [
+        [4, 11, 14, 16, 21],
+        [11, 16, 19, 21, 26],
+      ];
+    case "6":
+    case "maj":
+      return [
+        [4, 9, 14, 16, 19],
+        [9, 14, 16, 19, 21],
+      ];
+    case "min7":
+    case "min":
+      return [
+        [3, 10, 14, 17, 19],
+        [10, 15, 17, 19, 26],
+      ];
+    case "m6":
+      return [[3, 9, 14, 15, 19]];
+    case "dom":
+      return [
+        [4, 10, 14, 16, 21],
+        [10, 16, 21, 26, 28],
+      ];
+    case "sus":
+      return [[5, 10, 14, 17, 21]];
+    case "m7b5":
+      return [[3, 10, 12, 14, 18]];
+    default:
+      return rootlessForms(c);
+  }
+}
+
+/**
+ * Monk's crunch: three notes, two of them a half step apart, struck together on purpose
+ * (the 3rd with the 4th, the #9 against the 3rd, the 7th rubbing the root).
+ */
+function monkForms(c: Chord): number[][] {
+  switch (c.quality) {
+    case "dom":
+      return [
+        [10, 15, 16],
+        [4, 5, 10],
+      ];
+    case "maj7":
+    case "6":
+    case "maj":
+      return [
+        [11, 12, 16],
+        [4, 5, 9],
+      ];
+    case "min7":
+    case "min":
+    case "m6":
+      return [
+        [2, 3, 10],
+        [10, 14, 15],
+      ];
+    case "m7b5":
+      return [[5, 6, 10]];
+    default:
+      return rootlessForms(c);
+  }
+}
+
+/** The "So What" chord: three 4ths and a major 3rd on top; on major and dominant chords, 4ths that belong. */
+function soWhatForms(c: Chord): number[][] {
+  switch (c.quality) {
+    case "min7":
+    case "min":
+    case "m6":
+    case "minMaj7":
+      return [
+        [0, 5, 10, 15, 19],
+        [5, 10, 15, 19, 24],
+      ];
+    case "maj7":
+    case "maj":
+    case "6":
+      return [[4, 9, 14, 19, 23]];
+    case "sus":
+    case "dom":
+      return [
+        [5, 10, 15, 19, 24].map((i) => (i === 15 ? 14 : i)),
+        [0, 5, 10, 14, 19],
+      ];
+    default:
+      return quartalForms(c);
+  }
+}
+
 function triadTones(c: Chord): number[] {
   return c.tones.slice(0, 3);
 }
@@ -130,6 +227,12 @@ function candidates(c: Chord, fam: VoicingFamily): number[][] {
     }
     case "quartal":
       return quartalForms(c);
+    case "evans":
+      return evansForms(c);
+    case "monk":
+      return monkForms(c);
+    case "sowhat":
+      return soWhatForms(c);
     case "shell": {
       const third = c.tones[1] ?? 4;
       const seventh = c.tones[3] ?? (c.quality === "maj" ? 9 : 7);
@@ -192,7 +295,8 @@ export function voiceChord(
   // a closer shape of the same chord rather than a bare triad
   const order: VoicingFamily[] = [fam, ...(["rootless", "shell", "triad"] as VoicingFamily[]).filter((f) => f !== fam)];
   for (const f of order) {
-    const forms = candidates(c, f).map((x) => [...new Set(fitTensions(x, c, harm))]);
+    // Monk's half-step crunch is the point: it isn't fitted to the harmony
+    const forms = candidates(c, f).map((x) => [...new Set(f === "monk" ? x : fitTensions(x, c, harm))]);
     for (const form of forms) {
       for (let oct = 1; oct <= 7; oct++) {
         const base = oct * 12 + c.root;

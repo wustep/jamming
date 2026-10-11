@@ -399,7 +399,7 @@ export const useTroop = create<TroopState>((set, get) => {
           preset: p.id,
           tempo: p.tempo,
           key: { ...p.key },
-          meter: { beats: 4 },
+          meter: { beats: p.meter ?? 4 },
           standard: null,
           bars: cur.standard ? 32 : cur.bars,
           swingFeel: undefined,

@@ -10,6 +10,7 @@ import * as bass from "./patterns/bass";
 import * as comp from "./patterns/comp";
 import * as drums from "./patterns/drums";
 import * as lines from "./patterns/lines";
+import { bassFigure, compFigure, leftHandFigure } from "./patterns/signatures";
 import { voiceChord } from "./patterns/voicing";
 import type { NoteEvent } from "./types";
 
@@ -43,13 +44,23 @@ function parseDirective(text: string): { name: string; args: string[] } {
   return { name: (head ?? "").toLowerCase(), args };
 }
 
-function pianoSoloLeftHand(ctx: BarCtx): NoteEvent[] {
+function pianoSoloLeftHand(ctx: BarCtx, right: NoteEvent[] = []): NoteEvent[] {
+  // an artist whose left hand is the sound keeps it under their own tune: a note that would
+  // reach up to the right hand drops an octave (or out), so the hands never cross
+  const own = leftHandFigure(ctx, ctx.feel.sig);
+  if (own) {
+    const under = (n: NoteEvent) => right.filter((r) => r.start < n.start + n.dur - 1e-6 && r.start + r.dur > n.start + 1e-6).every((r) => r.pitch > n.pitch + 2);
+    return own.map((n) => (under(n) ? n : { ...n, pitch: n.pitch - 12 })).filter((n) => n.pitch >= 33 && under(n));
+  }
   // sparse shells under a piano solo
   const out: NoteEvent[] = [];
   const vel = velFor(ctx, 0.45);
   for (const s of chordSpans(ctx)) {
     // a step low down is mud (a sus shell's 4th against its 5th): the lower note keeps it open
-    const v = [...voiceChord(s.chord, "shell", 43, 62, ctx.mem.lastVoicing)].sort((a, b) => a - b);
+    // Evans's left hand plays his rootless A/B voicings, Monk's his crunch; everyone else shells
+    const own = ctx.feel.sig?.voicing;
+    const fam = own === "evans" ? "rootless" : own === "monk" ? "monk" : "shell";
+    const v = [...voiceChord(s.chord, fam, 43, 62, ctx.mem.lastVoicing)].sort((a, b) => a - b);
     const clear = v.filter((p, i) => i === 0 || !(p - v[i - 1] <= 2 && v[i - 1] < 52));
     const pos = s.start + (ctx.style.swing > 0.55 && ctx.rng.chance(0.5) ? 0.5 : 0);
     for (const p of clear) out.push({ pitch: p, start: pos, dur: Math.min(1.2, s.end - pos), vel });
@@ -87,6 +98,10 @@ function rehearse(ctx: BarCtx, notes: NoteEvent[], issues: string[]): NoteEvent[
     return { ...n, pitch: fixed };
   });
 }
+
+/** The directives an artist's bass figure or comping figure stands in for. */
+const BASS_PATTERNS = new Set(["walk", "two", "bossa", "funk", "baroque", "pedal", "pump"]);
+const COMP_PATTERNS = new Set(["comp", "pulse", "pump", "stride", "arp", "prelude", "continuo", "pad", "shimmer", "bossa", "funk", "groove"]);
 
 /** Bowed strings pluck these patterns. */
 const PLUCKED = new Set(["walk", "two", "bossa", "funk", "pizz"]);
@@ -173,6 +188,17 @@ function realizeRaw(ctx: BarCtx, text: string): DirectiveResult {
   // the string machine holds the harmony whatever the comping figure would have been
   if (ctx.inst.id === "pad" && ["comp", "stride", "arp", "prelude", "continuo", "shimmer", "pizz", "arco", "bossa", "funk", "riff"].includes(name)) return done(comp.pad(c));
 
+  // an artist's own figures, where the style's bass line or comping would have been
+  const sig = ctx.feel.sig;
+  if (sig?.bass && fn === "bass" && BASS_PATTERNS.has(name)) {
+    const notes = bassFigure(c, sig.bass);
+    if (notes) return done(notes);
+  }
+  if (sig?.comp && fn === "chordal" && ctx.inst.id !== "pad" && COMP_PATTERNS.has(name)) {
+    const notes = compFigure(c, sig.comp);
+    if (notes) return done(notes);
+  }
+
   switch (name) {
     case "head": {
       // the tune comes back: replay the leader's notes from that bar
@@ -232,18 +258,18 @@ function realizeRaw(ctx: BarCtx, text: string): DirectiveResult {
         issues.push(`@motif ${bar2}: the statement has no bar ${offset + 2}; playing bar ${offset + 1}`);
         notes = realizeMotifBar(c, ops, offset);
       }
-      if (comp.twoHanded(ctx)) notes.push(...pianoSoloLeftHand(c));
+      if (comp.twoHanded(ctx)) notes.push(...pianoSoloLeftHand(c, notes));
       return done(notes);
     }
     case "answer": {
       const notes = lines.answer(c);
-      if (comp.twoHanded(ctx)) notes.push(...pianoSoloLeftHand(c));
+      if (comp.twoHanded(ctx)) notes.push(...pianoSoloLeftHand(c, notes));
       return done(notes);
     }
     case "line":
     case "solo": {
       const notes = lines.line(c);
-      if (comp.twoHanded(ctx)) notes.push(...pianoSoloLeftHand(c));
+      if (comp.twoHanded(ctx)) notes.push(...pianoSoloLeftHand(c, notes));
       return done(notes);
     }
     case "walk":

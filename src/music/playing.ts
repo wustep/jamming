@@ -1,3 +1,4 @@
+import type { VoicingFamily } from "./patterns/voicing";
 import { hashString } from "./rng";
 import type { NoteEvent, StyleId } from "./types";
 
@@ -11,7 +12,47 @@ import type { NoteEvent, StyleId } from "./types";
 // animation shares). The rest move or mark a line's notes, only on a featured player's own lines:
 // never the written melody, the bass or the comping (a bossa's bass and comping don't anticipate).
 
-export type FeelId = StyleId | "glass" | "zimmer" | "chopin" | "debussy" | "laufey" | "fox" | "bach" | "basie";
+export type FeelId =
+  | StyleId
+  | "glass"
+  | "zimmer"
+  | "chopin"
+  | "debussy"
+  | "laufey"
+  | "fox"
+  | "bach"
+  | "basie"
+  | "evans"
+  | "monk"
+  | "miles"
+  | "herbie"
+  | "guaraldi"
+  | "stevie"
+  | "sakamoto"
+  | "hisaishi"
+  | "frahm"
+  | "einaudi"
+  | "satie"
+  | "fela"
+  | "son";
+
+/**
+ * What makes an artist recognisable beyond the touch: the chord shapes, the figure the keys or
+ * the guitar play, the bass line, the drummer's groove and the colour of the lead line. Each
+ * replaces the style's own where it's set (patterns/signatures.ts plays them).
+ */
+export interface Signature {
+  /** How the comping chords are voiced, in place of the style's family. */
+  voicing?: VoicingFamily;
+  /** The keys' and guitar's figure, in place of the style's comping. */
+  comp?: "amen" | "montuno" | "clav" | "afro" | "guaraldi" | "satie" | "einaudi" | "frahm" | "sakamoto" | "waltz";
+  /** The bass player's figure. */
+  bass?: "sowhat" | "tumbao" | "afro" | "chameleon" | "two";
+  /** The drummer's groove. */
+  drums?: "brushes" | "son" | "afrobeat";
+  /** The colour a featured line leans toward: whole-tone runs off a dominant, or the pentatonic. */
+  line?: "wholetone" | "pentatonic";
+}
 
 export interface PlayingFeel {
   name: string;
@@ -33,6 +74,8 @@ export interface PlayingFeel {
   ostinato?: true;
   /** Accent groupings that regroup a running bar of sixteenths against the metre, a bar each in turn. */
   grouping?: readonly (readonly number[])[];
+  /** The artist's own figures (voicings, comping, bass, drums, line colour). */
+  sig?: Signature;
 }
 
 export const FEELS: Record<FeelId, PlayingFeel> = {
@@ -53,6 +96,20 @@ export const FEELS: Record<FeelId, PlayingFeel> = {
   laufey: { name: "Laufey", accent: 1.1, articulation: 0.9, looseness: 0.01, humanize: 0.04, rubato: "light", push: 0.35, dotted: 0.15 },
   fox: { name: "Elijah Fox", accent: 0.8, articulation: 1, looseness: 0.008, humanize: 0.03, rubato: "light", push: 0.15, dotted: 0.05, grouping: [[5, 5, 6], [7, 5, 4]] },
   basie: { name: "Basie", accent: 1.1, articulation: 0.8, looseness: 0.007, humanize: 0.05, rubato: "even", push: 0.18, dotted: 0 },
+  // the second shelf: each brings its own figures as well as its touch
+  evans: { name: "Bill Evans", accent: 0.6, articulation: 0.95, looseness: 0.008, humanize: 0.035, rubato: "even", push: 0.15, dotted: 0, sig: { voicing: "evans", drums: "brushes" } },
+  monk: { name: "Monk", accent: 1.3, articulation: 0.7, looseness: 0.012, humanize: 0.08, rubato: "even", push: 0.25, dotted: 0, sig: { voicing: "monk", line: "wholetone" } },
+  miles: { name: "Miles Davis", accent: 0.7, articulation: 0.9, looseness: 0.008, humanize: 0.05, rubato: "even", push: 0.1, dotted: 0, sig: { voicing: "sowhat", comp: "amen", bass: "sowhat" } },
+  herbie: { name: "Herbie Hancock", accent: 1.2, articulation: 0.6, looseness: 0.003, humanize: 0.05, rubato: "even", push: 0.15, dotted: 0, grouping: [[3, 3, 2, 3, 3, 2]], sig: { voicing: "quartal", bass: "chameleon" } },
+  guaraldi: { name: "Guaraldi", accent: 1, articulation: 0.85, looseness: 0.006, humanize: 0.04, rubato: "even", push: 0.2, dotted: 0.1, sig: { comp: "guaraldi", bass: "two", drums: "brushes" } },
+  stevie: { name: "Stevie Wonder", accent: 1.25, articulation: 0.6, looseness: 0.004, humanize: 0.05, rubato: "even", push: 0.25, dotted: 0, grouping: [[3, 3, 2, 3, 3, 2]], sig: { comp: "clav", line: "pentatonic" } },
+  sakamoto: { name: "Sakamoto", accent: 0.6, articulation: 1, looseness: 0.006, humanize: 0.02, rubato: "light", push: 0, dotted: 0, ostinato: true, sig: { comp: "sakamoto", line: "pentatonic" } },
+  hisaishi: { name: "Hisaishi", accent: 0.9, articulation: 0.95, looseness: 0.008, humanize: 0.03, rubato: "light", push: 0.1, dotted: 0.15, sig: { comp: "waltz", bass: "two" } },
+  frahm: { name: "Nils Frahm", accent: 0.5, articulation: 1, looseness: 0.004, humanize: 0.02, rubato: "even", push: 0, dotted: 0, ostinato: true, sig: { comp: "frahm" } },
+  einaudi: { name: "Einaudi", accent: 0.6, articulation: 1, looseness: 0.006, humanize: 0.025, rubato: "light", push: 0.1, dotted: 0.05, ostinato: true, sig: { comp: "einaudi" } },
+  satie: { name: "Satie", accent: 0.4, articulation: 1, looseness: 0.012, humanize: 0.03, rubato: "breathing", push: 0, dotted: 0, sig: { comp: "satie" } },
+  fela: { name: "Fela Kuti", accent: 1.1, articulation: 0.7, looseness: 0.004, humanize: 0.05, rubato: "even", push: 0.2, dotted: 0, sig: { comp: "afro", bass: "afro", drums: "afrobeat", line: "pentatonic" } },
+  son: { name: "Son cubano", accent: 1, articulation: 0.8, looseness: 0.005, humanize: 0.04, rubato: "even", push: 0.3, dotted: 0, sig: { comp: "montuno", bass: "tumbao", drums: "son" } },
 };
 
 export const FEEL_IDS = Object.keys(FEELS) as FeelId[];

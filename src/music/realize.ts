@@ -1,4 +1,5 @@
 import { feelOf, playLine } from "./playing";
+import { colorLine } from "./patterns/signatures";
 import { DYNAMIC_ENERGY, newMemory, type BarCtx, type PlayerMemory } from "./context";
 import { realizeDirective } from "./directives";
 import { styleDynamic } from "./ending";
@@ -307,7 +308,8 @@ export function realize(o: RealizeOptions): RealizeResult {
       const alone = (n: NoteEvent) => !rel.some((x) => x !== n && Math.abs(x.start - n.start) < 1e-6);
       const line = ctx.inst.fn === "melodic" ? rel : rel.filter((n) => alone(n) && n.pitch >= 55);
       const rest = rel.filter((n) => !line.includes(n));
-      const played = playLine(line, ctx.feel, { bar, beats, seed: `${o.seed}:${m.id}`, straight: ctx.style.swing <= 0.55 });
+      // and the artist's colour (Monk's whole-tone runs, a pentatonic line)
+      const played = colorLine(playLine(line, ctx.feel, { bar, beats, seed: `${o.seed}:${m.id}`, straight: ctx.style.swing <= 0.55 }), ctx, ctx.feel.sig);
       rel = [...played, ...rest].sort((a, b) => a.start - b.start);
     }
     if (inside.length < res.notes.length) issues.push({ bar, member: m.id, detail: `${res.notes.length - inside.length} notes outside the bar dropped` });
