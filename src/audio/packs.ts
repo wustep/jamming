@@ -192,13 +192,37 @@ const splendid: PackSpec = {
   },
 };
 
-function soundfont(name: string, kit: "MusyngKite" | "FluidR3_GM"): PackSpec {
+type SoundfontKit = "MusyngKite" | "FluidR3_GM";
+
+/**
+ * Bowed, blown and held voices loop their samples (the MIDI.js samples run about three
+ * seconds), so a whole note at a slow tempo holds instead of cutting out.
+ */
+const SUSTAINED = new Set(["violin", "cello", "trumpet", "tenor_sax", "trombone", "clarinet", "flute", "string_ensemble_1", "choir_aahs", "church_organ", "drawbar_organ"]);
+
+/**
+ * Loop points goldst.dev doesn't publish, worked out from the samples themselves (a matching
+ * rising zero crossing in the sustain, by scripts/soundfont-loops.py) and served from public/.
+ */
+const OWN_LOOPS: Record<SoundfontKit, string[]> = {
+  MusyngKite: ["string_ensemble_1", "choir_aahs", "trombone", "clarinet"],
+  FluidR3_GM: ["string_ensemble_1", "choir_aahs"],
+};
+
+/** Where a soundfont's loop points come from: smplr's default (goldst.dev), ours, or none. */
+export function loopSource(name: string, kit: SoundfontKit): { loadLoopData: boolean; loopDataUrl?: string } {
+  if (!SUSTAINED.has(name)) return { loadLoopData: false };
+  return OWN_LOOPS[kit].includes(name) ? { loadLoopData: true, loopDataUrl: `/soundfont-loops/${kit}/${name}-loop.json` } : { loadLoopData: true };
+}
+
+function soundfont(name: string, kit: SoundfontKit): PackSpec {
   return {
     pack: `${kit === "MusyngKite" ? "musyngkite" : "fluidr3"}:${name}`,
     create(p) {
       return Soundfont(p.ctx, {
         instrument: name,
         kit,
+        ...loopSource(name, kit),
         destination: p.destination,
         scheduler: p.scheduler,
         storage: p.storage,

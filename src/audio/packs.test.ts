@@ -32,7 +32,7 @@ describe("the acoustic kit", () => {
 describe("sounds", () => {
   it("reads old saves and unknown values back as sounds we have", () => {
     expect(readSounds(undefined, "splendid")).toEqual({ ...DEFAULT_SOUNDS, piano: "splendid" });
-    expect(readSounds({ piano: "harpsichord", drums: "808", room: "cave", countIn: "yes" })).toEqual(DEFAULT_SOUNDS);
+    expect(readSounds({ piano: "theremin", drums: "808", room: "cave", countIn: "yes" })).toEqual(DEFAULT_SOUNDS);
     expect(readSounds({ piano: "wurlitzer", drums: "lm2", room: "hall", countIn: false })).toEqual({ piano: "wurlitzer", drums: "lm2", room: "hall", countIn: false });
   });
   it("falls back from every sampled pack", () => {

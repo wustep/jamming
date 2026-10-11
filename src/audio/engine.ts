@@ -17,6 +17,7 @@ import {
   type PianoPack,
   type Sounds,
 } from "./packs";
+import { tuneRoom } from "./room";
 import { CountingStorage } from "./storage";
 
 // Playback engine: smplr sampled instruments driven by our own lookahead scheduler on the
@@ -239,8 +240,13 @@ export class TroopAudio {
     this.master = master;
     this.compressor = compressor;
     try {
-      this.reverb = Reverb(ctx);
-      this.reverb.connect(master);
+      const reverb = Reverb(ctx);
+      reverb.connect(master);
+      this.reverb = reverb;
+      // the room is tuned once the worklet is up (and again whenever the room changes)
+      void reverb.ready().then(() => {
+        if (this.reverb === reverb) tuneRoom(reverb, this.sounds.room, ctx.sampleRate);
+      });
     } catch (err) {
       console.warn("[audio] reverb unavailable", err);
       this.reverb = null;
@@ -711,6 +717,7 @@ export class TroopAudio {
     const roomChanged = sounds.room !== this.sounds.room;
     this.sounds = sounds;
     if (!roomChanged || !this.reverb) return;
+    if (this.ctx) tuneRoom(this.reverb, sounds.room, this.ctx.sampleRate);
     for (const e of this.entries.values()) {
       try {
         e.inst?.output.sendEffect("reverb", REVERB_SEND[e.instrument] * ROOM_SEND[sounds.room]);
