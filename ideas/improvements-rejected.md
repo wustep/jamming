@@ -71,7 +71,7 @@
 - **Accompanists get harmony and the soloist's gaps** — chord-tone line and GAPS: line in accompanimentPhase _(rejected 2026-10-06)_
 - **Featured solo vocabulary; reject unknown directives** — @answer in the featured prompt, KNOWN_DIRECTIVES check _(rejected 2026-10-06)_
 - **Live soloists see only the nearby chart** — windowed chartBlock for featured calls _(rejected 2026-10-06)_
-- **Ties hold across the barline** — post-realize merge of cross-bar ties _(rejected 2026-10-06)_
+- **Ties hold across the barline (model-written lines)** — post-realize merge of cross-bar ties in what the models write. Written standard melodies are the exception: their ties across the barline are kept and held (`melodyBar` in standards.ts) _(rejected 2026-10-06; melody exception noted 2026-10-11)_
 - **Critic reads pitch names, not MIDI** — pitchName in textureFeatures register _(rejected 2026-10-06)_
 - **Solos save their top note** — remembered peaks and an arc-gated ceiling _(rejected 2026-10-06)_
 - **Jazz-waltz comping vocabulary** — 3/4 comp cells through listen() _(rejected 2026-10-06)_

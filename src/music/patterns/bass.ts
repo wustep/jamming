@@ -1,5 +1,5 @@
 import { chordAt, chordSpans, harmAt, velFor, type BarCtx } from "../context";
-import { diatonicIndex, fold, mod, nearestPc, scaleStep, pcOf, type Chord } from "../theory";
+import { chordPcs, diatonicIndex, fold, mod, nearestPc, scaleStep, pcOf, type Chord } from "../theory";
 import { hashString } from "../rng";
 import type { NoteEvent } from "../types";
 import { bassNote } from "./voicing";
@@ -269,6 +269,16 @@ export function baroque(ctx: BarCtx): NoteEvent[] {
   return out;
 }
 
+/**
+ * The tonic, held under the chord, unless it sits a semitone from one of the chord's tones (an E
+ * pedal under F#maj7 grinds against its E#): then the chord's own bass.
+ */
+function pedalPc(tonic: string, c: Chord): number {
+  const t = pcOf(tonic);
+  const rubs = chordPcs(c).some((x) => mod(x - t, 12) === 1 || mod(t - x, 12) === 1);
+  return rubs ? c.bass : t;
+}
+
 /** Pedal / drone: tonic (or root) held, optionally pulsing for minimalism. */
 export function pedal(ctx: BarCtx): NoteEvent[] {
   const [lo, hi] = range(ctx);
@@ -276,14 +286,17 @@ export function pedal(ctx: BarCtx): NoteEvent[] {
   const pulse = ctx.style.id === "minimal";
   const c = chordAt(ctx, 0);
   // ambient: follow the root; minimal: tonic pedal unless the chord moves far away
-  const pc = ctx.style.id === "minimal" ? pcOf(ctx.key.tonic) : c.bass;
+  const pc = ctx.style.id === "minimal" ? pedalPc(ctx.key.tonic, c) : c.bass;
   // a pedal sits deep and stays there (drifting up after the last note, it ends up in the pad)
   const p = fold(nearestPc(pc, Math.min(ctx.mem.lastPitch ?? lo + 7, lo + 10)), lo, hi);
   ctx.mem.lastPitch = p;
   if (pulse) {
     const out: NoteEvent[] = [];
     for (let i = 0; i < ctx.beats * 2; i++) {
-      out.push({ pitch: i % 4 === 2 ? Math.min(p + 12, hi + 12) : p, start: i / 2, dur: 0.5, vel: vel * (i % 2 === 0 ? 1 : 0.8) });
+      // a second chord in the bar that the tonic rubs against moves the pulse to its bass
+      const ci = chordAt(ctx, i / 2);
+      const q = ci === c ? p : fold(nearestPc(pedalPc(ctx.key.tonic, ci), p), lo, hi);
+      out.push({ pitch: i % 4 === 2 ? Math.min(q + 12, hi + 12) : q, start: i / 2, dur: 0.5, vel: vel * (i % 2 === 0 ? 1 : 0.8) });
     }
     return out;
   }

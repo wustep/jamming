@@ -412,6 +412,9 @@ export const useTroop = create<TroopState>((set, get) => {
         patch.meter = { beats: std.meter };
         patch.style = std.style;
         patch.tempo = std.tempo;
+        // a tune in another style is a style of your own: the preset's feel and changes go, as in
+        // setStyle (Laufey's bossa lilt has no place on Autumn Leaves; Basie's swing keeps it)
+        if (std.style !== get().settings.style) Object.assign(patch, { feel: undefined, harmony: undefined, preset: undefined });
         // a chorus for each soloist (the drummer's turn is a trading chorus)
         const { settings, members } = get();
         const soloists = settings.soloists.filter((sid) => members.some((m) => m.id === sid));
