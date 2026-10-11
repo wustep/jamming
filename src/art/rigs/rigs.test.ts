@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyFeel, pocketOf } from "@/audio/feel";
 import { DRUM, INSTRUMENT_LIST } from "@/music/instruments";
+import { PRESETS } from "@/music/presets";
 import { STYLES } from "@/music/styles";
 import type { InstrumentId, StyleId } from "@/music/types";
 import { glitchesOf } from "../glitch";
@@ -143,6 +144,21 @@ describe("rigs follow the notes frame by frame", () => {
           const misses = issues.filter((i) => i.kind === "miss");
           const shown = issues.filter((i) => i.kind !== "miss" || misses.length > onsets.length * 0.02);
           if (shown.length) found.push(`${inst} ${style}${tempo ? ` ${tempo}` : ""} seed ${seed}${solo ? " solo" : ""}: ${summarize(shown).join(" | ")}`);
+        }
+    expect(found).toEqual([]);
+  }, 600_000);
+
+  it("every artist preset's band passes the audit in its own takes", () => {
+    // a preset seats players in parts the default band never gives them: Elijah Fox's cello on the
+    // bass line, Ray Charles's organ leading, Zimmer's trombone in a low pad
+    const found: string[] = [];
+    for (const p of PRESETS)
+      for (const b of p.band)
+        for (const seed of [3, 7]) {
+          const { issues, onsets } = auditTake(b.instrument, p.style, { seed, preset: p.id });
+          const misses = issues.filter((i) => i.kind === "miss");
+          const shown = issues.filter((i) => i.kind !== "miss" || misses.length > onsets.length * 0.02);
+          if (shown.length) found.push(`${p.id} ${b.instrument} seed ${seed}: ${summarize(shown).join(" | ")}`);
         }
     expect(found).toEqual([]);
   }, 600_000);
