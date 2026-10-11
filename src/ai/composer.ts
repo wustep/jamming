@@ -271,7 +271,7 @@ export async function runComposer(settings: TroopSettings, members: Member[], ho
     const motif = validateMotif(obj.motif, obj.motifIdea, frame, leader, repairs) ?? localMotif;
     const plan = mergePlan(basePlan, obj.bars, frame, members, repairs);
     repairs.forEach((x) => noteRepair(call.id, x));
-    if (value) cands.push({ index: i + 1, concept: asString(obj.concept, 200) ?? "(no concept)", motif, plan, repairs });
+    if (value) cands.push({ index: i + 1, concept: trimSpeech(asString(obj.concept, 600) ?? "") || "(no concept)", motif, plan, repairs });
   });
   if (!cands.length) {
     const firstErr = results.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
@@ -323,7 +323,7 @@ export async function runComposer(settings: TroopSettings, members: Member[], ho
       const picked = pickCandidate(scores, real(obj.best), cands.map((c) => c.index));
       const pick = cands.find((c) => c.index === picked) ?? cands[0];
       chosen = pick;
-      critic = { scores, chosen: pick.index, summary: asString(obj.summary, 200) ?? "" };
+      critic = { scores, chosen: pick.index, summary: trimSpeech(asString(obj.summary, 600) ?? "", 200) };
     } catch (e) {
       if ((e as Error).name === "AbortError") throw e;
       dbg.step(runId, `judge failed (${(e as Error).message}); keeping candidate ${chosen.index}`);

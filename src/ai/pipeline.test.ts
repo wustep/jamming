@@ -318,3 +318,21 @@ describe("the judge", () => {
     expect([...chosen].sort()).toEqual([1, 2]);
   });
 });
+
+describe("the director's concept", () => {
+  it("a long one ends on a whole word, not cut mid-word at 200 characters", async () => {
+    // Haiku wrote "…transforms the motif through inversions and displa" for Summertime
+    const long = "A swinging take where the leader states the opening motif plainly, the rhythm section locks into a walking groove underneath, and the piano soloist transforms the motif through inversions and displacements before the band brings it home";
+    vi.stubGlobal("fetch", async (_url: string, init?: RequestInit) => {
+      const text = fakeModel(JSON.parse(String(init?.body ?? "{}"))).replace(/"concept":\s*"[^"]*"/, `"concept": "${long}"`);
+      return new Response(JSON.stringify({ text, usage: { inputTokens: 100, outputTokens: 50 }, serverMs: 5 }), { status: 200 });
+    });
+    const settings = { ...defaultSettings(band), mode: "composer" as const, bestOf: 1, soloists: ["bear"] };
+    const score = await runComposer(settings, band, hooks("t-concept"));
+    const said = score.chat[0].text;
+    expect(said.length).toBeLessThan(long.length);
+    expect(said).toMatch(/(placements|groove underneath|plainly)[.…]?$|…$/);
+    expect(said).not.toMatch(/displa…?$/);
+    expect(long.startsWith(said.replace(/…$/, ""))).toBe(true);
+  });
+});
