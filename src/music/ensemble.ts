@@ -272,7 +272,18 @@ export function ensemble(o: EnsembleInput): EnsembleFix[] {
 
   // ── 5. The bass doesn't strike a half step against a note someone is holding ──
   // A pulse jumping up the octave onto the piano's held 7th (E3 against D#3 under Emaj7): the same
-  // note an octave away keeps the line's harmony and loses the rub.
+  // note an octave away keeps the line's harmony and loses the rub. Every pitched note is filed
+  // under each bar it sounds in, so a long standard doesn't compare every note with every note.
+  const byBar = new Map<number, { id: string; x: NoteEvent }[]>();
+  for (const other of members) {
+    if (INSTRUMENTS[other.instrument].fn === "rhythm") continue;
+    for (const x of parts[other.id] ?? []) {
+      for (let b = barOf(x.start); b <= barOf(x.start + x.dur - EPS); b++) {
+        if (!byBar.has(b)) byBar.set(b, []);
+        byBar.get(b)!.push({ id: other.id, x });
+      }
+    }
+  }
   for (const m of members) {
     const inst = INSTRUMENTS[m.instrument];
     if (inst.fn === "rhythm") continue;
@@ -281,13 +292,10 @@ export function ensemble(o: EnsembleInput): EnsembleFix[] {
       if (!bars.has(bar) || plan[bar]?.roles[m.id] !== "bass" || n.written) continue;
       const held: number[] = [];
       const sounding: number[] = [];
-      for (const other of members) {
-        if (other.id === m.id || INSTRUMENTS[other.instrument].fn === "rhythm") continue;
-        for (const x of parts[other.id] ?? []) {
-          if (x.start > n.start + EPS || x.start + x.dur <= n.start + EPS) continue;
-          sounding.push(x.pitch);
-          if (x.dur >= HELD && x.start < n.start - EPS) held.push(x.pitch);
-        }
+      for (const { id, x } of byBar.get(bar) ?? []) {
+        if (id === m.id || x.start > n.start + EPS || x.start + x.dur <= n.start + EPS) continue;
+        sounding.push(x.pitch);
+        if (x.dur >= HELD && x.start < n.start - EPS) held.push(x.pitch);
       }
       const rub = (ps: number[], p: number) => ps.some((h) => Math.abs(h - p) === 1 || Math.abs(h - p) === 13);
       if (!rub(held, n.pitch)) continue;

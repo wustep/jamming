@@ -909,7 +909,7 @@ describe("standards with a written melody", () => {
         expect(Math.max(...pitches)).toBeLessThanOrEqual(inst.range[1]);
       }
     }
-  });
+  }, 30_000); // every standard in every key: about 1.3 s here, over 5 s on a CI runner
   it("around the song: the leader sits out the intro, and the tag sings the song's own cadence", () => {
     const std = STANDARDS.find((s) => s.id === "jingle-bells")!;
     const { score } = generateLocal({ ...defaultSettings(band), standard: std.id, key: std.key, style: std.style, bars: 48, soloists: ["bear"], seed: 1 }, band);
