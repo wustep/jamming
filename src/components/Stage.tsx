@@ -221,17 +221,20 @@ export function Stage() {
     return () => cancelAnimationFrame(raf);
   }, [band, computer, playing, score, muted]);
 
+  // what the band is saying: while a new take is being thought up, only its own lines (the last
+  // take's stayed up as if the band were saying them now, until the director's first word)
+  const talk = useMemo(() => (chat.length || (genRunning && !playing) ? chat : (score?.chat ?? [])), [chat, score, genRunning, playing]);
+
   // speech bubbles: during the count-off show the latest line per player; while playing, lines appear at their bar
   const bubbles = useMemo(() => {
     const out: Record<string, string> = {};
-    const msgs = chat.length ? chat : (score?.chat ?? []);
     if (playing && bar >= 0) {
-      for (const c of msgs) if (c.bar !== undefined && c.bar <= bar && c.bar >= bar - 1 && c.phase === "jam") out[c.from] = c.text;
+      for (const c of talk) if (c.bar !== undefined && c.bar <= bar && c.bar >= bar - 1 && c.phase === "jam") out[c.from] = c.text;
     } else if (genRunning) {
-      for (const c of msgs) out[c.from] = c.text;
+      for (const c of talk) out[c.from] = c.text;
     }
     return out;
-  }, [chat, score, playing, bar, genRunning]);
+  }, [talk, playing, bar, genRunning]);
 
   const thinking = useMemo(() => {
     const s = new Set<string>();
@@ -240,10 +243,9 @@ export function Stage() {
   }, [calls, runId]);
 
   const directorNote = useMemo(() => {
-    const msgs = chat.length ? chat : (score?.chat ?? []);
-    const d = msgs.filter((c) => c.from === "director" && (c.bar === undefined || c.bar <= Math.max(0, bar)));
+    const d = talk.filter((c) => c.from === "director" && (c.bar === undefined || c.bar <= Math.max(0, bar)));
     return d.length ? d[d.length - 1].text : null;
-  }, [chat, score, bar]);
+  }, [talk, bar]);
 
   return (
     <RoughBox seed="stage" rough={{ weight: "l" }} className="stage-paper w-full p-s">

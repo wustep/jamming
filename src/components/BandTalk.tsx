@@ -8,7 +8,8 @@ export function BandTalk() {
   const chat = useTroop((s) => s.chat);
   const current = useTroop((s) => s.current);
   const running = useTroop((s) => s.gen.running);
-  const msgs = chat.length ? chat : (current?.chat ?? []);
+  // while a take is being thought up, its own talk (or the huddle), not the last take's
+  const msgs = chat.length || running ? chat : (current?.chat ?? []);
   const members = current?.members ?? [];
   const listRef = useRef<HTMLOListElement>(null);
 
