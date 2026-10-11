@@ -865,6 +865,35 @@ describe("jazz waltz", () => {
 });
 
 describe("standards with a written melody", () => {
+  it("comping doesn't rub against a melody note held over from an earlier bar", () => {
+    // Caravan holds a Bb for nine beats over C7; two bars on, the piano struck the chord's A
+    // under it, a minor 9th, again and again
+    let rubs = 0;
+    let checked = 0;
+    for (const std of STANDARDS.filter((s) => s.melody)) {
+      const { score } = generateLocal({ ...defaultSettings(band), standard: std.id, key: std.key, style: std.style, bars: std.bars.length + 8, meter: { beats: std.meter }, seed: 5 }, band);
+      const beats = score.frame.meter.beats;
+      const lead = score.frame.leaderId;
+      const held = score.parts[lead].filter((n) => n.written && Math.floor((n.start + n.dur - 0.01) / beats) > Math.floor(n.start / beats));
+      for (const m of band) {
+        if (m.id === lead || INSTRUMENTS[m.instrument].fn !== "chordal") continue;
+        for (const x of score.parts[m.id]) {
+          const bar = Math.floor(x.start / beats + 1e-9);
+          // a 16th stab passes by (the ensemble leaves anything under a third of a beat)
+          if (score.plan[bar]?.roles[m.id] !== "comp" || x.dur < 0.3) continue;
+          for (const L of held) {
+            if (Math.floor(L.start / beats) >= bar || x.start < L.start || x.start >= L.start + L.dur - 0.3) continue;
+            checked++;
+            const below = L.pitch - x.pitch;
+            if (below === -1 || below === -13 || (below > 0 && below % 12 === 1 && below < 26)) rubs++;
+          }
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(200);
+    expect(rubs).toBe(0);
+  }, 30_000);
+
   it("the leader plays the tune as written on the head and the head out, in any key", () => {
     for (const id of STANDARDS.filter((s) => s.melody).map((s) => s.id)) {
       const std = STANDARDS.find((s) => s.id === id)!;

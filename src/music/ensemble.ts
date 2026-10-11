@@ -133,11 +133,15 @@ export function ensemble(o: EnsembleInput): EnsembleFix[] {
 
   // ── 2. The melody stays on top and unclouded ──
   const leadIds = new Set([...o.lead.values()].map((l) => l.id));
+  // Bars whose melody can sound in this one: struck here or in the next bar, or held over from the
+  // bars before (a standard ties a long note across two or three barlines; Caravan holds a Bb for
+  // nine beats, and the comping two bars on struck an A under it)
+  const leadBars = (bar: number) => [bar - 4, bar - 3, bar - 2, bar - 1, bar, bar + 1];
   /** Melody notes a supporting note sounds against. */
   const melodyAgainst = (n: NoteEvent, self: string): NoteEvent[] => {
     const out: NoteEvent[] = [];
     const bar = barOf(n.start);
-    for (const b of [bar, bar + 1]) {
+    for (const b of leadBars(bar)) {
       const lead = o.lead.get(b);
       if (!lead || lead.id === self) continue;
       for (const L of lead.notes) if (Math.min(n.start + n.dur, L.start + L.dur) - Math.max(n.start, L.start) >= 0.3) out.push(L);
@@ -168,7 +172,7 @@ export function ensemble(o: EnsembleInput): EnsembleFix[] {
       const chordal = inst.poly && (role === "comp" || role === "pad");
       // every melody note this one sounds against (the tune may move on while it rings)
       const against: NoteEvent[] = [];
-      for (const b of [bar, bar + 1]) {
+      for (const b of leadBars(bar)) {
         const lead = o.lead.get(b);
         if (!lead || lead.id === m.id) continue;
         for (const L of lead.notes) {
