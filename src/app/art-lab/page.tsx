@@ -8,7 +8,7 @@ import { AnimalSprite, type SpriteHandle } from "@/art/AnimalSprite";
 import type { Pt } from "@/art/affine";
 import { AnimalPortrait } from "@/art/AnimalPortrait";
 import { InstrumentIcon } from "@/art/InstrumentIcon";
-import { glitchesOf, type Glitch } from "@/art/glitch";
+import { SHAKE_WINDOW, flicker, glitchesOf, shake, type Glitch } from "@/art/glitch";
 import { DoodleDefs } from "@/art/DoodleDefs";
 import { rigTake } from "@/art/rigs/take";
 import { STYLES } from "@/music/styles";
@@ -227,6 +227,7 @@ function ArtLab() {
   const startBeat = Number(q.get("beat")) || 0;
   const clock = useRef<{ beat: number; last: number; seekTo: number | null }>({ beat: startBeat, last: 0, seekTo: startBeat });
   const prevHands = useRef<(Record<"L" | "R", Pt> | null)[]>([]);
+  const handHistory = useRef<Record<"L" | "R", Pt>[][]>([]);
   const [readout, setReadout] = useState({ beat: startBeat, glitches: [] as Glitch[][] });
   const fpsRef = useRef<HTMLSpanElement>(null);
   // new music: stay on the same beat when it still exists, so a pose can be compared across styles
@@ -248,10 +249,18 @@ function ArtLab() {
         const h = sp.hands();
         glitches[i] = glitchesOf(h, opts.step ? prevHands.current[i] : null, sp.shoulders());
         prevHands.current[i] = h;
+        // a few frames of each paw, for a shake or a flicker (only while stepping frame by frame)
+        const hist = (handHistory.current[i] = opts.step ? [...(handHistory.current[i] ?? []), h].slice(-(SHAKE_WINDOW + 1)) : [h]);
+        if (!tk || s.recent.filter((o) => o.age < (SHAKE_WINDOW * FRAME_BEATS * SPB)).length < 2)
+          for (const k of ["L", "R"] as const) {
+            const path = hist.map((q) => q[k]);
+            if (path.length > SHAKE_WINDOW && shake(path)) glitches[i].push("shake");
+            if (path.length >= 4 && flicker(path.slice(-4))) glitches[i].push("flicker");
+          }
       });
       return glitches;
     },
-    [parts, featured, stopped, takes, SPB],
+    [parts, featured, stopped, takes, SPB, FRAME_BEATS],
   );
 
   /** Jump to a beat, replaying the frames just before it so eased motion is where it would be. */
@@ -428,7 +437,7 @@ function ArtLab() {
         <button className={btn} onClick={() => stepFrames(Math.round(1 / FRAME_BEATS))} title="Forward a beat (shift + →)">
           beat ⏭
         </button>
-        <button className={btn} onClick={nextGlitch} title="Step until a pose looks wrong: crossed arms, an arm out of reach or across the chest, or a paw jumping (g)" data-testid="next-glitch">
+        <button className={btn} onClick={nextGlitch} title="Step until a pose looks wrong: crossed arms, an arm out of reach or across the chest, a paw jumping, shaking or flickering (g)" data-testid="next-glitch">
           next glitch
         </button>
         <button className={btn} onClick={() => sprites.current.forEach((sp) => sp?.cheer())} title="What the band does when a take plays to its end" data-testid="cheer">

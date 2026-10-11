@@ -6,9 +6,10 @@ import { ANCHOR } from "./animals";
 
 /**
  * crossed: the arms cross each other. jump: a paw teleports. reach: an arm stretched longer than
- * an arm could be. across: an arm laid straight across the chest to the far side.
+ * an arm could be. across: an arm laid straight across the chest to the far side. shake: a paw
+ * going back and forth again and again. flicker: a paw darting sideways and straight back.
  */
-export type Glitch = "crossed" | "jump" | "reach" | "across";
+export type Glitch = "crossed" | "jump" | "reach" | "across" | "shake" | "flicker";
 
 /** A paw that moves farther than this in one 60 fps frame reads as a teleport, not a motion. */
 export const JUMP_PX = 25;

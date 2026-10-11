@@ -18,7 +18,7 @@ import { Bag, type Frame, type RigCtx } from "./types";
 // everything that would look wrong on screen, with the beat it happens on:
 //
 //   the arms: crossed, a paw teleporting, out of reach, laid across the chest (glitch.ts);
-//   jitter: a paw shaking back and forth from frame to frame;
+//   shake and flicker: a paw going back and forth again and again, or darting sideways and back;
 //   pop: the instrument, or what's in the paws (a bow, sticks, mallets), jumping in one frame;
 //   clip: a paw or what it holds leaving the sprite's frame;
 //   miss: the note sounds with no paw on its key or at its stop, or the valves, keys or slide
@@ -28,7 +28,7 @@ import { Bag, type Frame, type RigCtx } from "./types";
 //
 // The art lab steps to these; the rig tests hold every instrument to none.
 
-export type AuditKind = Glitch | "jitter" | "pop" | "clip" | "miss" | "late" | "detached";
+export type AuditKind = Glitch | "pop" | "clip" | "miss" | "late" | "detached";
 
 export interface AuditIssue {
   kind: AuditKind;
@@ -154,9 +154,9 @@ export function auditTake(inst: InstrumentId, style: StyleId, opts: { seed?: num
       for (const k of ["L", "R"] as const) {
         const path = recs.slice(i - SHAKE_WINDOW, i + 1).map((q) => q.hands[k]);
         const sh = shake(path);
-        if (sh) at(r.beat, "jitter", `${k} paw: ${sh.flips} reversals in ${SHAKE_WINDOW} frames, ${sh.mean.toFixed(1)}px a frame`);
+        if (sh) at(r.beat, "shake", `${k} paw: ${sh.flips} reversals in ${SHAKE_WINDOW} frames, ${sh.mean.toFixed(1)}px a frame`);
         const fl = flicker(path.slice(-4));
-        if (fl) at(r.beat, "jitter", `${k} paw darted ${fl.toFixed(1)}px sideways and back`);
+        if (fl) at(r.beat, "flicker", `${k} paw darted ${fl.toFixed(1)}px sideways and back`);
       }
     }
     // pop: the instrument jumps or snaps round; what's held jumps
