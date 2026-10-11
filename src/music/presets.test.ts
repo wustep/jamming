@@ -7,9 +7,15 @@ import { defaultSettings, generateLocal } from "./local";
 import { FEELS } from "./playing";
 import { PRESETS } from "./presets";
 import { STYLES } from "./styles";
-import type { Member } from "./types";
+import { chordPcs, mod, parseChord } from "./theory";
+import type { Member, Score } from "./types";
 
 const bandOf = (p: (typeof PRESETS)[number]): Member[] => p.band.map((b) => ({ id: b.animal, animal: b.animal, name: ANIMALS[b.animal].name, instrument: b.instrument }));
+
+const takeOf = (p: (typeof PRESETS)[number], seed: number): Score => {
+  const band = bandOf(p);
+  return generateLocal({ ...defaultSettings(band), style: p.style, feel: p.feel, harmony: p.harmony, preset: p.id, tempo: p.tempo, key: p.key, leaderId: band[0].id, soloists: p.soloists, seed, bars: 32 }, band).score;
+};
 
 describe("artist presets", () => {
   it("set a style, a feel, a book and sounds this build has, and a band that can play", () => {
@@ -54,5 +60,62 @@ describe("artist presets", () => {
     const own = generateLocal(base, band).score.frame.chords.flat().map((c) => c.symbol);
     const film = generateLocal({ ...base, harmony: glass.harmony }, band).score.frame.chords.flat().map((c) => c.symbol);
     expect(film).not.toEqual(own);
+  });
+
+  it("a minimalist's tonic pedal steps onto the chord's bass where the tonic would grind against it", () => {
+    // Elijah Fox: E major, Emaj7 to F#maj7; an E pedal under F#maj7 rubs a half step on its E#
+    let bad = 0;
+    let held = 0;
+    for (const p of PRESETS.filter((x) => x.style === "minimal")) {
+      for (const seed of [1, 2, 3, 4]) {
+        const score = takeOf(p, seed);
+        const beats = score.frame.meter.beats;
+        for (const m of score.members) {
+          for (const n of score.parts[m.id]) {
+            const bar = Math.floor(n.start / beats + 1e-9);
+            if (score.plan[bar]?.roles[m.id] !== "bass") continue;
+            let sym = score.frame.chords[bar][0].symbol;
+            for (const c of score.frame.chords[bar]) if (c.beat <= n.start - bar * beats + 1e-6) sym = c.symbol;
+            const chord = parseChord(sym);
+            const pc = mod(n.pitch, 12);
+            held++;
+            if (pc !== chord.bass && chordPcs(chord).some((x) => mod(x - pc, 12) === 1 || mod(pc - x, 12) === 1)) bad++;
+          }
+        }
+      }
+    }
+    expect(held).toBeGreaterThan(500);
+    expect(bad).toBe(0);
+  });
+
+  it("held supporting voices don't rub a half step, quarters played legato included", () => {
+    const SUPPORT = ["comp", "pad", "counter", "fill", "bass"];
+    let rubs = 0;
+    let pairs = 0;
+    for (const p of PRESETS) {
+      for (const seed of [1, 2, 3, 4]) {
+        const score = takeOf(p, seed);
+        const beats = score.frame.meter.beats;
+        const roleOf = (id: string, t: number) => score.plan[Math.floor(t / beats + 1e-9)]?.roles[id] ?? "rest";
+        const ids = score.members.filter((m) => m.instrument !== "drums").map((m) => m.id);
+        for (const a of ids) {
+          for (const n of score.parts[a]) {
+            if (n.dur < 0.95 || roleOf(a, n.start) === "bass" || !SUPPORT.includes(roleOf(a, n.start))) continue;
+            for (const b of ids) {
+              if (b === a) continue;
+              for (const x of score.parts[b]) {
+                if (x.dur < 0.95 || !SUPPORT.includes(roleOf(b, x.start))) continue;
+                if (Math.min(x.start + x.dur, n.start + n.dur) - Math.max(x.start, n.start) < 0.95) continue;
+                pairs++;
+                if (Math.abs(x.pitch - n.pitch) === 1 || Math.abs(x.pitch - n.pitch) === 13) rubs++;
+              }
+            }
+          }
+        }
+      }
+    }
+    // 18 of 17,281 are left where no free note was near (60 before legato quarters counted)
+    expect(pairs).toBeGreaterThan(5000);
+    expect(rubs / pairs, `${rubs} of ${pairs}`).toBeLessThan(0.0025);
   });
 });

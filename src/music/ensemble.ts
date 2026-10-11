@@ -27,6 +27,8 @@ export interface EnsembleFix {
 }
 
 const EPS = 1e-6;
+/** A held beat: a quarter played legato or tenuto comes out a little short of 1 and still sustains. */
+const HELD = 0.95;
 const SUPPORT: Role[] = ["comp", "pad", "counter", "fill"];
 
 function spanAfter(h: Harmony, from: Harm, until: number): Harm[] {
@@ -48,8 +50,8 @@ function sustainedAgainst(parts: Record<string, NoteEvent[]>, ids: string[], n: 
   const out: number[] = [];
   for (const id of ids) {
     for (const x of parts[id] ?? []) {
-      if (x === n || x.dur < 1) continue;
-      if (Math.min(x.start + x.dur, n.start + n.dur) - Math.max(x.start, n.start) >= 1) out.push(x.pitch);
+      if (x === n || x.dur < HELD) continue;
+      if (Math.min(x.start + x.dur, n.start + n.dur) - Math.max(x.start, n.start) >= HELD) out.push(x.pitch);
     }
   }
   return out;
@@ -222,12 +224,12 @@ export function ensemble(o: EnsembleInput): EnsembleFix[] {
       const A = support[a];
       const B = support[b];
       for (const n of parts[B.id] ?? []) {
-        if (n.dur < 1) continue;
+        if (n.dur < HELD) continue;
         const bar = barOf(n.start);
         if (!bars.has(bar)) continue;
         const roleB = plan[bar]?.roles[B.id];
         if (!roleB || !SUPPORT.includes(roleB) || (leadIds.has(B.id) && o.lead.get(bar)?.id === B.id)) continue;
-        const twin = (parts[A.id] ?? []).find((x) => x.pitch === n.pitch && x.dur >= 1 && Math.min(x.start + x.dur, n.start + n.dur) - Math.max(x.start, n.start) >= 1);
+        const twin = (parts[A.id] ?? []).find((x) => x.pitch === n.pitch && x.dur >= HELD && Math.min(x.start + x.dur, n.start + n.dur) - Math.max(x.start, n.start) >= HELD);
         if (!twin || n.written) continue;
         const home = homeOf(harmony, n);
         const others = [...sustainedAgainst(parts, support.map((x) => x.id).filter((id) => id !== B.id), n), ...melodyAgainst(n, B.id).map((L) => L.pitch)];
@@ -249,12 +251,12 @@ export function ensemble(o: EnsembleInput): EnsembleFix[] {
       if (A.id === B.id || INSTRUMENTS[B.instrument].fn === "bass") continue;
       const instB = INSTRUMENTS[B.instrument];
       for (const n of parts[B.id] ?? []) {
-        if (n.dur < 1) continue;
+        if (n.dur < HELD) continue;
         const bar = barOf(n.start);
         if (!bars.has(bar) || o.lead.get(bar)?.id === B.id) continue;
         const roleB = plan[bar]?.roles[B.id];
         if (!roleB || !SUPPORT.includes(roleB)) continue;
-        const sounding = (parts[A.id] ?? []).filter((x) => x.dur >= 1 && Math.min(x.start + x.dur, n.start + n.dur) - Math.max(x.start, n.start) >= 1);
+        const sounding = (parts[A.id] ?? []).filter((x) => x.dur >= HELD && Math.min(x.start + x.dur, n.start + n.dur) - Math.max(x.start, n.start) >= HELD);
         const rubs = (p: number) => sounding.some((x) => Math.abs(x.pitch - p) === 1 || Math.abs(x.pitch - p) === 13);
         if (!rubs(n.pitch) || n.written) continue;
         const home = homeOf(harmony, n);
