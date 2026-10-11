@@ -154,11 +154,15 @@ function save(s: Saved) {
   }
 }
 
-/** Keep settings coherent with the band (leader/soloists must exist, leader can't be the drummer). */
-/** What a take is of, for the takes list: the tune when it's a standard, else the style. */
+/**
+ * What a take is of, for the takes list: the tune when it's a standard, else who it's played like
+ * (a Count Basie take and a plain swing one both read "Swing" otherwise), else the style.
+ */
 function tuneOf(settings: TroopSettings): string {
-  return getStandard(settings.standard)?.name ?? STYLES[settings.style].name;
+  return getStandard(settings.standard)?.name ?? getPreset(settings.preset)?.name ?? STYLES[settings.style].name;
 }
+
+/** Keep settings coherent with the band (leader/soloists must exist, leader can't be the drummer). */
 
 function reconcile(settings: TroopSettings, members: Member[]): TroopSettings {
   const ids = new Set(members.map((m) => m.id));
