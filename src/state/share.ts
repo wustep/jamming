@@ -5,6 +5,9 @@
 // Format: `#t=1.<base64url JSON>`. The leading number versions the payload; the music engine
 // itself isn't versioned, so an old link replays with whatever the band plays today.
 
+import { FEELS, type FeelId } from "@/music/playing";
+import { HARMONY_BOOKS, type BookId } from "@/music/harmony-books";
+import { getPreset, type PresetId } from "@/music/presets";
 import { ANIMALS, INSTRUMENTS } from "@/music/instruments";
 import { getStandard } from "@/music/standards";
 import { STYLES } from "@/music/styles";
@@ -14,7 +17,7 @@ const VERSION = 1;
 export const SHARE_PARAM = "t";
 const MAX_MEMBERS = 12;
 
-type SharedSettings = Pick<TroopSettings, "style" | "bars" | "tempo" | "key" | "meter" | "standard" | "leaderId" | "soloists" | "seed" | "phraseBars" | "swingFeel">;
+type SharedSettings = Pick<TroopSettings, "style" | "bars" | "tempo" | "key" | "meter" | "standard" | "leaderId" | "soloists" | "seed" | "phraseBars" | "swingFeel" | "feel" | "harmony" | "preset">;
 
 interface Payload {
   s: SharedSettings;
@@ -58,6 +61,9 @@ export function encodeShare(score: Score): string {
       seed: s.seed,
       phraseBars: s.phraseBars,
       ...(s.swingFeel && s.swingFeel !== "medium" ? { swingFeel: s.swingFeel } : {}),
+      ...(s.feel ? { feel: s.feel } : {}),
+      ...(s.harmony ? { harmony: s.harmony } : {}),
+      ...(s.preset ? { preset: s.preset } : {}),
     },
     m: score.members.map((m) => [m.id, m.animal, m.name, m.instrument]),
   };
@@ -121,6 +127,10 @@ export function decodeShare(value: string): SharedTake | null {
       soloists: Array.isArray(s.soloists) ? s.soloists.filter((id): id is string => typeof id === "string" && ids.has(id)) : [],
       phraseBars: int(s.phraseBars, 1, 16) ?? 4,
       ...(s.swingFeel === "light" || s.swingFeel === "hard" ? { swingFeel: s.swingFeel } : {}),
+      // how it's played and where its changes come from (unknown ones fall back to the style's)
+      ...(typeof s.feel === "string" && Object.hasOwn(FEELS, s.feel) ? { feel: s.feel as FeelId } : {}),
+      ...(typeof s.harmony === "string" && Object.hasOwn(HARMONY_BOOKS, s.harmony) ? { harmony: s.harmony as BookId } : {}),
+      ...(typeof s.preset === "string" && getPreset(s.preset) ? { preset: s.preset as PresetId } : {}),
     },
   };
 }

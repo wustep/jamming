@@ -10,18 +10,19 @@ Live: https://jamming-wustep.vercel.app
 - **Shared motif.** The leader states a short cell. Solos are transforms of it (inverted, sequenced, displaced, fragmented), and everyone else comps in the style's texture.
 - **The tune comes back.** A repeated A section and the out head replay what the leader played the first time, over the same changes, whether the engine or a model wrote it.
 - **Phrases, and a band that listens.** Lines are planned a phrase at a time: a pickup, a direction, a landing on a chord tone, a breath. Harmony is read in context (the key, and where each chord is going). After the notes are written, the band checks itself: held notes belong to the chord they ring over, comping sits under the melody, and pads spell the chord instead of doubling it.
-- **Seven styles** are defined by texture priors (what each instrument actually does), not by name: swing, bossa nova, funk, New Orleans, minimalist, baroque, and ambient.
+- **Eight styles** are defined by texture priors (what each instrument actually does), not by name: swing, bossa nova, funk, pop, New Orleans, minimalist, baroque, and ambient. Each is played with its own hands (accent, note length, looseness, rubato, a line's pushes and dotted pairs), and a free chart's changes are built in four-bar phrases from the style's harmony book.
+- **Play like an artist:** ten presets (Count Basie, Jobim, Ray Charles, Laufey, Bach, Chopin, Debussy, Philip Glass, Hans Zimmer, Elijah Fox) set the style, the feel, the harmony book, the band, the tempo and the room in one pick.
 - **Two modes**, using your own [Vercel AI Gateway](https://vercel.com/ai-gateway) key (every model) or [Anthropic API key](https://console.anthropic.com/settings/keys) (Claude models only):
   - **Improviser:** the leader counts off with a motif and a plan. Bandmates reply, then trade phrases. In each round the featured player goes first and the band answers what it heard. Playback starts after the first phrase.
   - **Composer:** a director writes the chart. "Best of 4" drafts four charts and a judge picks the most distinctive. Featured parts are then written note by note.
 - **Without a key** the band plays from its own engine, and models are only called when you press the big button.
-- **Sound:** sampled instruments via [smplr](https://github.com/danigb/smplr): Salamander Grand piano (with fallbacks) or a Wurlitzer or CP80 electric piano, the Smolken double bass, an acoustic drum kit built from VCSL (or a LinnDrum), the VCSL vibraphone, and MusyngKite soundfonts, including pizzicato strings. Sources and licenses are listed in [docs/SOUNDS.md](docs/SOUNDS.md).
+- **Sound:** sampled instruments via [smplr](https://github.com/danigb/smplr): Salamander Grand piano (with fallbacks) or a Wurlitzer or CP80 electric piano, the Smolken double bass, an acoustic drum kit built from VCSL (or a LinnDrum), the VCSL vibraphone, and MusyngKite soundfonts, including pizzicato strings, a harpsichord, a drawbar organ, and a string pad that can be a choir. Held notes loop, and each room tunes its own reverb. Sources and licenses are listed in [docs/SOUNDS.md](docs/SOUNDS.md).
 - **Sheet music:** [VexFlow](https://www.vexflow.com/) charts with follow-scroll. The cello switches to tenor clef for high passages, and pizz./arco changes are marked.
 - **Under the hood:** the debug panel shows every model call (prompt, raw reply, repairs, timings), the plan, the judge's scores, and instrument loading.
 
 ## The band
 
-Bruno (bear), Lily (frog), Hoot (owl), Rusty (fox), Mochi (cat), Clover (rabbit), Tuck (elephant), Pip (penguin) and Olive (sheep). Each has a default instrument, and any of them can play any of the 12 instruments. Olive the cellist plays countermelodies, bowed pads, and pizzicato comping. She takes over the bass line only when the band has no bassist.
+Bruno (bear), Lily (frog), Hoot (owl), Rusty (fox), Mochi (cat), Clover (rabbit), Tuck (elephant), Pip (penguin), Olive (sheep), Rocco (raccoon) and Fern (deer). Each has a default instrument, and any of them can play any of the 14 instruments. Rocco plays a drawbar organ with a rotating speaker; Fern holds the harmony on a string machine. Olive the cellist plays countermelodies, bowed pads, and pizzicato comping. She takes over the bass line only when the band has no bassist.
 
 ## Develop
 

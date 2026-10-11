@@ -6,6 +6,7 @@
 
 import type { BookId } from "./harmony-books";
 import type { FeelId } from "./playing";
+import type { PresetId } from "./presets";
 
 export type InstrumentId =
   | "piano"
@@ -204,6 +205,8 @@ export interface TroopSettings {
   feel?: FeelId;
   /** The harmony book a free chart's changes are built from (harmony-books.ts). Absent = the style's own. */
   harmony?: BookId;
+  /** The artist preset these settings came from, if any (presets.ts). */
+  preset?: PresetId;
 }
 
 export type SwingFeel = "light" | "medium" | "hard";

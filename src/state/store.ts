@@ -1,5 +1,8 @@
 "use client";
 
+import { FEELS } from "@/music/playing";
+import { HARMONY_BOOKS } from "@/music/harmony-books";
+import { getPreset, type PresetId } from "@/music/presets";
 import { create } from "zustand";
 import { runComposer, type PipelineHooks } from "@/ai/composer";
 import { insertByBar } from "@/ai/talk";
@@ -73,6 +76,8 @@ interface TroopState {
   adoptSharedBand(): void;
   setSettings(patch: Partial<TroopSettings>): void;
   setStyle(style: TroopSettings["style"]): void;
+  /** Play like an artist: their style, feel, changes, band, tempo and room, all at once. */
+  applyPreset(id: PresetId): void;
   setStandard(id: string | null): void;
   setMembers(members: Member[]): void;
   setApiKey(key: string): void;
@@ -163,7 +168,12 @@ function reconcile(settings: TroopSettings, members: Member[]): TroopSettings {
   }
   const soloists = settings.soloists.filter((id) => ids.has(id));
   const bars = snapLength(settings.standard, settings.bars);
-  return { ...settings, leaderId, soloists, bars };
+  // a saved feel, book or preset this build doesn't have falls back to the style's own
+  const out: TroopSettings = { ...settings, leaderId, soloists, bars };
+  if (out.feel && !Object.hasOwn(FEELS, out.feel)) delete out.feel;
+  if (out.harmony && !Object.hasOwn(HARMONY_BOOKS, out.harmony)) delete out.harmony;
+  if (out.preset && !getPreset(out.preset)) delete out.preset;
+  return out;
 }
 
 /**
@@ -360,9 +370,38 @@ export const useTroop = create<TroopState>((set, get) => {
     setStyle(style) {
       const s = STYLES[style];
       const std = getStandard(get().settings.standard);
-      const patch: Partial<TroopSettings> = { style, tempo: s.tempo.default };
+      // a style of your own: the preset's feel and changes go with it
+      const patch: Partial<TroopSettings> = { style, tempo: s.tempo.default, feel: undefined, harmony: undefined, preset: undefined };
       if (!std) patch.key = { ...s.key };
       get().setSettings(patch);
+    },
+
+    applyPreset(id) {
+      const p = getPreset(id);
+      if (!p) return;
+      const members: Member[] = p.band.map((b) => ({ id: b.animal, animal: b.animal, name: ANIMALS[b.animal].name, instrument: b.instrument }));
+      const cur = get().settings;
+      const settings = reconcile(
+        {
+          ...cur,
+          style: p.style,
+          feel: p.feel,
+          harmony: p.harmony,
+          preset: p.id,
+          tempo: p.tempo,
+          key: { ...p.key },
+          meter: { beats: 4 },
+          standard: null,
+          bars: cur.standard ? 32 : cur.bars,
+          swingFeel: undefined,
+          leaderId: members[0].id,
+          soloists: p.soloists.filter((a) => members.some((m) => m.id === a)),
+        },
+        members,
+      );
+      set({ members, settings, sounds: { ...get().sounds, ...p.sounds } });
+      persist();
+      sketch();
     },
 
     setStandard(id) {

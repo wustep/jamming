@@ -9,10 +9,18 @@ import { lengthOptions } from "@/music/form";
 import { ANIMAL_LIST, ANIMALS, INSTRUMENT_LIST, INSTRUMENTS } from "@/music/instruments";
 import { STANDARDS, getStandard, searchStandards } from "@/music/standards";
 import { STYLE_LIST, STYLES } from "@/music/styles";
+import { PRESETS, getPreset, type PresetId } from "@/music/presets";
 import type { AnimalId, InstrumentId, Member } from "@/music/types";
 import type { Sounds } from "@/audio/packs";
 import { keyAccess, useTroop } from "@/state/store";
 import { RoughBox, RoughButton } from "./ui/rough";
+
+/** The presets, by where they come from. */
+const PRESET_GROUPS: { label: string; ids: PresetId[] }[] = [
+  { label: "Jazz and song", ids: ["basie", "jobim", "ray", "laufey"] },
+  { label: "Piano and the concert hall", ids: ["bach", "chopin", "debussy"] },
+  { label: "Minimalism and film", ids: ["glass", "zimmer", "fox"] },
+];
 
 /** The tune list, grouped by what you get: a standard and its head, a song, a jazz form, pop chords, a groove. */
 const TUNE_GROUPS: { label: string; has: (t: (typeof STANDARDS)[number]) => boolean }[] = [
@@ -256,6 +264,8 @@ export function ControlPanel() {
   const sounds = useTroop((x) => x.sounds);
   const set = useTroop((x) => x.setSettings);
   const setStyle = useTroop((x) => x.setStyle);
+  const applyPreset = useTroop((x) => x.applyPreset);
+  const preset = getPreset(s.preset);
   const setStandard = useTroop((x) => x.setStandard);
   const setMembers = useTroop((x) => x.setMembers);
   const setApiKey = useTroop((x) => x.setApiKey);
@@ -320,7 +330,7 @@ export function ControlPanel() {
       </Field>
 
       <Field>
-        <Label hint={STYLES[s.style].blurb}>Style</Label>
+        <Label hint={preset?.blurb ?? STYLES[s.style].blurb}>Style</Label>
         <div className="flex flex-wrap gap-xs">
           {STYLE_LIST.map((id) => (
             <Chip key={id} seed={`style-${id}`} active={s.style === id} onClick={() => setStyle(id)}>
@@ -328,6 +338,27 @@ export function ControlPanel() {
             </Chip>
           ))}
         </div>
+        {/* an artist sets the style, the feel, the changes, the band, the tempo and the room at once */}
+        <label className="mt-xs flex items-center gap-xs text-m">
+          <span className="shrink-0 text-ink-soft">play like</span>
+          <select
+            className="sketch-select min-w-0 flex-1"
+            value={preset?.id ?? ""}
+            onChange={(e) => (e.target.value ? applyPreset(e.target.value as PresetId) : setStyle(s.style))}
+            aria-label="Play like an artist"
+          >
+            <option value="">nobody in particular</option>
+            {PRESET_GROUPS.map((g) => (
+              <optgroup key={g.label} label={g.label}>
+                {PRESETS.filter((p) => g.ids.includes(p.id)).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </label>
       </Field>
 
       <Field>
