@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { DoodleDefs } from "@/art/DoodleDefs";
 import { troopAudio } from "@/audio/engine";
 import { BandTalk } from "@/components/BandTalk";
+import { BrainsButton, BrainsSheet } from "@/components/BrainsSheet";
 import { ControlPanel } from "@/components/ControlPanel";
 import { DebugPanel } from "@/components/DebugPanel";
 import { KeyDialog } from "@/components/KeyDialog";
@@ -48,29 +49,17 @@ export function Home() {
   return (
     <div className="mx-auto w-full max-w-[1400px] px-m pb-xxl pt-m sm:px-l">
       <DoodleDefs />
+      <BrainsSheet />
       <KeyDialog />
-      <header className="mb-s flex flex-wrap items-end justify-between gap-xs">
-        <div>
-          <h1 className="font-brand text-xxl font-heavy">Jamming</h1>
-          <Squiggle width={250} seed="title" color="var(--pencil-red)" />
-          <p className="text-m text-ink-soft">Pick the band, hand them instruments, and let them make something up.</p>
+      <header className="mb-s">
+        <div className="flex items-start justify-between gap-s">
+          <div className="min-w-0">
+            <h1 className="font-brand text-xxl font-heavy">Jamming</h1>
+            <Squiggle width={200} seed="title" color="var(--pencil-red)" />
+          </div>
+          <BrainsButton />
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setDebugOpen(!debugOpen);
-            // on a phone the panel opens below the stage, out of sight: bring it into view
-            if (!debugOpen)
-              requestAnimationFrame(() => {
-                const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-                document.querySelector('[aria-label="Debug"]')?.scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
-              });
-          }}
-          className="text-action text-m"
-          aria-expanded={debugOpen}
-        >
-          {debugOpen ? "hide" : "peek"} under the hood
-        </button>
+        <p className="text-m text-ink-soft">Pick the band, hand them instruments, and let them make something up.</p>
       </header>
 
       {/* Below lg the page is one column, and main's pieces join the grid so the band settings sit
@@ -82,7 +71,7 @@ export function Home() {
             <div className="mt-s">
               <Transport />
             </div>
-            <div className="mt-s">
+            <div className="mt-s empty:hidden">
               <PlayAlong />
             </div>
             {debugOpen && <DebugPanel sheetStats={sheetStats} />}

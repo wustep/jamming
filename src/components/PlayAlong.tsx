@@ -190,6 +190,18 @@ function MidiStatusLine() {
   );
 }
 
+/** The transport's way in; the panel opens under it. */
+export function PlayAlongToggle() {
+  const open = usePlayAlong((s) => s.open);
+  const setOpen = usePlayAlong((s) => s.setOpen);
+  if (open) return null;
+  return (
+    <button type="button" className="text-action inline-block py-xs text-m" onClick={() => setOpen(true)} aria-expanded={false} aria-controls="play-along">
+      play along
+    </button>
+  );
+}
+
 export function PlayAlong() {
   const open = usePlayAlong((s) => s.open);
   const setOpen = usePlayAlong((s) => s.setOpen);
@@ -203,15 +215,10 @@ export function PlayAlong() {
   const loadError = usePlayAlong((s) => s.loadError);
   useTypingKeys(open);
 
-  if (!open)
-    return (
-      <button type="button" className="text-action text-m" onClick={() => setOpen(true)} aria-expanded={false}>
-        play along with the band
-      </button>
-    );
+  if (!open) return null;
 
   return (
-    <RoughBox seed="play-along" rough={{ weight: "m" }} className="panel-paper p-s" as="section" aria-label="Play along">
+    <RoughBox seed="play-along" rough={{ weight: "m" }} className="panel-paper p-s" as="section" aria-label="Play along" id="play-along">
       <div className="mb-xs flex items-baseline justify-between gap-s">
         <h2 className="type-label">Play along</h2>
         <button type="button" className="text-action text-s" onClick={() => setOpen(false)} aria-expanded>
@@ -274,11 +281,8 @@ export function PlayAlong() {
       <div className="mt-s">
         <LiveKeys />
       </div>
-      <p className="mt-xxs text-xs text-ink-soft max-sm:hidden">
-        Typing: A S D F G H J K are the white keys, W E T Y U O P the black ones; Z and X move an octave.
-        {cr.on && " With call and response, play in the bars marked “your turn”; the band answers in the next ones."}
-      </p>
-      {cr.on && <p className="mt-xxs text-xs text-ink-soft sm:hidden">Play in the bars marked “your turn”; the band answers in the next ones.</p>}
+      {/* the typing letters are drawn on the keys, and Z / X are on the octave buttons */}
+      {cr.on && <p className="mt-xxs text-xs text-ink-soft">Play in the bars marked “your turn”; the band answers in the next ones.</p>}
     </RoughBox>
   );
 }

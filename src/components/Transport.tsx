@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { isKeyProblem, runErrorText } from "@/ai/keys";
 import { troopAudio, type LoadState } from "@/audio/engine";
 import { INSTRUMENTS } from "@/music/instruments";
 import { savedConfig } from "@/state/saved";
 import { canShare, shareUrl, type JamConfig } from "@/state/share";
 import { canThink, useTroop } from "@/state/store";
-import { openBrains } from "./ControlPanel";
+import { openBrains } from "./BrainsSheet";
+import { PlayAlongToggle } from "./PlayAlong";
 import { RoughButton } from "./ui/rough";
 
 function useLoadStates() {
@@ -25,8 +26,6 @@ export function Transport() {
   const playSketchInstead = useTroop((s) => s.playSketchInstead);
   const gen = useTroop((s) => s.gen);
   const mode = useTroop((s) => s.settings.mode);
-  const bestOf = useTroop((s) => s.settings.bestOf);
-  const set = useTroop((s) => s.setSettings);
   const hasKey = useTroop(canThink);
   const heuristic = useTroop((s) => s.heuristic);
   const current = useTroop((s) => s.current);
@@ -149,13 +148,6 @@ export function Transport() {
         </button>
       )}
 
-      {mode === "composer" && hasKey && (
-        <label className="flex cursor-pointer items-center gap-xs text-m" title="Write 4 candidate charts and let a judge pick the most distinctive">
-          <input type="checkbox" className="sketch-check" checked={bestOf > 1} onChange={(e) => set({ bestOf: e.target.checked ? 4 : 1 })} />
-          best of 4
-        </label>
-      )}
-
       <div className="min-w-0 flex-1 basis-60 text-m text-ink-soft" aria-live="polite">
         {gen.running ? (
           <span>{gen.status}</span>
@@ -204,15 +196,11 @@ export function Transport() {
               {loads.length - loading.length - failed.length} of {loads.length} ready
             </span>
           </span>
-        ) : current ? (
+        ) : current && !isSketch ? (
+          // the stage already says what's loaded; here, only whose take it is and how it scored
           <span>
-            {isSketch ? "sketch" : current.engine === "ai" ? "take" : "sketch take"}: <b className="text-ink">{current.title}</b> — {current.frame.bars} bars, {current.frame.key.tonic} {current.frame.key.mode}, {current.frame.tempo} bpm
-            {current.critic && current.critic.scores.length > 0 && (
-              <>
-                {" "}
-                · judge: {current.critic.scores.find((x) => x.candidate === current.critic!.chosen)?.score ?? "?"}/10
-              </>
-            )}
+            {current.engine === "ai" ? "the band's take" : "a sketch take"}
+            {current.critic && current.critic.scores.length > 0 && <> · judge: {current.critic.scores.find((x) => x.candidate === current.critic!.chosen)?.score ?? "?"}/10</>}
           </span>
         ) : null}
         {failed.length > 0 && !loading.length && !gen.running && (
@@ -230,10 +218,57 @@ export function Transport() {
           </span>
         )}
       </div>
-      <div className="flex flex-wrap items-baseline gap-x-m">
-        <SaveAudio />
-        <SaveJam />
-        <ShareLink />
+      <div className="flex flex-wrap items-baseline gap-x-m gap-y-xs">
+        <PlayAlongToggle />
+        <KeepMenu />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Save and share, in one menu: an audio file, this browser's saved jams, or a link. The items
+ * stay mounted while it's shut, so a recording or a "link copied" carries on and still says so.
+ */
+function KeepMenu() {
+  const current = useTroop((s) => s.current);
+  const running = useTroop((s) => s.gen.running);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const toggle = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      toggle.current?.focus();
+    };
+    window.addEventListener("pointerdown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  if (!current || running) return null;
+  return (
+    <div ref={ref} className="relative">
+      <button ref={toggle} type="button" className="text-action inline-block py-xs text-m" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls="keep-menu">
+        save &amp; share {open ? "▴" : "▾"}
+      </button>
+      <div id="keep-menu" hidden={!open} className="menu-paper absolute right-0 top-full z-30 mt-xs w-max min-w-full p-xs">
+        <ul className="flex flex-col">
+          <li>
+            <ShareLink />
+          </li>
+          <li>
+            <SaveJam />
+          </li>
+          <li>
+            <SaveAudio />
+          </li>
+        </ul>
       </div>
     </div>
   );
@@ -320,7 +355,7 @@ function SaveAudio() {
   return (
     <button
       type="button"
-      className="text-action text-m"
+      className="pick block w-full px-xs py-xs text-left text-m"
       disabled={phase !== "idle"}
       onClick={() => void record()}
       title="Play the take from the top and save it as an audio file"
@@ -368,11 +403,11 @@ function SaveJam() {
   return (
     <button
       type="button"
-      className="text-action text-m"
-      onClick={() => setNote({ id: current.id, text: saveJam() ? "saved below" : "couldn't save it" })}
+      className="pick block w-full px-xs py-xs text-left text-m"
+      onClick={() => setNote({ id: current.id, text: saveJam() ? "saved under Saved jams" : "couldn't save it" })}
       title="Save this jam's whole setup (band, settings, sounds, brains and seed) in this browser"
     >
-      <span aria-live="polite">{note?.id === current.id ? note.text : "save this jam"}</span>
+      <span aria-live="polite">{note?.id === current.id ? note.text : "save it in this browser"}</span>
     </button>
   );
 }
@@ -395,11 +430,11 @@ function ShareLink() {
   return (
     <button
       type="button"
-      className="text-action text-m"
+      className="pick block w-full px-xs py-xs text-left text-m"
       onClick={() => void share()}
       title={ai ? `Copy a link to this jam. It carries ${AI_LINK_NOTE}.` : "Copy a link that plays this jam again, note for note"}
     >
-      <span aria-live="polite">{note?.id === current.id ? note.text : "share this jam"}</span>
+      <span aria-live="polite">{note?.id === current.id ? note.text : "share a link"}</span>
     </button>
   );
 }

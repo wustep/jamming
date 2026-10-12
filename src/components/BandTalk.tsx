@@ -18,16 +18,8 @@ export function BandTalk() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [msgs.length]);
 
-  if (!msgs.length && !running) {
-    return (
-      <div>
-        <h2 className="type-section mb-xs">Band talk</h2>
-        <p className="max-w-[60ch] text-m text-ink-soft">
-          In <b>Improviser</b> mode the animals plan the tune together and talk between phrases. In <b>Composer</b> mode the director leaves notes on the chart.
-        </p>
-      </div>
-    );
-  }
+  // nothing said yet: the panel waits for a take with talk in it (the intro note says how)
+  if (!msgs.length && !running) return null;
 
   const nameOf = (id: string) => (id === "director" ? "Director" : id === "critic" ? "Judge" : (members.find((m) => m.id === id)?.name ?? id));
   return (
