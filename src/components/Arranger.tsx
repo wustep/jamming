@@ -12,7 +12,7 @@ import { getPreset, PRESET_GROUPS, PRESETS, type PresetId } from "@/music/preset
 import { getStandard, STANDARDS } from "@/music/standards";
 import { STYLE_LIST, STYLES } from "@/music/styles";
 import type { InstrumentId, StyleId } from "@/music/types";
-import { canThink, useTroop, type Arranged } from "@/state/store";
+import { useTroop, type Arranged } from "@/state/store";
 import { RoughButton } from "./ui/rough";
 
 // One sentence to a jam. The arranger reads it once (a cheap model call, or keywords with no
@@ -63,7 +63,6 @@ export function Arranger() {
   const arranging = useTroop((x) => x.arranging);
   const arranged = useTroop((x) => x.arranged);
   const busy = useTroop((x) => x.gen.running);
-  const thinks = useTroop((x) => canThink(x));
   const s = useTroop((x) => x.settings);
   const members = useTroop((x) => x.members);
   const room = useTroop((x) => x.sounds.room);
@@ -246,12 +245,9 @@ export function Arranger() {
 
   return (
     <section className="mb-m" aria-label="Ask for a jam">
-      <div className="mb-xxs flex items-baseline justify-between gap-xs">
-        <label htmlFor="arranger-input" className="type-label">
-          Ask for a jam
-        </label>
-        <span className="text-s text-ink-soft">{thinks ? "one sentence, one cheap model call" : "one sentence, read by keywords"}</span>
-      </div>
+      <label htmlFor="arranger-input" className="type-label mb-xxs block">
+        Ask for a jam
+      </label>
       <form
         className="flex items-end gap-xs"
         onSubmit={(e) => {

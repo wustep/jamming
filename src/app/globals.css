@@ -522,6 +522,65 @@ body {
   background: var(--cte-canvas);
   box-shadow: var(--shadow-l);
 }
+/* “Brains & sounds” (BrainsSheet.tsx): a sheet of paper slid in from the right, or up from the
+   bottom on a phone, over the same dimmed page */
+.sheet-dialog {
+  position: fixed;
+  inset: 0 0 0 auto;
+  width: min(28rem, 100vw);
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: var(--cte-canvas);
+  color: var(--cte-text);
+  box-shadow: var(--border-shadow-m), var(--shadow-l);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.sheet-dialog[open] {
+  animation: sheet-in-side var(--motion-large-duration) var(--motion-easing);
+}
+.sheet-dialog::backdrop {
+  background: color-mix(in srgb, var(--neutral-9) 35%, transparent);
+}
+.sheet-head {
+  background: var(--cte-canvas);
+}
+@media (width < 40rem) {
+  .sheet-dialog {
+    inset: auto 0 0 0;
+    width: 100vw;
+    height: auto;
+    max-height: 88dvh;
+    border-radius: var(--radius-l) var(--radius-l) 0 0;
+  }
+  .sheet-dialog[open] {
+    animation-name: sheet-in-bottom;
+  }
+}
+@keyframes sheet-in-side {
+  from {
+    opacity: 0;
+    transform: translateX(var(--space-xl));
+  }
+}
+@keyframes sheet-in-bottom {
+  from {
+    opacity: 0;
+    transform: translateY(var(--space-xl));
+  }
+}
+
+/* a small menu off a text action (save & share) */
+.menu-paper {
+  background: var(--neutral-1);
+  border-radius: var(--radius-s);
+  box-shadow: var(--border-shadow-m), var(--shadow-m);
+}
+
 /* the provider the pasted key belongs to, in highlighter */
 .key-badge {
   border-radius: var(--radius-full);
@@ -537,7 +596,8 @@ body {
   .bubble,
   .chord-ink,
   .thinking-dots i,
-  .key-dialog[open] {
+  .key-dialog[open],
+  .sheet-dialog[open] {
     animation: none;
   }
 }
