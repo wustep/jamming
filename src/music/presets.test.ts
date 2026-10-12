@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DRUM_KITS, PAD_VOICES, PIANO_PACKS, ROOMS } from "@/audio/packs";
-import { decodeShare, encodeShare } from "@/state/share";
+import { decodeShare, encodeJam, jamOf } from "@/state/share";
 import { HARMONY_BOOKS } from "./harmony-books";
 import { ANIMALS, INSTRUMENTS } from "./instruments";
 import { defaultSettings, generateLocal } from "./local";
@@ -51,7 +51,7 @@ describe("artist presets", () => {
       const { score } = generateLocal(settings, band);
       expect(score.frame.feel ?? score.frame.style, p.id).toBe(p.feel === p.style ? p.style : p.feel);
       for (const m of band) expect(score.parts[m.id].length, `${p.id} ${m.instrument}`).toBeGreaterThan(0);
-      const shared = decodeShare(encodeShare(score))!;
+      const shared = decodeShare(encodeJam(jamOf(score)))!;
       expect(shared.settings).toMatchObject({ feel: p.feel, harmony: p.harmony, preset: p.id });
       expect(generateLocal({ ...defaultSettings(shared.members), ...shared.settings }, shared.members).score.parts).toEqual(score.parts);
     }

@@ -113,7 +113,7 @@ function SharedNote() {
   const arrival = useTroop((s) => s.sharedArrival);
   const take = useTroop((s) => s.takes.find((t) => t.id === s.sharedArrival?.takeId));
   const play = useTroop((s) => s.play);
-  const adopt = useTroop((s) => s.adoptSharedBand);
+  const restore = useTroop((s) => s.restoreBeforeLink);
   const dismiss = useTroop((s) => s.dismissArrival);
   if (!arrival || !take) return null;
   const names = take.score.members.map((m) => m.name);
@@ -123,17 +123,20 @@ function SharedNote() {
       <button type="button" onClick={dismiss} className="absolute right-xs top-xxs text-l text-ink-soft transition-colors duration-(--motion-duration) hover:text-ink" aria-label="Dismiss">
         ×
       </button>
-      <div className="type-label">Someone sent you a take</div>
+      <div className="type-label">Someone sent you a jam</div>
       <p>
-        <b>{take.score.title}</b>, played by {band}.
+        <b>{take.score.title}</b>, played by {band}, set up just as they had it.
       </p>
+      {arrival.ai && <p className="text-s text-ink-soft">The models played theirs. The link has its setup and seed, so the band plays it here without them, and the parts will differ.</p>}
       <div className="mt-xxs flex flex-wrap gap-x-s">
         <button type="button" className="text-action" onClick={() => void play()}>
           ▶ play it
         </button>
-        <button type="button" className="text-action" onClick={adopt}>
-          jam with this band
-        </button>
+        {arrival.backupId && (
+          <button type="button" className="text-action" onClick={restore} title="Your own band and settings were saved under Saved jams">
+            back to my jam
+          </button>
+        )}
       </div>
     </div>
   );

@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { isKeyProblem, runErrorText } from "@/ai/keys";
 import { troopAudio, type LoadState } from "@/audio/engine";
 import { INSTRUMENTS } from "@/music/instruments";
-import { canShare, shareUrl } from "@/state/share";
+import { savedConfig } from "@/state/saved";
+import { canShare, shareUrl, type JamConfig } from "@/state/share";
 import { canThink, useTroop } from "@/state/store";
 import { openBrains } from "./ControlPanel";
 import { RoughButton } from "./ui/rough";
@@ -231,6 +232,7 @@ export function Transport() {
       </div>
       <div className="flex flex-wrap items-baseline gap-x-m">
         <SaveAudio />
+        <SaveJam />
         <ShareLink />
       </div>
     </div>
@@ -328,38 +330,136 @@ function SaveAudio() {
   );
 }
 
-/** Copy a link that replays this take (local takes only: they're rebuilt from settings and seed). */
-function ShareLink() {
-  const current = useTroop((s) => s.current);
-  const running = useTroop((s) => s.gen.running);
-  // the note belongs to the take it was about, so switching takes clears it
+/** A note that clears itself, about the take it was said of (switching takes clears it). */
+function useNote(ms: number) {
   const [note, setNote] = useState<{ id: string; text: string } | null>(null);
   useEffect(() => {
     if (!note) return;
-    const t = setTimeout(() => setNote(null), 2500);
+    const t = setTimeout(() => setNote(null), ms);
     return () => clearTimeout(t);
-  }, [note]);
+  }, [note, ms]);
+  return [note, setNote] as const;
+}
+
+/** What a link says about a take the models played: it carries their setup, not their notes. */
+const AI_LINK_NOTE = "the setup and seed: the models' parts will differ";
+
+/** Copy a link, or hand it to the share sheet on a phone. Resolves to what to say about it. */
+async function sendLink(url: string, title: string): Promise<string | null> {
+  try {
+    if (navigator.share && matchMedia("(hover: none)").matches) {
+      await navigator.share({ title: `Jamming · ${title}`, url });
+      return null;
+    }
+    await navigator.clipboard.writeText(url);
+    return "link copied";
+  } catch (e) {
+    return (e as Error).name === "AbortError" ? null : "couldn't copy the link";
+  }
+}
+
+/** Keep the jam on stage in this browser: its whole configuration (and the models' notes, when they played it). */
+function SaveJam() {
+  const current = useTroop((s) => s.current);
+  const running = useTroop((s) => s.gen.running);
+  const saveJam = useTroop((s) => s.saveJam);
+  const [note, setNote] = useNote(2500);
   if (running || !canShare(current)) return null;
-  const say = (text: string) => setNote({ id: current.id, text });
+  return (
+    <button
+      type="button"
+      className="text-action text-m"
+      onClick={() => setNote({ id: current.id, text: saveJam() ? "saved below" : "couldn't save it" })}
+      title="Save this jam's whole setup (band, settings, sounds, brains and seed) in this browser"
+    >
+      <span aria-live="polite">{note?.id === current.id ? note.text : "save this jam"}</span>
+    </button>
+  );
+}
+
+/** Copy a link that opens this jam, set up as it is (a model-written take as its setup and seed). */
+function ShareLink() {
+  const current = useTroop((s) => s.current);
+  const running = useTroop((s) => s.gen.running);
+  const [note, setNote] = useNote(4000);
+  if (running || !canShare(current)) return null;
+  const ai = current.engine === "ai";
 
   const share = async () => {
-    const url = shareUrl(current, location.href);
-    try {
-      if (navigator.share && matchMedia("(hover: none)").matches) {
-        await navigator.share({ title: `Jamming · ${current.title}`, url });
-        return;
-      }
-      await navigator.clipboard.writeText(url);
-      say("link copied");
-    } catch (e) {
-      if ((e as Error).name !== "AbortError") say("couldn't copy the link");
-    }
+    const config = useTroop.getState().jamConfig();
+    if (!config) return;
+    const said = await sendLink(shareUrl(config, location.href), current.title);
+    if (said) setNote({ id: current.id, text: ai && said === "link copied" ? `link copied: ${AI_LINK_NOTE}` : said });
   };
 
   return (
-    <button type="button" className="text-action text-m" onClick={() => void share()} title="Copy a link that plays this take again">
-      <span aria-live="polite">{note?.id === current.id ? note.text : "share this take"}</span>
+    <button
+      type="button"
+      className="text-action text-m"
+      onClick={() => void share()}
+      title={ai ? `Copy a link to this jam. It carries ${AI_LINK_NOTE}.` : "Copy a link that plays this jam again, note for note"}
+    >
+      <span aria-live="polite">{note?.id === current.id ? note.text : "share this jam"}</span>
     </button>
+  );
+}
+
+/** "Bossa Nova · C minor · 132 bpm · in the hall" */
+function jamFacts(c: JamConfig): string {
+  const s = c.settings;
+  const room = c.sounds.room === "club" ? "" : c.sounds.room === "dry" ? " · dry" : " · in the hall";
+  return `${s.key.tonic} ${s.key.mode} · ${s.tempo} bpm${room}`;
+}
+
+/** Jams saved in this browser: open one to set it all up again, or copy its link. */
+export function SavedJams() {
+  const saved = useTroop((s) => s.saved);
+  const open = useTroop((s) => s.openSaved);
+  const remove = useTroop((s) => s.deleteSaved);
+  const [note, setNote] = useNote(2500);
+  if (!saved.length) return null;
+  return (
+    <div>
+      <h2 className="type-section mb-xs">Saved jams</h2>
+      <ol className="space-y-xxs">
+        {saved.map((entry) => {
+          const c = savedConfig(entry);
+          if (!c) return null;
+          const ai = c.engine === "ai";
+          return (
+            <li key={entry.id} className="group flex items-start gap-xxs">
+              <button type="button" onClick={() => open(entry.id)} className="pick min-w-0 flex-1 px-xs py-xxs text-left text-m" title="Set this jam up again">
+                <span className="block truncate">{entry.name}</span>
+                <span className="block text-xs text-ink-soft">
+                  {jamFacts(c)}
+                  {ai ? (entry.score ? " · the models' take, as played" : " · setup only: the models' parts will differ") : ""}
+                </span>
+              </button>
+              <button
+                type="button"
+                className="text-action shrink-0 px-xxs pt-xxs text-s"
+                onClick={async () => {
+                  const said = await sendLink(`${location.origin}/s/${entry.jam}${location.search}`, entry.name);
+                  if (said) setNote({ id: entry.id, text: said === "link copied" ? "copied" : said });
+                }}
+                title={ai ? `Copy a link to this jam. It carries ${AI_LINK_NOTE}.` : "Copy a link to this jam"}
+              >
+                <span aria-live="polite">{note?.id === entry.id ? note.text : "link"}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => remove(entry.id)}
+                className="px-xxs pt-xxs text-ink-soft opacity-0 transition-colors duration-(--motion-duration) hover:text-(--color-1) focus:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-70"
+                aria-label={`Delete the saved jam ${entry.name}`}
+                title="Delete this saved jam"
+              >
+                ×
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }
 

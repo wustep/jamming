@@ -10,7 +10,7 @@ import { makeRng } from "./rng";
 import { getStandard } from "./standards";
 import { STYLES, swingAt } from "./styles";
 import { mod, pcOf } from "./theory";
-import type { Frame, Member, Motif, Score, TroopSettings } from "./types";
+import type { Frame, Member, Motif, Score, StyleId, TroopSettings } from "./types";
 
 export function defaultSettings(members: Member[]): TroopSettings {
   const style = STYLES.swing;
@@ -67,6 +67,12 @@ export interface LocalResult {
   timings: { frameMs: number; planMs: number; realizeMs: number };
 }
 
+/** What a local take is called: its style, and the tune when it plays a standard. */
+export function takeTitle(style: StyleId, standard: string | null): string {
+  const tune = getStandard(standard)?.name;
+  return `${STYLES[style].name}${tune ? ` · ${tune}` : ""}`;
+}
+
 /** The stub band: plays a full chart with no model calls. Same settings + seed = same take. */
 export function generateLocal(settings: TroopSettings, members: Member[]): LocalResult {
   const t0 = performance.now();
@@ -80,7 +86,7 @@ export function generateLocal(settings: TroopSettings, members: Member[]): Local
   const style = STYLES[settings.style];
   const score: Score = {
     id: newScoreId(),
-    title: `${style.name}${frame.standard ? ` · ${getStandard(frame.standard)?.name}` : ""}`,
+    title: takeTitle(settings.style, frame.standard),
     // eslint-disable-next-line no-restricted-properties -- when it was made, not what it plays
     createdAt: Date.now(),
     settings,

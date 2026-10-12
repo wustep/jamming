@@ -8,6 +8,8 @@ const script = Caveat({ variable: "--font-script", subsets: ["latin"], weight: [
 export const metadata: Metadata = {
   title: "Jamming",
   description: "A band of doodled animals that improvise music together.",
+  openGraph: { siteName: "Jamming", type: "website" },
+  twitter: { card: "summary_large_image" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
