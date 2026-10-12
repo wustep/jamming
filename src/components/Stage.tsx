@@ -80,31 +80,33 @@ function bubbleFit(i: number, n: number, perRow: number, spriteW: number, width:
 function IntroNote({ onClose }: { onClose: () => void }) {
   const thinks = useTroop(canThink);
   return (
-    <div className="sticky-note relative z-30 mx-auto mt-m w-full max-w-[19rem] -rotate-[1deg] px-s py-xs text-m lg:max-w-[46rem] lg:-rotate-[0.6deg]" role="note">
-      <button type="button" onClick={onClose} className="absolute right-xs top-xxs text-l text-ink-soft transition-colors duration-(--motion-duration) hover:text-ink" aria-label="Dismiss">
+    <div className="sticky-note relative z-30 mx-auto mt-m w-full max-w-[19rem] -rotate-[1deg] px-s py-xs text-m lg:max-w-[46rem] lg:-rotate-[0.6deg]" role="note" title="Tap a name to mute them. Tap the form strip to jump around.">
+      <button type="button" onClick={onClose} className="tap absolute right-xxs top-0 text-l text-ink-soft transition-colors duration-(--motion-duration) hover:text-ink" aria-label="Dismiss">
         ×
       </button>
       <div className="type-label">How to jam</div>
       <ol className="ml-m list-decimal lg:ml-0 lg:flex lg:list-inside lg:gap-l">
         <li>
-          Pick the band and their instruments <span className="hidden lg:inline">→</span>
-          <span className="lg:hidden">(just below)</span>
+          Pick a band <span aria-hidden className="hidden lg:inline">→</span>
+          <span aria-hidden className="lg:hidden">↓</span>
         </li>
-        <li>Press ▶ to hear their sketch</li>
+        <li>
+          <span aria-hidden>▶</span>
+          <span className="sr-only">Play</span> to hear a sketch
+        </li>
         {thinks ? (
           <li>
-            <b>Let them jam!</b> to make them think it through
+            <b>Let them jam!</b> to make them think
           </li>
         ) : (
           <li>
             <button type="button" className="text-action" onClick={() => useTroop.getState().openKeyDialog()} aria-haspopup="dialog">
-              Add a gateway or Anthropic key
+              Add a key
             </button>
-            , then <b>Let them jam!</b> to make them think it through
+            , then <b>Let them jam!</b>
           </li>
         )}
       </ol>
-      <div className="mt-xxs text-xs text-ink-soft">Tap a name to mute them. Tap the form strip to jump around.</div>
     </div>
   );
 }
@@ -120,20 +122,24 @@ function SharedNote() {
   const band = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0];
   return (
     <div className="sticky-note relative z-30 mx-auto mt-m w-full max-w-[19rem] -rotate-[1deg] px-s py-xs text-m lg:max-w-[46rem] lg:-rotate-[0.6deg]" role="note">
-      <button type="button" onClick={dismiss} className="absolute right-xs top-xxs text-l text-ink-soft transition-colors duration-(--motion-duration) hover:text-ink" aria-label="Dismiss">
+      <button type="button" onClick={dismiss} className="tap absolute right-xxs top-0 text-l text-ink-soft transition-colors duration-(--motion-duration) hover:text-ink" aria-label="Dismiss">
         ×
       </button>
       <div className="type-label">Someone sent you a jam</div>
       <p>
         <b>{take.score.title}</b>, played by {band}, set up just as they had it.
       </p>
-      {arrival.ai && <p className="text-s text-ink-soft">The models played theirs. The link has its setup and seed, so the band plays it here without them, and the parts will differ.</p>}
+      {arrival.ai && (
+        <p className="text-s text-ink-soft" title="The models played theirs. The link has its setup and seed, so the band plays it here without them.">
+          Setup and seed only: the parts will differ.
+        </p>
+      )}
       <div className="mt-xxs flex flex-wrap gap-x-s">
         <button type="button" className="text-action" onClick={() => void play()}>
           ▶ play it
         </button>
         {arrival.backupId && (
-          <button type="button" className="text-action" onClick={restore} title="Your own band and settings were saved under Saved jams">
+          <button type="button" className="text-action" onClick={restore} title="Your own band and settings were saved under Saved">
             back to my jam
           </button>
         )}

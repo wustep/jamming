@@ -655,7 +655,7 @@ export const useTroop = create<TroopState>((set, get) => {
       const blocked = modelsFor(settings).find((m) => !canRun(m, keyAccess(st)));
       if (blocked) {
         const name = modelInfo(blocked)?.label ?? blocked;
-        set({ gen: { ...st.gen, running: false, error: `${name} needs an AI Gateway key. With only an Anthropic key, pick a Claude model in “Brains & sounds”.` } });
+        set({ gen: { ...st.gen, running: false, error: `${name} needs an AI Gateway key. With only an Anthropic key, pick a Claude model in “Settings”.` } });
         return;
       }
 

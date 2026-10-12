@@ -115,7 +115,7 @@ export function keyMismatch(field: keyof KeySet, key: string): string | null {
   return null;
 }
 
-/** A run stopped because of a key (missing, rejected, or one that can't reach the model): the fix is in "Brains & sounds". */
+/** A run stopped because of a key (missing, rejected, or one that can't reach the model): the fix is in "Settings". */
 export const isKeyProblem = (error: string) => /\bkey\b/i.test(error);
 
 /** How a failed run reads. A key problem already says what to do; anything else, the band lost the thread mid-take. */

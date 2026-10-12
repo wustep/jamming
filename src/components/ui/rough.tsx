@@ -158,7 +158,7 @@ export function RoughButton({
       type="button"
       onPointerEnter={() => setHover(true)}
       onPointerLeave={() => setHover(false)}
-      className={`relative cursor-pointer select-none transition-transform duration-(--motion-duration) ease-small active:translate-y-(--motion-press-distance) disabled:cursor-not-allowed disabled:opacity-45 ${className}`}
+      className={`relative cursor-pointer select-none transition-transform duration-(--motion-duration) ease-small press active:scale-(--motion-press-scale) disabled:cursor-not-allowed disabled:opacity-45 ${className}`}
       aria-pressed={tone === "plain" || tone === "quiet" ? active : undefined}
       {...rest}
     >

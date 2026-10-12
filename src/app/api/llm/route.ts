@@ -29,8 +29,8 @@ const PROVIDER = { gateway: "The AI Gateway", anthropic: "Anthropic" } as const;
 
 function keyRejected(r: Route) {
   return r.from === "browser"
-    ? `${PROVIDER[r.via]} rejected your ${r.via === "gateway" ? "AI Gateway" : "Anthropic"} key — check it in “Brains & sounds”.`
-    : `${PROVIDER[r.via]} rejected this server's ${r.via === "gateway" ? "gateway" : "Anthropic"} key — add your own in “Brains & sounds”.`;
+    ? `${PROVIDER[r.via]} rejected your ${r.via === "gateway" ? "AI Gateway" : "Anthropic"} key — check it in “Settings”.`
+    : `${PROVIDER[r.via]} rejected this server's ${r.via === "gateway" ? "gateway" : "Anthropic"} key — add your own in “Settings”.`;
 }
 
 const rateLimited = (r: Route) => `Rate limited by ${r.via === "gateway" ? "the AI Gateway" : "Anthropic"} — try again in a moment.`;
@@ -97,8 +97,8 @@ export async function POST(req: Request) {
   if (!route) {
     const anyKey = [body.key, body.anthropicKey, ...Object.values(serverKeys())].some((k) => k?.trim());
     return anyKey && !isClaude(body.model)
-      ? Response.json({ error: `${body.model} needs an AI Gateway key. With only an Anthropic key, pick a Claude model in “Brains & sounds”.` }, { status: 400 })
-      : Response.json({ error: "Add an AI Gateway or Anthropic key in “Brains & sounds” to let the band think." }, { status: 401 });
+      ? Response.json({ error: `${body.model} needs an AI Gateway key. With only an Anthropic key, pick a Claude model in “Settings”.` }, { status: 400 })
+      : Response.json({ error: "Add an AI Gateway or Anthropic key in “Settings” to let the band think." }, { status: 401 });
   }
   if (!body.prompt || body.prompt.length > 60_000 || (body.system?.length ?? 0) > 30_000) {
     return Response.json({ error: "Prompt missing or too long" }, { status: 400 });

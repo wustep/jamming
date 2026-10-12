@@ -59,7 +59,6 @@ export function Home() {
           </div>
           <BrainsButton />
         </div>
-        <p className="text-m text-ink-soft">Pick the band, hand them instruments, and let them make something up.</p>
       </header>
 
       {/* Below lg the page is one column, and main's pieces join the grid so the band settings sit
@@ -84,21 +83,25 @@ export function Home() {
             </div>
           </div>
           <section className="order-4 min-w-0 lg:order-none lg:mt-l" aria-label="Sheet music">
-            <div className="mb-xs flex items-baseline gap-s">
-              <h2 className="type-section">The chart</h2>
-              {score ? (
-                <>
-                  <button type="button" className="text-action text-s" onClick={() => setShowSheet((v) => !v)}>
-                    {showSheet ? "fold it up" : "unfold"}
-                  </button>
-                  <span className="text-s text-ink-soft">click a bar to play from there</span>
-                </>
-              ) : (
-                <span className="text-s text-ink-soft">invite someone to the band to see their parts</span>
+            <div className="mb-xs flex items-center gap-xs">
+              <h2 className="type-section">Chart</h2>
+              {score && (
+                <button
+                  type="button"
+                  className="tap min-h-xl min-w-xl rounded-full text-m text-ink-soft transition-colors duration-(--motion-duration) hover:text-ink"
+                  onClick={() => setShowSheet((v) => !v)}
+                  aria-expanded={showSheet}
+                  aria-label={showSheet ? "Hide the chart" : "Show the chart"}
+                  title={showSheet ? "Hide" : "Show"}
+                >
+                  <span aria-hidden className={`inline-block transition-transform duration-(--motion-duration) ease-small ${showSheet ? "rotate-90" : ""}`}>
+                    ▸
+                  </span>
+                </button>
               )}
             </div>
             {showSheet && score && (
-              <RoughBox seed="sheet" rough={{ weight: "m" }} className="sheet-paper p-xs">
+              <RoughBox seed="sheet" rough={{ weight: "m" }} className="sheet-paper p-xs" title="Click a bar to play from there">
                 <SheetMusic
                   score={score}
                   getBeat={getBeat}
@@ -117,7 +120,12 @@ export function Home() {
         </div>
       </div>
       <footer className="mt-xl text-center text-s text-ink-soft">
-        Samples: Salamander Grand Piano (Alexander Holm), Splendid Grand, Greg Sullivan’s Wurlitzer and CP80, Smolken double bass, VCSL drums and vibraphone, LinnDrum (LM-2), MusyngKite (harpsichord, organ, string pad and choir included) and FluidR3 soundfonts — via smplr. Notation by VexFlow.
+        <details className="group">
+          <summary className="tap text-action inline-flex cursor-pointer list-none items-center">Credits</summary>
+          <p className="mx-auto mt-xs max-w-[48rem]">
+            Samples: Salamander Grand Piano (Alexander Holm), Splendid Grand, Greg Sullivan’s Wurlitzer and CP80, Smolken double bass, VCSL drums and vibraphone, LinnDrum (LM-2), MusyngKite (harpsichord, organ, string pad and choir included) and FluidR3 soundfonts — via smplr. Notation by VexFlow.
+          </p>
+        </details>
       </footer>
     </div>
   );

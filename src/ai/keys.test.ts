@@ -62,8 +62,8 @@ describe("key routing", () => {
 
 describe("run errors", () => {
   it("lets a key problem speak for itself", () => {
-    expect(runErrorText("Anthropic rejected your Anthropic key — check it in “Brains & sounds”.")).toBe("Anthropic rejected your Anthropic key — check it in “Brains & sounds”.");
-    expect(runErrorText("GPT-5.4 mini needs an AI Gateway key. With only an Anthropic key, pick a Claude model in “Brains & sounds”.")).not.toMatch(/lost the thread/);
+    expect(runErrorText("Anthropic rejected your Anthropic key — check it in “Settings”.")).toBe("Anthropic rejected your Anthropic key — check it in “Settings”.");
+    expect(runErrorText("GPT-5.4 mini needs an AI Gateway key. With only an Anthropic key, pick a Claude model in “Settings”.")).not.toMatch(/lost the thread/);
   });
 
   it("says the band lost the thread for anything else", () => {

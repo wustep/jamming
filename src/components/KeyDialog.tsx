@@ -16,7 +16,7 @@ type Check = { state: "idle" } | { state: "checking" } | { state: "rejected"; er
 /**
  * The welcome dialog: one field for an Anthropic or Vercel AI Gateway key (the prefix says
  * which), or the heuristic band. Opens by itself on a first visit (see shouldAskForKey) and
- * again from “Change key” in Brains & sounds.
+ * again from “Change key” in Settings.
  *
  * A native modal <dialog>: the page behind is inert, Tab cycles inside it, and Esc or × closes
  * it without changing anything (it won't reopen by itself; the key can be added later).
@@ -135,7 +135,7 @@ function KeyForm() {
       <button
         type="button"
         onClick={close}
-        className="absolute -right-xs -top-xs flex min-h-xl min-w-xl items-center justify-center text-l text-ink-soft transition-colors duration-(--motion-duration) hover:text-ink"
+        className="tap absolute -right-xs -top-xs min-h-xl min-w-xl text-l text-ink-soft transition-colors duration-(--motion-duration) hover:text-ink"
         aria-label="Close"
       >
         ×
@@ -144,8 +144,7 @@ function KeyForm() {
         Give the band a brain?
       </h2>
       <p id="key-dialog-desc" className="mt-xs text-m">
-        Paste an Anthropic or Vercel AI Gateway key and the animals talk every take through with a real model. No key? They play from their own sketchbook, a
-        heuristic band that runs right here with no model calls.
+        Paste an Anthropic or AI Gateway key and the band thinks with a real model. Or skip, and they play from a sketchbook with no model calls.
       </p>
 
       <form onSubmit={submit} className="mt-m" noValidate>
@@ -181,8 +180,8 @@ function KeyForm() {
               {KEY_PROVIDER_LABEL[guess.provider]}
             </span>
           )}
-          <button type="button" className="text-action px-xxs text-s" onClick={() => setShow((v) => !v)} aria-pressed={show}>
-            {show ? "hide" : "show"}
+          <button type="button" className="tap text-action px-xxs text-s" onClick={() => setShow((v) => !v)} aria-pressed={show}>
+            {show ? "Hide" : "Show"}
           </button>
         </div>
         <p id={statusId} className="mt-xxs min-h-[calc(2*var(--line-s))] text-s" aria-live="polite">
@@ -221,20 +220,19 @@ function KeyForm() {
           <RoughButton seed="key-save" tone="primary" type="submit" disabled={!guess.ok || checking} className="px-m py-xs font-brand text-l font-heavy text-on-accent">
             {checking ? "Checking…" : guess.ok && guess.provider ? `Save ${guess.provider === "anthropic" ? "Anthropic" : "Gateway"} key` : "Save key"}
           </RoughButton>
-          <button type="button" className="text-action text-m" onClick={chooseHeuristic}>
-            Skip — use the heuristic model
+          <button type="button" className="tap text-action text-m" onClick={chooseHeuristic} title="Use the heuristic band: no model calls">
+            Skip
           </button>
         </div>
       </form>
 
       <p className="mt-m text-xs text-ink-soft">
         {lends && !heuristic
-          ? "This server lends the band a key already, so you can close this and they’ll still think. Your own key spends your own credits. "
+          ? "The server lends a key already; yours spends your own credits. "
           : saved && !heuristic
             ? `Your ${KEY_PROVIDER_LABEL[saved]} key is saved; a new one of the same kind replaces it. `
             : ""}
-        Your key is kept in this browser only and sent with each model call, through this site straight on to the provider. Nothing is logged or stored on the server.
-        Change it any time in <b>Brains &amp; sounds</b>.
+        Kept in this browser, sent only with each model call, never stored on the server. Change it in <b>Settings</b>.
       </p>
     </RoughBox>
   );

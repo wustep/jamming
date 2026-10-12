@@ -7,6 +7,7 @@ import { lengthOptions } from "@/music/form";
 import { ANIMAL_LIST, ANIMALS, INSTRUMENT_LIST, INSTRUMENTS } from "@/music/instruments";
 import { STANDARDS, getStandard, searchStandards } from "@/music/standards";
 import { STYLE_LIST, STYLES } from "@/music/styles";
+import { FEELS, type FeelId } from "@/music/playing";
 import { PRESET_GROUPS, PRESETS, getPreset, searchPresets, type PresetId } from "@/music/presets";
 import type { AnimalId, InstrumentId, Member } from "@/music/types";
 import { useTroop } from "@/state/store";
@@ -15,11 +16,11 @@ import { RoughBox, RoughButton } from "./ui/rough";
 
 /** The tune list, grouped by what you get: a standard and its head, a song, a jazz form, pop chords, a groove. */
 const TUNE_GROUPS: { label: string; has: (t: (typeof STANDARDS)[number]) => boolean }[] = [
-  { label: "Jazz standards (the band plays the head)", has: (t) => !!t.melody && !t.publicDomain },
-  { label: "Songs (the band plays the melody)", has: (t) => !!t.melody && !!t.publicDomain },
-  { label: "Jazz forms (the changes)", has: (t) => !t.melody && ["swing", "bossa"].includes(t.style) },
+  { label: "Jazz standards", has: (t) => !!t.melody && !t.publicDomain },
+  { label: "Songs", has: (t) => !!t.melody && !!t.publicDomain },
+  { label: "Jazz forms", has: (t) => !t.melody && ["swing", "bossa"].includes(t.style) },
   { label: "Pop progressions", has: (t) => !t.melody && t.style === "pop" },
-  { label: "Grooves and grounds", has: (t) => !t.melody && !["swing", "bossa", "pop"].includes(t.style) },
+  { label: "Grooves", has: (t) => !t.melody && !["swing", "bossa", "pop"].includes(t.style) },
 ];
 
 const TONICS = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
@@ -39,7 +40,7 @@ function Field({ children }: { children: React.ReactNode }) {
 
 function Chip({ seed, active, onClick, children, title, disabled }: { seed: string; active?: boolean; onClick?: () => void; children: React.ReactNode; title?: string; disabled?: boolean }) {
   return (
-    <RoughButton seed={seed} active={active} onClick={onClick} title={title} disabled={disabled} className="px-xs py-xxs text-m">
+    <RoughButton seed={seed} active={active} onClick={onClick} title={title} disabled={disabled} className="tap px-xs py-xxs text-m">
       {children}
     </RoughButton>
   );
@@ -54,7 +55,7 @@ function MemberRow({ m, members, onChange, onRemove }: { m: Member; members: Mem
         <div className="type-label min-w-0 flex-1 truncate" title={`${m.name} the ${ANIMALS[m.animal].species}`}>
           {m.name}
         </div>
-        <RoughButton seed={`inst-${m.id}`} className="px-xs py-xxs text-s" onClick={() => setOpen((o) => !o)} aria-expanded={open} title={`Choose ${m.name}'s instrument`}>
+        <RoughButton seed={`inst-${m.id}`} className="tap px-xs py-xxs text-s" onClick={() => setOpen((o) => !o)} aria-expanded={open} title={`Choose ${m.name}'s instrument`}>
           <span className="inline-flex items-center gap-xxs whitespace-nowrap">
             <InstrumentIcon instrument={m.instrument} size={20} />
             {INSTRUMENTS[m.instrument].name}
@@ -63,7 +64,7 @@ function MemberRow({ m, members, onChange, onRemove }: { m: Member; members: Mem
         <button
           type="button"
           // a finger-sized target (the × alone was 18 px wide)
-          className="flex min-h-xl min-w-xl items-center justify-center text-l text-ink-soft transition-colors duration-(--motion-duration) hover:text-(--color-1) disabled:opacity-30"
+          className="tap min-h-xl min-w-xl text-l text-ink-soft transition-colors duration-(--motion-duration) hover:text-(--color-1) disabled:opacity-30"
           onClick={onRemove}
           disabled={members.length <= 1}
           aria-label={`Remove ${m.name}`}
@@ -113,6 +114,7 @@ function SearchPicker({
   groups,
   search,
   onPick,
+  hint,
 }: {
   id: string;
   label: string;
@@ -122,6 +124,8 @@ function SearchPicker({
   groups: { key: string; label: string; items: Item[] }[];
   search: (query: string) => Item[];
   onPick: (id: string | null) => void;
+  /** a line about the current pick, shown on hover */
+  hint?: string;
 }) {
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState("");
@@ -160,7 +164,7 @@ function SearchPicker({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder={`Search ${total} ${noun}…`}
+          placeholder={`${total} ${noun}…`}
           aria-label={`Search ${noun}`}
           aria-controls={id}
           aria-describedby={typed ? `${id}-status` : undefined}
@@ -170,8 +174,8 @@ function SearchPicker({
           autoFocus
         />
       )}
-      <div className="flex items-baseline gap-xs">
-        <select id={id} ref={listRef} className="sketch-select min-w-0 flex-1" value={value ?? ""} onChange={(e) => onPick(e.target.value || null)} aria-label={label}>
+      <div className="flex items-center gap-xxs">
+        <select id={id} ref={listRef} className="sketch-select min-w-0 flex-1" value={value ?? ""} onChange={(e) => onPick(e.target.value || null)} aria-label={label} title={hint}>
           <option value="">{none}</option>
           {groups.map((g) => {
             const here = g.items.filter(shown);
@@ -189,21 +193,32 @@ function SearchPicker({
         <button
           ref={toggleRef}
           type="button"
-          className="text-action shrink-0 py-xs text-s"
+          className="pick tap min-h-xl min-w-xl shrink-0 text-m text-ink-soft"
           onClick={() => (searching ? close() : setSearching(true))}
           aria-expanded={searching}
           aria-label={searching ? `Close the ${noun} search` : `Search ${noun}`}
+          title={searching ? "Close search" : "Search"}
         >
-          {searching ? "done" : "search"}
+          {searching ? (
+            <span aria-hidden className="text-l">
+              ×
+            </span>
+          ) : (
+            // a pencil-drawn magnifier, in the ink colour
+            <svg aria-hidden width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              <circle cx="7.5" cy="7.5" r="5" />
+              <path d="M11.3 11.3 16 16" />
+            </svg>
+          )}
         </button>
       </div>
       {typed && (
         <div id={`${id}-status`} role="status" aria-live="polite" className="mt-xxs text-s text-ink-soft">
           {matches.length ? (
-            `${matches.length} of ${total} match · Enter picks ${matches[0].name}`
+            <span title={`Enter picks ${matches[0].name}`}>{matches.length} found</span>
           ) : (
             <>
-              Nothing matches “{query.trim()}”.{" "}
+              No match.{" "}
               <button type="button" className="text-action" onClick={() => setQuery("")}>
                 Clear
               </button>
@@ -257,12 +272,12 @@ export function ControlPanel() {
           label="Play like an artist"
           noun="artists"
           value={preset?.id ?? null}
-          none="Play like… nobody in particular"
+          none="Play like…"
           groups={PRESET_PICKER_GROUPS}
           search={searchPresets}
           onPick={(id) => (id ? applyPreset(id as PresetId) : setStyle(s.style))}
+          hint={preset?.blurb ?? "Play like an artist: sets the style, feel, changes, band, tempo and room"}
         />
-        {preset && <p className="mt-xxs text-s text-ink-soft">{preset.blurb}</p>}
       </Field>
 
       <Field>
@@ -272,16 +287,16 @@ export function ControlPanel() {
           label="Tune"
           noun="tunes"
           value={s.standard}
-          none="An original (the band writes the changes)"
+          none="Original"
           groups={TUNE_PICKER_GROUPS}
           search={searchStandards}
           onPick={setStandard}
+          hint={std?.note ?? "An original: the band writes the changes"}
         />
-        {std?.note && <p className="mt-xxs text-s text-ink-soft">{std.note}</p>}
       </Field>
 
       <Field>
-        <Label hint={`${members.length}/6`}>The band</Label>
+        <Label hint={`${members.length}/6`}>Band</Label>
         {members.map((m) => (
           <MemberRow
             key={m.id}
@@ -298,7 +313,7 @@ export function ControlPanel() {
                 key={a}
                 type="button"
                 onClick={() => setMembers([...members, { id: a, animal: a, name: ANIMALS[a].name, instrument: ANIMALS[a].defaultInstrument }])}
-                className="pick rounded-full p-xxs"
+                className="pick tap rounded-full p-xxs"
                 title={`Invite ${ANIMALS[a].name} the ${ANIMALS[a].species}`}
                 aria-label={`Invite ${ANIMALS[a].name}`}
               >
@@ -346,7 +361,7 @@ export function ControlPanel() {
       </div>
 
       <Field>
-        <Label hint={std ? `times through` : undefined}>Length</Label>
+        <Label>Length</Label>
         <div className="flex flex-wrap gap-xs">
           {lengths.map((b) => (
             // a standard is played in choruses: once through, twice, three times...
@@ -358,11 +373,11 @@ export function ControlPanel() {
       </Field>
 
       <details id="arrangement" className="group">
-        <summary className="type-label flex cursor-pointer list-none items-baseline gap-xxs py-xxs">
+        <summary className="type-label flex min-h-10 cursor-pointer list-none items-center gap-xxs" title={`Leader, solos, meter, ${swings ? "swing, " : ""}feel`}>
           <span aria-hidden className="inline-block transition-transform duration-(--motion-duration) ease-small group-open:rotate-90">
             ▸
           </span>
-          Leader, solos, meter{swings ? ", swing" : ""}
+          More
         </summary>
         <div className="mt-s">
           <Field>
@@ -377,7 +392,7 @@ export function ControlPanel() {
           </Field>
 
           <Field>
-            <Label hint="tap in solo order">Solos</Label>
+            <Label hint="in order">Solos</Label>
             <div className="flex flex-wrap gap-xs">
               {members.map((m) => {
                 const idx = s.soloists.indexOf(m.id);
@@ -417,6 +432,18 @@ export function ControlPanel() {
               </Field>
             )}
           </div>
+
+          <Field>
+            <Label>Feel</Label>
+            <select className="sketch-select w-full" value={s.feel ?? ""} onChange={(e) => set({ feel: (e.target.value || undefined) as FeelId | undefined })} aria-label="Feel">
+              <option value="">The style’s own</option>
+              {(Object.keys(FEELS) as FeelId[]).map((id) => (
+                <option key={id} value={id}>
+                  {FEELS[id].name}
+                </option>
+              ))}
+            </select>
+          </Field>
         </div>
       </details>
     </RoughBox>
