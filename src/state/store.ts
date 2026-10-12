@@ -4,6 +4,7 @@ import { FEELS } from "@/music/playing";
 import { HARMONY_BOOKS } from "@/music/harmony-books";
 import { getPreset, type PresetId } from "@/music/presets";
 import { create } from "zustand";
+import { arrange, type ArrangeSource } from "@/ai/arranger";
 import { runComposer, type PipelineHooks } from "@/ai/composer";
 import { insertByBar } from "@/ai/talk";
 import { startImproviser, type ImprovController } from "@/ai/improviser";
@@ -13,6 +14,7 @@ import { notesHintFromScore, troopAudio } from "@/audio/engine";
 import { DEFAULT_SOUNDS, readSounds, type Sounds } from "@/audio/packs";
 import { defaultStandardLength, snapLength } from "@/music/form";
 import { ANIMALS, defaultMembers, INSTRUMENTS } from "@/music/instruments";
+import { describeBrief, resolveBrief } from "@/music/brief";
 import { defaultSettings, generateLocal } from "@/music/local";
 import { getStandard } from "@/music/standards";
 import { STYLES, swingAt } from "@/music/styles";
@@ -27,6 +29,17 @@ interface GenState {
   runId: string | null;
   mode: TroopSettings["mode"] | null;
   error: string | null;
+}
+
+/** The last sentence the arranger read, and how. */
+export interface Arranged {
+  text: string;
+  source: ArrangeSource;
+  model?: string;
+  usage?: { inputTokens: number | null; outputTokens: number | null };
+  /** What was mended in the model's reply, or why it wasn't used. */
+  repairs: string[];
+  note: string | null;
 }
 
 interface TroopState {
@@ -65,6 +78,9 @@ interface TroopState {
   autopilotBars: number[];
   /** First-visit hints dismissed. */
   seenIntro: boolean;
+  /** The arranger is reading a sentence. */
+  arranging: boolean;
+  arranged: Arranged | null;
   /** Just arrived from a share link: the take it carried (cleared on play or dismiss). */
   sharedArrival: { takeId: string } | null;
   hydrate(): void;
@@ -76,6 +92,10 @@ interface TroopState {
   adoptSharedBand(): void;
   setSettings(patch: Partial<TroopSettings>): void;
   setStyle(style: TroopSettings["style"]): void;
+  /** One sentence to a jam: the arranger picks the settings (one model call, or keywords), then the band plays. */
+  arrangeFrom(text: string): Promise<void>;
+  /** Hide the arranger's chips. */
+  clearArranged(): void;
   /** Play like an artist: their style, feel, changes, band, tempo and room, all at once. */
   applyPreset(id: PresetId): void;
   setStandard(id: string | null): void;
@@ -196,6 +216,7 @@ function atPlayback(score: Score, tempo: number, swingFeel = score.settings.swin
 }
 
 let controller: AbortController | null = null;
+let arrangeCtl: AbortController | null = null;
 let improv: ImprovController | null = null;
 let liveTimer: ReturnType<typeof setInterval> | null = null;
 let endedUnsub: (() => void) | null = null;
@@ -284,6 +305,8 @@ export const useTroop = create<TroopState>((set, get) => {
     readyBars: null,
     autopilotBars: [],
     seenIntro: true,
+    arranging: false,
+    arranged: null,
     sharedArrival: null,
 
     hydrate() {
@@ -383,6 +406,49 @@ export const useTroop = create<TroopState>((set, get) => {
       const patch: Partial<TroopSettings> = { style, tempo: s.tempo.default, feel: undefined, harmony: undefined, preset: undefined };
       if (!std) patch.key = { ...s.key };
       get().setSettings(patch);
+    },
+
+    async arrangeFrom(raw) {
+      const text = raw.trim().slice(0, 400);
+      if (!text || get().gen.running) return;
+      arrangeCtl?.abort();
+      const ctl = (arrangeCtl = new AbortController());
+      const runId = `arrange-${Date.now()}`;
+      const dbg = useDebug.getState();
+      dbg.startRun(runId, "arranger");
+      dbg.step(runId, `asked for “${text}”`);
+      set({ arranging: true });
+      try {
+        const st = get();
+        const r = await arrange(text, { runId, access: keyAccess(st), apiKey: st.apiKey, anthropicKey: st.anthropicKey, signal: ctl.signal });
+        if (ctl.signal.aborted) return;
+        dbg.step(runId, `${r.source === "model" ? "the model" : r.source === "fallback" ? "keywords (the model's answer couldn't be used)" : "keywords"}: ${describeBrief(r.brief)}`);
+        const a = resolveBrief(r.brief, get());
+        const settings = reconcile(a.settings, a.members);
+        set((s) => ({
+          members: a.members,
+          settings,
+          sounds: { ...s.sounds, ...a.sounds },
+          arranging: false,
+          arranged: { text, source: r.source, model: r.model, usage: r.usage, repairs: r.repairs, note: r.brief.note },
+        }));
+        persist();
+        const wasPlaying = get().playing;
+        sketch();
+        dbg.endRun(runId, "done");
+        // the engine plays it from here: no more model calls
+        if (!wasPlaying) void get().play();
+      } catch (e) {
+        if (arrangeCtl === ctl) set({ arranging: false });
+        dbg.endRun(runId, (e as Error).name === "AbortError" ? "cancelled" : "error");
+        if ((e as Error).name !== "AbortError") console.error("[troop] arrange failed", e);
+      } finally {
+        if (arrangeCtl === ctl) arrangeCtl = null;
+      }
+    },
+
+    clearArranged() {
+      set({ arranged: null });
     },
 
     applyPreset(id) {
