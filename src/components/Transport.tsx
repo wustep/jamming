@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { isKeyProblem, runErrorText } from "@/ai/keys";
-import { troopAudio, type LoadState } from "@/audio/engine";
+import { canRecordVideo, troopAudio, type LoadState, type Recording } from "@/audio/engine";
 import { INSTRUMENTS } from "@/music/instruments";
+import { getPreset } from "@/music/presets";
 import { canShare, shareUrl } from "@/state/share";
 import { canThink, useTroop } from "@/state/store";
 import { openBrains } from "./ControlPanel";
+import { CLIP_SECONDS, paintStage, takeFileName, type ClipPainter } from "./stage/clip";
 import { RoughButton } from "./ui/rough";
 
 function useLoadStates() {
@@ -230,101 +232,182 @@ export function Transport() {
         )}
       </div>
       <div className="flex flex-wrap items-baseline gap-x-m">
-        <SaveAudio />
+        <SaveTake />
         <ShareLink />
       </div>
     </div>
   );
 }
 
-/** A file name for a take: its title, without characters file systems refuse. */
-export function audioFileName(title: string, mimeType: string) {
-  const ext = mimeType.includes("mp4") ? "m4a" : mimeType.includes("ogg") ? "ogg" : "webm";
-  const base = title.replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim() || "take";
-  return `${base} · Jamming.${ext}`;
-}
-
 /** After the last note, keep recording while the room rings out. */
 const TAIL_MS = 1500;
+/** A clip that's cut short fades out over this long, rather than stopping mid-note. */
+const CLIP_FADE_SEC = 1;
+
+const noChange = () => () => {};
+
+type SaveKind = "audio" | "clip";
+type SavePhase = { kind: SaveKind; step: "recording" | "saving" } | { kind: SaveKind; step: "ready"; file: File; link: string | null } | null;
+
+/** Hand a recording over: the share sheet where the browser can share files, else a download. */
+function canShareFile(file: File) {
+  try {
+    return typeof navigator.canShare === "function" && navigator.canShare({ files: [file] });
+  } catch {
+    return false;
+  }
+}
+
+function download(file: File) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(file);
+  a.download = file.name;
+  a.click();
+  window.setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+}
 
 /**
- * Save the take as an audio file: it plays from the top and the band is recorded as it plays
- * (the samplers are live, so there's no faster-than-real-time render). The count-in isn't on the
- * file. Stop throws the recording away.
+ * Save the take as an audio file, or a short video clip of the stage: it plays from the top and
+ * the band is recorded as it plays (the samplers are live, so there's no faster-than-real-time
+ * render). The count-in isn't on the file. Stop throws the recording away. Where the browser can
+ * share files (phones, mostly) the file goes to the share sheet; elsewhere it downloads.
  */
-function SaveAudio() {
+function SaveTake() {
   const current = useTroop((s) => s.current);
   const running = useTroop((s) => s.gen.running);
-  const [phase, setPhase] = useState<"idle" | "recording" | "saving">("idle");
+  const [phase, setPhase] = useState<SavePhase>(null);
   const [note, setNote] = useState<string | null>(null);
+  // known only in the browser, so it's decided after the first render (no hydration mismatch)
+  const video = useSyncExternalStore(noChange, canRecordVideo, () => false);
   useEffect(() => {
     if (!note) return;
     const t = setTimeout(() => setNote(null), 3000);
     return () => clearTimeout(t);
   }, [note]);
-  if (!current || (running && phase === "idle")) return null;
+  if (!current || (running && !phase)) return null;
 
-  const record = async () => {
+  const record = async (kind: SaveKind) => {
     const score = current;
     const st = useTroop.getState();
     if (st.playing) st.stop();
     await st.play(0);
     if (!useTroop.getState().playing) return;
-    setPhase("recording");
-    let rec: ReturnType<typeof troopAudio.startRecording> = null;
-    let ended = false;
+    setPhase({ kind, step: "recording" });
+    const link = canShare(score) ? shareUrl(score, location.href) : null;
+    let rec: Recording | null = null;
+    let painter: ClipPainter | null = null;
+    let startedAt = 0;
+    let done = false;
     let timer = 0;
-    const offEnded = troopAudio.onEnded(() => {
-      ended = true;
+    const end = (wait: number) => {
+      done = true;
       window.clearInterval(timer);
       offEnded();
-      setPhase("saving");
+      setPhase({ kind, step: "saving" });
       window.setTimeout(async () => {
         const blob = await rec?.stop();
-        setPhase("idle");
-        if (!blob) return setNote("nothing was recorded");
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = audioFileName(score.title, blob.type);
-        a.click();
-        window.setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+        painter?.stop();
+        if (!blob) {
+          setPhase(null);
+          return setNote("nothing was recorded");
+        }
+        const file = new File([blob], takeFileName(score.title, blob.type), { type: blob.type });
+        if (canShareFile(file)) return setPhase({ kind, step: "ready", file, link });
+        setPhase(null);
+        download(file);
         setNote("saved");
-      }, TAIL_MS);
-    });
+      }, wait);
+    };
+    const fail = (text: string) => {
+      done = true;
+      window.clearInterval(timer);
+      offEnded();
+      rec?.cancel();
+      painter?.stop();
+      setPhase(null);
+      setNote(text);
+    };
+    const offEnded = troopAudio.onEnded(() => end(TAIL_MS));
     // start on the downbeat, after the count-in; a stop before the end throws it away
     timer = window.setInterval(() => {
-      if (ended) return;
-      if (!useTroop.getState().playing) {
-        window.clearInterval(timer);
-        offEnded();
-        rec?.cancel();
-        setPhase("idle");
-        setNote("stopped, nothing saved");
-        return;
-      }
+      if (done) return;
+      if (!useTroop.getState().playing) return fail("stopped, nothing saved");
+      // a hidden tab stops drawing frames, so the video would freeze while the sound went on
+      if (kind === "clip" && document.hidden) return fail("the tab was hidden, so the clip stopped");
       if (!rec && troopAudio.getBeat() >= 0) {
-        rec = troopAudio.startRecording();
-        if (!rec) {
-          window.clearInterval(timer);
-          offEnded();
-          setPhase("idle");
-          setNote("this browser can't record audio");
-        }
+        if (kind === "clip") {
+          const stage = document.querySelector<HTMLElement>("[data-stage]");
+          if (stage) {
+            const preset = getPreset(score.settings.preset);
+            painter = paintStage(stage, score, () => troopAudio.getBeat(), { footer: preset ? `an homage to ${preset.name}` : "", link: location.host });
+            rec = troopAudio.startRecording({ video: painter.stream });
+          }
+        } else rec = troopAudio.startRecording();
+        if (!rec) return fail(kind === "clip" ? "this browser can't record video" : "this browser can't record audio");
+        startedAt = performance.now();
+      }
+      // a clip is the first few seconds: fade, then stop recording (the band plays on)
+      if (rec && kind === "clip" && performance.now() - startedAt >= (CLIP_SECONDS - CLIP_FADE_SEC) * 1000) {
+        rec.fadeOut(CLIP_FADE_SEC);
+        end(CLIP_FADE_SEC * 1000);
       }
     }, 20);
   };
 
-  const label = phase === "recording" ? "recording… (stop to cancel)" : phase === "saving" ? "saving…" : (note ?? "save as audio");
+  if (phase?.step === "ready") {
+    const { file, link, kind } = phase;
+    const share = async () => {
+      try {
+        await navigator.share({ files: [file], title: `Jamming · ${current.title}`, ...(link ? { text: link } : {}) });
+        setPhase(null);
+      } catch (e) {
+        if ((e as Error).name !== "AbortError") setNote("couldn't share it");
+      }
+    };
+    return (
+      <span className="flex flex-wrap items-baseline gap-x-s text-m">
+        <span className="text-ink-soft">{kind === "clip" ? "clip" : "audio"} ready:</span>
+        <button type="button" className="text-action" onClick={() => void share()}>
+          {note ?? "share it"}
+        </button>
+        <button
+          type="button"
+          className="text-action"
+          onClick={() => {
+            download(file);
+            setPhase(null);
+          }}
+        >
+          download
+        </button>
+        <button type="button" className="text-action" onClick={() => setPhase(null)} aria-label="Discard the recording">
+          ×
+        </button>
+      </span>
+    );
+  }
+
+  const busy = phase !== null;
+  const label = (kind: SaveKind, idle: string) => (phase?.kind !== kind ? idle : phase.step === "recording" ? "recording… (stop to cancel)" : "saving…");
   return (
-    <button
-      type="button"
-      className="text-action text-m"
-      disabled={phase !== "idle"}
-      onClick={() => void record()}
-      title="Play the take from the top and save it as an audio file"
-    >
-      <span aria-live="polite">{label}</span>
-    </button>
+    <>
+      {(!busy || phase.kind === "audio") && (
+        <button type="button" className="text-action text-m" disabled={busy} onClick={() => void record("audio")} title="Play the take from the top and save it as an audio file">
+          <span aria-live="polite">{label("audio", note ?? "save as audio")}</span>
+        </button>
+      )}
+      {video && (!busy || phase.kind === "clip") && (
+        <button
+          type="button"
+          className="text-action text-m"
+          disabled={busy}
+          onClick={() => void record("clip")}
+          title={`Play the take from the top and save the first ${CLIP_SECONDS} seconds of the stage as a video`}
+        >
+          <span aria-live="polite">{label("clip", `save a ${CLIP_SECONDS}s clip`)}</span>
+        </button>
+      )}
+    </>
   );
 }
 

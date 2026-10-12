@@ -12,6 +12,7 @@ import { canThink, useTroop } from "@/state/store";
 import { FormMap } from "./FormMap";
 import { Bunting } from "./stage/Bunting";
 import { FrameComputer } from "./stage/frames";
+import { headerAt } from "./stage/header";
 import { RoughBox } from "./ui/rough";
 
 function useWidth<T extends HTMLElement>() {
@@ -229,40 +230,25 @@ export function Stage() {
         if (spot) spot.style.opacity = st.featured && Number.isFinite(beat) && beat >= 0 ? (isPhrasing(st) ? "1" : "0.45") : "0";
       }
       if (score && Number.isFinite(beat)) {
-        const beats = score.frame.meter.beats;
-        const b = beat < 0 ? -1 : Math.min(score.frame.bars - 1, Math.floor(beat / beats));
-        if (b !== lastBar) {
-          lastBar = b;
-          setBar(b);
+        const h = headerAt(score, beat);
+        if (h.bar !== lastBar) {
+          lastBar = h.bar;
+          setBar(h.bar);
           const name = turn?.kind === "answer" ? band.find((m) => m.id === echoer)?.name : null;
-          const label = turn?.kind === "call" ? "Your turn!" : name ? `${name} answers` : (score.plan[b]?.section ?? "");
-          if (labelRef.current) labelRef.current.textContent = b < 0 ? "count-in…" : label;
+          const label = turn?.kind === "call" ? "Your turn!" : name ? `${name} answers` : h.section;
+          if (labelRef.current) labelRef.current.textContent = h.bar < 0 ? h.section : label;
           // the counter has its own fixed width, so the line doesn't shift as the bar number grows
-          if (counterRef.current) counterRef.current.textContent = b < 0 ? "" : `· bar ${b + 1}/${score.frame.bars}`;
+          if (counterRef.current) counterRef.current.textContent = h.counter;
         }
-        if (chordRef.current && b >= 0) {
-          const inBar = beat - b * beats;
-          const chords = score.frame.chords[b] ?? [];
-          let sym = chords[0]?.symbol ?? "";
-          for (const c of chords) if (c.beat <= inBar + 1e-6) sym = c.symbol;
-          if (chordRef.current.textContent !== sym) {
-            chordRef.current.textContent = sym;
+        if (chordRef.current && h.bar >= 0) {
+          if (chordRef.current.textContent !== h.chord) {
+            chordRef.current.textContent = h.chord;
             // a change inks in, so it reads apart from a repeat (restarting the animation, not a React render)
             chordRef.current.classList.remove("chord-ink");
             void chordRef.current.offsetWidth;
             chordRef.current.classList.add("chord-ink");
           }
-          // read ahead, like the band does: the next change in this bar or the next two
-          let next = "";
-          for (let k = b; k < Math.min(score.frame.bars, b + 3) && !next; k++) {
-            for (const c of score.frame.chords[k] ?? []) {
-              if ((k > b || c.beat > inBar + 1e-6) && c.symbol !== sym) {
-                next = `→ ${c.symbol}`;
-                break;
-              }
-            }
-          }
-          if (nextChordRef.current && nextChordRef.current.textContent !== next) nextChordRef.current.textContent = next;
+          if (nextChordRef.current && nextChordRef.current.textContent !== h.next) nextChordRef.current.textContent = h.next;
         }
       } else if (lastBar !== -2) {
         lastBar = -2;
@@ -307,7 +293,7 @@ export function Stage() {
 
   return (
     <RoughBox seed="stage" rough={{ weight: "l" }} className="stage-paper w-full p-s">
-      <div ref={wrapRef} className="relative">
+      <div ref={wrapRef} className="relative" data-stage>
         <Bunting />
         <div className="flex min-h-7 items-baseline justify-between gap-s px-xs pt-9 font-brand font-heavy text-ink-soft">
           <div className="flex min-w-0 items-baseline gap-xxs text-l" aria-live="off">
@@ -342,7 +328,7 @@ export function Stage() {
             const crowded = band.some((o, j) => j !== i && Math.floor(j / perRow) === row && (bubbles[o.id] || thinking.has(o.id)));
             const fit = bubbleFit(i, n, perRow, spriteW, width, crowded);
             return (
-              <div key={`${m.id}:${m.instrument}`} className="band-slot relative flex flex-col items-center">
+              <div key={`${m.id}:${m.instrument}`} className="band-slot relative flex flex-col items-center" data-member={m.id}>
                 <div
                   ref={(el) => {
                     spots.current.set(m.id, el);

@@ -21,7 +21,7 @@ import { STYLES, swingAt } from "@/music/styles";
 import type { ChatMessage, Member, Score, TroopSettings } from "@/music/types";
 import { useDebug } from "./debug";
 import { arrangeForPlay, arrangeUpdate } from "./playalong";
-import { sharedFromHash, type SharedTake } from "./share";
+import { decodeShare, shareValueAt, type SharedTake } from "./share";
 import { addTake, cutShortTake, loadTakes, saveTakes, type Take } from "./takes";
 
 interface GenState {
@@ -253,12 +253,14 @@ export const useTroop = create<TroopState>((set, get) => {
     else void troopAudio.prepare(members, { sounds: get().sounds, notesHint: notesHintFromScore(score) });
   };
 
-  // A shared link (#t=…): replay that take without touching the visitor's own band.
+  // A shared link (/s/1.… or an older #t=1.…): replay that take without touching the visitor's own band.
   const openSharedLink = () => {
     let shared: SharedTake | null = null;
     try {
-      shared = sharedFromHash(location.hash);
-      if (/[#&]t=/.test(location.hash)) history.replaceState(null, "", location.pathname + location.search);
+      const value = shareValueAt(location.pathname, location.hash);
+      shared = value ? decodeShare(value) : null;
+      // back to the app's own address, so a reload is your jam and not the link again
+      if (value !== null) history.replaceState(null, "", "/" + location.search);
     } catch {
       /* ignore */
     }

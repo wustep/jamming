@@ -3,7 +3,7 @@ import { defaultMembers } from "@/music/instruments";
 import { defaultSettings, generateLocal } from "@/music/local";
 import { STANDARDS } from "@/music/standards";
 import type { Member } from "@/music/types";
-import { decodeShare, encodeShare, sharedFromHash, shareUrl } from "./share";
+import { decodeShare, encodeShare, sharedFromHash, shareUrl, shareValueAt } from "./share";
 
 const band: Member[] = [...defaultMembers(), { id: "sheep", animal: "sheep", name: "Olive ☁", instrument: "cello" }];
 
@@ -37,11 +37,24 @@ describe("share links", () => {
     expect(replay(encodeShare(take)).parts).toEqual(take.parts);
   });
 
-  it("round-trip through a URL hash", () => {
+  it("round-trip through a link's path, which a server can read", () => {
     const take = generateLocal({ ...defaultSettings(band), seed: 7 }, band).score;
-    const url = new URL(shareUrl(take, "https://example.com/?debug"));
+    const url = new URL(shareUrl(take, "https://example.com/somewhere?debug#t=old"));
+    expect(url.pathname).toBe(`/s/${encodeShare(take)}`);
     expect(url.search).toBe("?debug");
-    expect(sharedFromHash(url.hash)?.settings.seed).toBe(7);
+    expect(url.hash).toBe("");
+    expect(decodeShare(shareValueAt(url.pathname, url.hash)!)?.settings.seed).toBe(7);
+  });
+
+  it("still open older links, which carried the take in the hash", () => {
+    const take = generateLocal({ ...defaultSettings(band), seed: 9 }, band).score;
+    const hash = `#t=${encodeShare(take)}`;
+    expect(shareValueAt("/", hash)).toBe(encodeShare(take));
+    expect(sharedFromHash(hash)?.settings.seed).toBe(9);
+    expect(shareValueAt("/", "")).toBeNull();
+    expect(shareValueAt("/s/", "")).toBeNull();
+    expect(shareValueAt("/s/a/b", "")).toBeNull();
+    expect(shareValueAt("/s/%E0%A4%A", "")).toBeNull();
   });
 
   it("reject tampered or unknown links", () => {

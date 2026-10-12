@@ -179,6 +179,25 @@ function isBrowser() {
 
 /** Recording formats, best first: Opus in WebM (Chrome, Firefox), AAC in MP4 (Safari). */
 const RECORD_TYPES = ["audio/webm;codecs=opus", "audio/mp4;codecs=mp4a.40.2", "audio/mp4", "audio/ogg;codecs=opus", "audio/webm"];
+// MP4 first: it's what phones' galleries and most apps will take (Safari, and Chrome since 126)
+const VIDEO_TYPES = ["video/mp4;codecs=avc1.42E01E,mp4a.40.2", "video/mp4;codecs=avc1,mp4a", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"];
+
+/** Can this browser record a video of a canvas with sound (a clip of the stage)? */
+export function canRecordVideo(): boolean {
+  return (
+    typeof MediaRecorder !== "undefined" &&
+    typeof HTMLCanvasElement !== "undefined" &&
+    typeof HTMLCanvasElement.prototype.captureStream === "function" &&
+    VIDEO_TYPES.some((t) => MediaRecorder.isTypeSupported(t))
+  );
+}
+
+export interface Recording {
+  mimeType: string;
+  stop(): Promise<Blob | null>;
+  cancel(): void;
+  fadeOut(sec: number): void;
+}
 
 export class TroopAudio {
   private ctx: AudioContext | null = null;
@@ -852,22 +871,33 @@ export class TroopAudio {
 
   /**
    * Record what the band plays, from the end of the mix (after the compressor, so the file
-   * sounds like the speakers). Null where the browser can't record audio. `stop` resolves with
-   * the file; `cancel` throws it away.
+   * sounds like the speakers). With `video`, its track is recorded alongside, into one video file
+   * (a clip of the stage). Null where the browser can't record that. `stop` resolves with the
+   * file; `cancel` throws it away; `fadeOut` fades the recording (not the speakers) to silence.
    */
-  startRecording(): { mimeType: string; stop(): Promise<Blob | null>; cancel(): void } | null {
+  startRecording(opts: { video?: MediaStream } = {}): Recording | null {
     const ctx = this.ctx;
     const out = this.compressor;
     if (!ctx || !out || typeof MediaRecorder === "undefined") return null;
-    const mimeType = RECORD_TYPES.find((t) => MediaRecorder.isTypeSupported(t));
+    const mimeType = (opts.video ? VIDEO_TYPES : RECORD_TYPES).find((t) => MediaRecorder.isTypeSupported(t));
     if (!mimeType) return null;
+    const fade = ctx.createGain();
     const tap = ctx.createMediaStreamDestination();
-    out.connect(tap);
+    out.connect(fade);
+    fade.connect(tap);
+    const disconnect = () => {
+      try {
+        out.disconnect(fade);
+      } catch {
+        /* already gone */
+      }
+    };
+    const stream = opts.video ? new MediaStream([...opts.video.getVideoTracks(), ...tap.stream.getAudioTracks()]) : tap.stream;
     let rec: MediaRecorder;
     try {
-      rec = new MediaRecorder(tap.stream, { mimeType, audioBitsPerSecond: 192_000 });
+      rec = new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 192_000, ...(opts.video ? { videoBitsPerSecond: 4_000_000 } : {}) });
     } catch {
-      out.disconnect(tap);
+      disconnect();
       return null;
     }
     const chunks: Blob[] = [];
@@ -879,14 +909,18 @@ export class TroopAudio {
     const finish = async (keep: boolean) => {
       if (rec.state !== "inactive") rec.stop();
       await done;
-      try {
-        out.disconnect(tap);
-      } catch {
-        /* already gone */
-      }
+      disconnect();
       return keep && chunks.length ? new Blob(chunks, { type: mimeType }) : null;
     };
-    return { mimeType, stop: () => finish(true), cancel: () => void finish(false) };
+    return {
+      mimeType,
+      stop: () => finish(true),
+      cancel: () => void finish(false),
+      fadeOut: (sec) => {
+        fade.gain.setValueAtTime(1, ctx.currentTime);
+        fade.gain.linearRampToValueAtTime(0, ctx.currentTime + sec);
+      },
+    };
   }
 
   /** RMS of the master output right now (0..~1). Cheap enough to call every frame. */

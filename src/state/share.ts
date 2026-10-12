@@ -2,8 +2,11 @@
 // its seed (see generateLocal), so the link carries only those and the receiving page plays it
 // again. Model-written takes can't be rebuilt from a seed, so they aren't shareable this way.
 //
-// Format: `#t=1.<base64url JSON>`. The leading number versions the payload; the music engine
-// itself isn't versioned, so an old link replays with whatever the band plays today.
+// Format: `/s/1.<base64url JSON>`. The leading number versions the payload; the music engine
+// itself isn't versioned, so an old link replays with whatever the band plays today. The take
+// rides in the path so the server sees it and can unfurl the link with a card (app/s/[t]).
+// Older links carried it in the hash (`#t=1.…`), which never reaches a server: they still play,
+// but unfurl with the plain Jamming card.
 
 import { FEELS, type FeelId } from "@/music/playing";
 import { HARMONY_BOOKS, type BookId } from "@/music/harmony-books";
@@ -135,14 +138,32 @@ export function decodeShare(value: string): SharedTake | null {
   };
 }
 
+/** The path a take's link opens: `/s/1.eyJ…`. */
+export const SHARE_PATH = /^\/s\/([^/?#]+)\/?$/;
+
+/** The payload a page address carries, from its path (`/s/1.…`) or an older link's hash (`#t=1.…`). */
+export function shareValueAt(pathname: string, hash: string): string | null {
+  const m = SHARE_PATH.exec(pathname);
+  if (m) {
+    try {
+      return decodeURIComponent(m[1]);
+    } catch {
+      return null;
+    }
+  }
+  return new URLSearchParams(hash.replace(/^#/, "")).get(SHARE_PARAM);
+}
+
 /** Pull a shared take out of a location hash like `#t=1.eyJ…`. */
 export function sharedFromHash(hash: string): SharedTake | null {
   const v = new URLSearchParams(hash.replace(/^#/, "")).get(SHARE_PARAM);
   return v ? decodeShare(v) : null;
 }
 
+/** A link that replays the take, on the same site as `base` (its query, like `?debug`, is kept). */
 export function shareUrl(score: Score, base: string): string {
   const url = new URL(base);
-  url.hash = `${SHARE_PARAM}=${encodeShare(score)}`;
+  url.pathname = `/s/${encodeShare(score)}`;
+  url.hash = "";
   return url.toString();
 }
