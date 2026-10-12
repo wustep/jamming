@@ -13,6 +13,7 @@ import { PRESET_GROUPS, PRESETS, getPreset, searchPresets, type PresetId } from 
 import type { AnimalId, InstrumentId, Member } from "@/music/types";
 import type { Sounds } from "@/audio/packs";
 import { keyAccess, useTroop } from "@/state/store";
+import { Arranger } from "./Arranger";
 import { RoughBox, RoughButton } from "./ui/rough";
 
 /** The tune list, grouped by what you get: a standard and its head, a song, a jazz form, pop chords, a groove. */
@@ -358,6 +359,8 @@ export function ControlPanel() {
 
   return (
     <RoughBox seed="panel" rough={{ weight: "l" }} className="panel-paper w-full p-m" as="aside" aria-label="Band settings">
+      <Arranger />
+
       <Field>
         <Label hint={thinks ? undefined : "how they think, once they have a key"}>Mode</Label>
         <div className="grid grid-cols-2 gap-xs">

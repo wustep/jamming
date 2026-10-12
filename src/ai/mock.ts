@@ -2,6 +2,22 @@
 // including some slop (fences, a bar outside the frame, a wrong role) to exercise repairs.
 export function fakeModel(body: { system: string; prompt: string }): string {
   const { system, prompt } = body;
+  if (system.startsWith("You arrange jams")) {
+    // a brief with some slop to mend: a name for an id, a tempo out of range, an extra player
+    return JSON.stringify({
+      preset: "Thelonious Monk",
+      style: "swing",
+      standard: null,
+      key: { tonic: "A#", mode: "minor" },
+      tempo: 30,
+      meter: 4,
+      band: ["piano", "sax", "bass", "drums", "kazoo"],
+      room: "club",
+      feel: "monk",
+      bars: 32,
+      note: "a slow, crooked late-night ballad",
+    });
+  }
   if (prompt.includes("TASK — write the chart")) {
     return (
       "Here you go:\n```json\n" +
