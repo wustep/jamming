@@ -119,8 +119,20 @@ export function Home() {
           <ControlPanel />
         </div>
       </div>
-      <footer className="mt-xl text-center text-s text-ink-soft">
-        <details className="group">
+      <footer className="mt-xl text-center text-s text-ink-soft max-lg:pb-xl">
+        <details
+          // clear the phone's fixed transport bar, which the padding below makes room for
+          className="group scroll-mb-[calc(var(--space-xxl)+var(--space-xl))]"
+          onToggle={(e) => {
+            // the credits unfold at the very bottom: bring them up into view
+            const el = e.currentTarget;
+            if (!el.open) return;
+            requestAnimationFrame(() => {
+              const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+              el.scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
+            });
+          }}
+        >
           <summary className="tap text-action inline-flex cursor-pointer list-none items-center">Credits</summary>
           <p className="mx-auto mt-xs max-w-[48rem]">
             Samples: Salamander Grand Piano (Alexander Holm), Splendid Grand, Greg Sullivan’s Wurlitzer and CP80, Smolken double bass, VCSL drums and vibraphone, LinnDrum (LM-2), MusyngKite (harpsichord, organ, string pad and choir included) and FluidR3 soundfonts — via smplr. Notation by VexFlow.

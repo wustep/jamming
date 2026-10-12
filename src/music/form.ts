@@ -33,6 +33,23 @@ export function lengthOptions(standardId: string | null): number[] {
 }
 
 /**
+ * What the length control shows for a length: its bar count, with the unit on the first one
+ * only ("32 bars", "64", "96"). The setting itself is the bar count, so the label is all that's
+ * new; a standard's counts are its choruses times its form.
+ */
+export function lengthLabel(standardId: string | null, bars: number): string {
+  return bars === lengthOptions(standardId)[0] ? `${bars} bars` : `${bars}`;
+}
+
+/** The longer reading of a length, for its tooltip: a standard's choruses ("2 choruses"). */
+export function lengthTitle(standardId: string | null, bars: number): string {
+  const std = getStandard(standardId);
+  if (!std) return `${bars} bars`;
+  const n = bars / std.bars.length;
+  return n === 1 ? `${bars} bars, once through` : `${bars} bars, ${n} choruses`;
+}
+
+/**
  * A full performance of a standard: the head, a chorus for each soloist (two to three of
  * them, as time allows), and the head out.
  */

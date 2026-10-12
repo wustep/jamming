@@ -101,6 +101,16 @@ describe("jam links", () => {
     expect(decodeShare(shareValueAt(url.pathname, url.hash)!)?.settings.seed).toBe(7);
   });
 
+  it("open links made before the length control counted bars at the same length", () => {
+    // Autumn Leaves twice through (64 bars), as /s/1 and /s/2 links made it when the control read "2×"
+    const v1 = "1.eyJzIjp7InN0eWxlIjoic3dpbmciLCJiYXJzIjo2NCwidGVtcG8iOjEzMiwia2V5Ijp7InRvbmljIjoiRyIsIm1vZGUiOiJtaW5vciJ9LCJtZXRlciI6eyJiZWF0cyI6NH0sInN0YW5kYXJkIjoiYXV0dW1uIiwibGVhZGVySWQiOiJmb3giLCJzb2xvaXN0cyI6WyJiZWFyIiwic2hlZXAiXSwic2VlZCI6NDIsInBocmFzZUJhcnMiOjR9LCJtIjpbWyJiZWFyIiwiYmVhciIsIkJydW5vIiwicGlhbm8iXSxbImZyb2ciLCJmcm9nIiwiTGlseSIsImJhc3MiXSxbIm93bCIsIm93bCIsIkhvb3QiLCJkcnVtcyJdLFsiZm94IiwiZm94IiwiUnVzdHkiLCJ0cnVtcGV0Il0sWyJzaGVlcCIsInNoZWVwIiwiT2xpdmUg4piBIiwiY2VsbG8iXV19";
+    const v2 = "2.eyJiIjpbWyJiZWFyIiwicGlhbm8iXSxbImZyb2ciLCJiYXNzIl0sWyJvd2wiLCJkcnVtcyJdLFsiZm94IiwidHJ1bXBldCJdLFsic2hlZXAiLCJzaGVlcCIsIk9saXZlIOKYgSIsImNlbGxvIl1dLCJzdCI6InN3aW5nIiwibiI6NjQsImJwbSI6MTMyLCJrIjoiR20iLCJzdGQiOiJhdXR1bW4iLCJsIjoiZm94Iiwic28iOlsiYmVhciIsInNoZWVwIl0sInNkIjo0Mn0";
+    for (const value of [v1, v2]) {
+      expect(decodeShare(shareValueAt(`/s/${value}`, "")!)?.settings).toMatchObject({ standard: "autumn", bars: 64 });
+      expect(sharedFromHash(`#t=${value}`)?.settings.bars).toBe(64);
+    }
+  });
+
   it("still open older links (the music only), from the path or the hash", () => {
     const settings = { ...defaultSettings(band), style: "bossa" as const, seed: 9, tempo: 140, swingFeel: "hard" as const };
     const take = generateLocal(settings, band).score;

@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { AnimalPortrait } from "@/art/AnimalPortrait";
 import { InstrumentIcon } from "@/art/InstrumentIcon";
-import { lengthOptions } from "@/music/form";
+import { lengthLabel, lengthOptions, lengthTitle } from "@/music/form";
 import { ANIMAL_LIST, ANIMALS, INSTRUMENT_LIST, INSTRUMENTS } from "@/music/instruments";
 import { STANDARDS, getStandard, searchStandards } from "@/music/standards";
 import { STYLE_LIST, STYLES } from "@/music/styles";
@@ -364,9 +364,9 @@ export function ControlPanel() {
         <Label>Length</Label>
         <div className="flex flex-wrap gap-xs">
           {lengths.map((b) => (
-            // a standard is played in choruses: once through, twice, three times...
-            <Chip key={b} seed={`len-${b}`} active={s.bars === b} onClick={() => set({ bars: b })} title={std ? `${b} bars` : undefined}>
-              {std ? (b === std.bars.length ? "once" : `${b / std.bars.length}×`) : `${b} bars`}
+            // in bars; a standard's come in whole choruses, which the tooltip counts
+            <Chip key={b} seed={`len-${b}`} active={s.bars === b} onClick={() => set({ bars: b })} title={lengthTitle(s.standard, b)}>
+              {lengthLabel(s.standard, b)}
             </Chip>
           ))}
         </div>
