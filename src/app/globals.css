@@ -558,3 +558,41 @@ body {
   background-color: color-mix(in srgb, var(--neutral-2) 72%, transparent);
   background-image: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--neutral-9) 30%, transparent) 0 1.2px, transparent 1.2px 5px);
 }
+
+/* the play-along keys: paper whites, ink blacks, the highlighter on whatever is held down */
+.live-keys {
+  --white-w: calc(100% / 15);
+  --black-w: calc(100% / 15 * 0.62);
+}
+@media (width < 40rem) {
+  .live-keys {
+    --white-w: calc(100% / 11);
+    --black-w: calc(100% / 11 * 0.62);
+  }
+}
+.live-key {
+  cursor: pointer;
+  transition: background-color var(--motion-duration) var(--motion-easing);
+}
+.live-key[data-held] {
+  transition: none;
+}
+.live-key-white {
+  background: var(--neutral-1);
+  box-shadow: var(--border-shadow-m);
+  border-radius: 0 0 var(--radius-s) var(--radius-s);
+}
+.live-key-white[data-held] {
+  background: var(--color-2-transparent);
+}
+.live-key-black {
+  z-index: 1;
+  width: var(--black-w);
+  background: var(--neutral-9);
+  color: var(--neutral-5);
+  border-radius: 0 0 var(--radius-xs) var(--radius-xs);
+}
+.live-key-black[data-held] {
+  background: var(--color-2);
+  color: var(--neutral-9);
+}

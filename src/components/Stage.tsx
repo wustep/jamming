@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimalSprite, IDLE_STATE, isPhrasing, type SpriteHandle } from "@/art/AnimalSprite";
 import { troopAudio } from "@/audio/engine";
-import { ANIMALS, INSTRUMENTS } from "@/music/instruments";
+import { ANIMAL_LIST, ANIMALS, INSTRUMENTS } from "@/music/instruments";
+import { echoerFor, type Block } from "@/music/live";
+import type { Member, MemberFrameState } from "@/music/types";
+import { liveCore, usePlayAlong } from "@/state/playalong";
 import { useDebug } from "@/state/debug";
 import { canThink, useTroop } from "@/state/store";
 import { FormMap } from "./FormMap";
@@ -22,6 +25,33 @@ function useWidth<T extends HTMLElement>() {
     return () => ro.disconnect();
   }, []);
   return [ref, w] as const;
+}
+
+/** Your place on stage while you play along. */
+const YOU = "you";
+
+/**
+ * Your frame state, from the notes you're holding and just played: the rig's hands go to the
+ * keys you press. You have the spotlight in your turn of a call and response.
+ */
+function yourFrame(beat: number, bpm: number, beatsPerBar: number, turn: Block | null): MemberFrameState {
+  const now = performance.now();
+  const f = liveCore().frame(now);
+  const playing = Number.isFinite(beat) || f.active.length > 0 || (f.recent[0]?.age ?? Infinity) < 2;
+  const b = Number.isFinite(beat) ? beat : (now / 1000) * (bpm / 60);
+  return {
+    ...IDLE_STATE,
+    playing,
+    beat: b,
+    beatPhase: ((b % 1) + 1) % 1,
+    bpm,
+    beatsPerBar,
+    active: f.active.map((a) => ({ pitch: a.pitch, vel: a.vel, age: a.age, progress: Math.min(0.95, a.age / 2), durSec: Math.max(2, a.age + 0.5) })),
+    recent: f.recent,
+    role: turn?.kind === "call" ? "solo" : f.active.length || (f.recent[0]?.age ?? Infinity) < 1 ? "comp" : "rest",
+    featured: turn?.kind === "call",
+    energy: 0.6,
+  };
 }
 
 /** Narrow screens shrink each slot so a horn reaching past it stays inside the stage (globals.css). */
@@ -134,9 +164,18 @@ export function Stage() {
   const seenIntro = useTroop((s) => s.seenIntro);
   const sharedArrival = useTroop((s) => !!s.sharedArrival);
   const dismissIntro = useTroop((s) => s.dismissIntro);
+  const playingAlong = usePlayAlong((s) => s.open);
+  const yourInstrument = usePlayAlong((s) => s.instrument);
+  const arranged = usePlayAlong((s) => s.arranged);
 
   // the band on stage is the chart's band when one is loaded (so sketches and takes match what you hear)
-  const band = score?.members.length ? score.members : members;
+  const players = score?.members.length ? score.members : members;
+  // playing along, you join them on stage: an animal nobody in the band is
+  const band = useMemo<Member[]>(() => {
+    if (!playingAlong) return players;
+    const animal = ANIMAL_LIST.find((a) => !players.some((m) => m.animal === a)) ?? "cat";
+    return [...players, { id: YOU, animal, name: "You", instrument: yourInstrument }];
+  }, [players, playingAlong, yourInstrument]);
   const n = Math.max(1, band.length);
   // narrow screens: up to three per row, sprites shrink rather than overflow. The slots size
   // themselves in CSS (a container query on the row), so the server-rendered first paint is
@@ -146,7 +185,9 @@ export function Stage() {
   const perRow = narrow ? perRowNarrow : n;
   const spriteW = Math.max(84, Math.min(220, ((width - 8) / perRow - 8) * (narrow ? NARROW_SLOT : 1)));
 
-  const computer = useMemo(() => (score ? new FrameComputer(score) : null), [score]);
+  // with call and response the band plays the chart with room left for you (and your phrase answered)
+  const heard = playing && arranged && score && arranged.id === score.id ? arranged : score;
+  const computer = useMemo(() => (heard ? new FrameComputer(heard) : null), [heard]);
 
   // a take played to its end (not stopped): the band cheers
   useEffect(() => troopAudio.onEnded(() => sprites.current.forEach((h) => h?.cheer())), []);
@@ -157,16 +198,31 @@ export function Stage() {
     let raf = 0;
     // -3: not drawn yet, so a stop (which restarts this effect) clears the header on its first frame
     let lastBar = -3;
+    // call and response: whose turn it is, and who answers you
+    let turn: Block | null = null;
+    let echoer: string | null = null;
     const loop = () => {
       const isPlaying = troopAudio.isPlaying() && playing;
       const beat = isPlaying ? troopAudio.getBeat() : -Infinity;
       const spb = troopAudio.getSecondsPerBeat() || 0.5;
+      if (score && Number.isFinite(beat) && beat >= 0) {
+        const b = Math.floor(beat / score.frame.meter.beats);
+        turn = liveCore().turnAt(b);
+        if (turn?.kind === "answer") echoer = echoerFor(score, turn.start);
+      } else turn = null;
       for (const m of band) {
         const h = sprites.current.get(m.id);
         if (!h) continue;
-        let st = computer && Number.isFinite(beat) ? computer.compute(m.id, beat, true, spb) : { ...IDLE_STATE, bpm: score?.frame.tempo ?? 100 };
+        let st =
+          m.id === YOU
+            ? yourFrame(beat, score?.frame.tempo ?? 100, score?.frame.meter.beats ?? 4, turn)
+            : computer && Number.isFinite(beat)
+              ? computer.compute(m.id, beat, true, spb)
+              : { ...IDLE_STATE, bpm: score?.frame.tempo ?? 100 };
         // a muted player makes no sound, so they sit out and listen instead of miming
         if (mutedSet.has(m.id)) st = { ...st, role: "rest", featured: false, active: [], recent: [], upcoming: [], nextOnsetIn: Infinity, nextPitch: null };
+        // your turn has the spotlight; in the answer, it's on whoever answers you
+        if (turn && m.id !== YOU) st = { ...st, featured: turn.kind === "answer" && m.id === echoer };
         h.update(st);
         const spot = spots.current.get(m.id);
         // the spotlight stays on the soloist, softer while they breathe between phrases
@@ -178,7 +234,9 @@ export function Stage() {
         if (b !== lastBar) {
           lastBar = b;
           setBar(b);
-          if (labelRef.current) labelRef.current.textContent = b < 0 ? "count-in…" : (score.plan[b]?.section ?? "");
+          const name = turn?.kind === "answer" ? band.find((m) => m.id === echoer)?.name : null;
+          const label = turn?.kind === "call" ? "Your turn!" : name ? `${name} answers` : (score.plan[b]?.section ?? "");
+          if (labelRef.current) labelRef.current.textContent = b < 0 ? "count-in…" : label;
           // the counter has its own fixed width, so the line doesn't shift as the bar number grows
           if (counterRef.current) counterRef.current.textContent = b < 0 ? "" : `· bar ${b + 1}/${score.frame.bars}`;
         }
@@ -313,22 +371,31 @@ export function Stage() {
                     className="block h-auto w-full"
                   />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => toggleMute(m.id)}
-                  aria-pressed={isMuted}
-                  title={isMuted ? `Bring ${m.name} back in` : `Mute ${m.name}`}
-                  className="pick group -mt-xxs px-xs text-center"
-                >
-                  <div className={`type-label ${isMuted ? "line-through decoration-2" : ""}`} style={{ color: ANIMALS[m.animal].ink }}>
-                    {m.name}
-                    {score?.frame.leaderId === m.id && <span className="ml-xxs text-s text-(--color-1)" aria-label="leader">★</span>}
+                {m.id === YOU ? (
+                  <div className="-mt-xxs px-xs text-center">
+                    <div className="type-label" style={{ color: ANIMALS[m.animal].ink }}>
+                      You
+                    </div>
+                    <div className="text-s text-ink-soft">{inst.name}</div>
                   </div>
-                  <div className="text-s text-ink-soft">
-                    {isMuted ? "muted · tap to unmute" : inst.name}
-                    {!isMuted && <span className="ml-xxs hidden text-xs group-hover:inline">· tap to mute</span>}
-                  </div>
-                </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => toggleMute(m.id)}
+                    aria-pressed={isMuted}
+                    title={isMuted ? `Bring ${m.name} back in` : `Mute ${m.name}`}
+                    className="pick group -mt-xxs px-xs text-center"
+                  >
+                    <div className={`type-label ${isMuted ? "line-through decoration-2" : ""}`} style={{ color: ANIMALS[m.animal].ink }}>
+                      {m.name}
+                      {score?.frame.leaderId === m.id && <span className="ml-xxs text-s text-(--color-1)" aria-label="leader">★</span>}
+                    </div>
+                    <div className="text-s text-ink-soft">
+                      {isMuted ? "muted · tap to unmute" : inst.name}
+                      {!isMuted && <span className="ml-xxs hidden text-xs group-hover:inline">· tap to mute</span>}
+                    </div>
+                  </button>
+                )}
               </div>
             );
           })}
