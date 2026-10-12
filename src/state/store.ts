@@ -20,6 +20,7 @@ import { getStandard } from "@/music/standards";
 import { STYLES, swingAt } from "@/music/styles";
 import type { ChatMessage, Member, Score, TroopSettings } from "@/music/types";
 import { useDebug } from "./debug";
+import { arrangeForPlay, arrangeUpdate } from "./playalong";
 import { sharedFromHash, type SharedTake } from "./share";
 import { addTake, cutShortTake, loadTakes, saveTakes, type Take } from "./takes";
 
@@ -390,10 +391,10 @@ export const useTroop = create<TroopState>((set, get) => {
           const next = atPlayback(cur, settings.tempo, settings.swingFeel);
           set({ current: next });
           // re-tempo in place; restart from this bar only if the transport can't (e.g. mid count-in)
-          if (get().playing && !troopAudio.setTempo(next)) {
+          if (get().playing && !troopAudio.setTempo(arrangeUpdate(next))) {
             const beat = troopAudio.getBeat();
             const bar = Number.isFinite(beat) && beat > 0 ? Math.floor(beat / next.frame.meter.beats) : 0;
-            troopAudio.play(next, { fromBar: bar, countIn: false });
+            troopAudio.play(arrangeUpdate(next), { fromBar: bar, countIn: false });
           }
         }
       }
@@ -617,7 +618,7 @@ export const useTroop = create<TroopState>((set, get) => {
             readyBars: improv ? improv.readyBars() : null,
             autopilotBars: improv ? improv.autopilotBars() : [],
           });
-          if (get().playing) troopAudio.updateScore(score);
+          if (get().playing) troopAudio.updateScore(arrangeUpdate(score));
           else if (improv && improv.readyBars() > 0 && !get().playing) {
             // start as soon as the band can stay ahead of the playhead at the pace it's thinking
             if (improv.readyToPlay(60 / score.frame.tempo)) void get().play();
@@ -638,7 +639,7 @@ export const useTroop = create<TroopState>((set, get) => {
           chat: score.chat,
         }));
         saveTakes(get().takes);
-        if (get().playing) troopAudio.updateScore(score);
+        if (get().playing) troopAudio.updateScore(arrangeUpdate(score));
         else void get().play();
       };
 
@@ -684,7 +685,8 @@ export const useTroop = create<TroopState>((set, get) => {
         await troopAudio.unlock();
         void troopAudio.prepare(score.members, { sounds: get().sounds, notesHint: notesHintFromScore(score) });
         for (const m of score.members) troopAudio.setMute(m.id, get().muted.includes(m.id));
-        started = troopAudio.play(score, { fromBar, countIn: fromBar === 0 && get().sounds.countIn });
+        // playing along with call and response: the band leaves room for you
+        started = troopAudio.play(arrangeForPlay(score), { fromBar, countIn: fromBar === 0 && get().sounds.countIn });
       } catch (e) {
         console.error("[troop] play failed", e);
       }
@@ -711,7 +713,7 @@ export const useTroop = create<TroopState>((set, get) => {
         if (Number.isFinite(beat) && ready < score.frame.bars && beat > ready * beats - margin) {
           if (improv.ensureReady(ready)) {
             const cur = get().current;
-            if (cur) troopAudio.updateScore(cur);
+            if (cur) troopAudio.updateScore(arrangeUpdate(cur));
             set({ readyBars: improv.readyBars(), autopilotBars: improv.autopilotBars() });
           }
         }

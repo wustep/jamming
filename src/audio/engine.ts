@@ -1,4 +1,4 @@
-import { DrumMachine, Reverb, Scheduler, type Smplr } from "smplr";
+import { DrumMachine, Reverb, Scheduler, type Smplr, type StopFn } from "smplr";
 import type { InstrumentId, Member, NoteEvent, Score } from "@/music/types";
 import { INSTRUMENTS } from "@/music/instruments";
 import { applyFeel, beatAt, beatToSeconds, ghostVel, jitter, pocketOf, secAt, spbAt, type TempoMap } from "./feel";
@@ -218,6 +218,8 @@ export class TroopAudio {
   private loop = false;
   private clicks: { time: number; accent: boolean }[] = [];
   private stats: PlaybackStats = this.freshStats();
+  /** The instrument you play along on (see prepareLive), and the notes you're holding down. */
+  private live: { key: string; instrument: InstrumentId; held: Map<number, StopFn> } | null = null;
 
   // ─── Context ───────────────────────────────────────────────────────────────
 
@@ -357,6 +359,7 @@ export class TroopAudio {
     if (this.state === "playing") return;
     const inUse = new Set<string>();
     for (const key of this.memberEntry.values()) inUse.add(key).add(`${key}|pizz`);
+    if (this.live) inUse.add(this.live.key);
     const idle = [...this.entries.values()]
       .filter((e) => !inUse.has(e.key) && (e.ready || e.failed))
       .sort((a, b) => b.used - a.used);
@@ -907,6 +910,134 @@ export class TroopAudio {
 
   private lookahead() {
     return typeof document !== "undefined" && document.hidden ? LOOKAHEAD_HIDDEN_SEC : LOOKAHEAD_SEC;
+  }
+
+  // ─── Playing along ─────────────────────────────────────────────────────────
+
+  /**
+   * Load the instrument you play along on. It's one of the band's sampled instruments, kept
+   * apart from theirs (its own instance, in the middle of the stage) so the band can use the
+   * same one. Resolves once it's ready or has definitively failed.
+   */
+  async prepareLive(instrument: InstrumentId): Promise<{ ready: boolean; error?: string }> {
+    const ctx = this.ensureContext();
+    if (!ctx) return { ready: false, error: "no audio here" };
+    const pack = instrument === "piano" ? this.sounds.piano : instrument === "drums" ? this.sounds.drums : instrument === "pad" ? this.sounds.pad : "default";
+    const key = `live:${instrument}:${pack}`;
+    if (this.live?.key !== key) {
+      this.liveAllOff();
+      this.live = { key, instrument, held: new Map() };
+    }
+    // every sample (no hint): you can play anywhere on the keyboard
+    const entry = this.getEntry(key, instrument);
+    await entry.done;
+    return { ready: entry.ready, error: entry.failed ? entry.error : undefined };
+  }
+
+  /** Is the play-along instrument loaded? */
+  liveReady(): boolean {
+    const e = this.live ? this.entries.get(this.live.key) : undefined;
+    return !!e?.ready;
+  }
+
+  /**
+   * Sound one of your notes: right away, or at `at` (context seconds) when it was played a hair
+   * early and is being pulled onto the grid. Held until liveOff.
+   */
+  liveOn(pitch: number, vel: number, at?: number): void {
+    const live = this.live;
+    const ctx = this.ctx;
+    const entry = live ? this.entries.get(live.key) : undefined;
+    if (!live || !ctx || !entry?.inst || !entry.ready) return;
+    if (ctx.state !== "running") void ctx.resume().catch(() => {});
+    live.held.get(pitch)?.(ctx.currentTime);
+    const time = at !== undefined && at > ctx.currentTime ? at : undefined;
+    const velocity = Math.round(1 + clamp(vel, 0, 1) * 126);
+    try {
+      let stop: StopFn;
+      if (live.instrument === "drums") {
+        // pads send General MIDI drum notes, which is what the kits are keyed by
+        const sample = entry.pack === "lm-2" ? lm2Sample(pitch, vel) : pitch;
+        if (sample === null || sample === undefined) return;
+        stop = entry.inst.start({ note: sample, velocity, time });
+      } else {
+        let p = Math.round(pitch);
+        const range = INSTRUMENTS[live.instrument]?.range;
+        if (range) {
+          while (p < range[0] - 12) p += 12;
+          while (p > range[1] + 12) p -= 12;
+        }
+        const event: SmplrNote = { note: p, velocity, time };
+        if (live.instrument === "piano" && entry.pack === "salamander") event.lpfCutoffHz = 1800 + Math.pow(vel, 1.4) * 14000;
+        stop = entry.inst.start(event);
+      }
+      live.held.set(pitch, stop);
+    } catch (err) {
+      console.warn("[audio] live note failed", err);
+    }
+  }
+
+  /** Let go of one of your notes (a drum hit rings out on its own). */
+  liveOff(pitch: number, at?: number): void {
+    const live = this.live;
+    const stop = live?.held.get(pitch);
+    if (!live || !stop || !this.ctx) return;
+    live.held.delete(pitch);
+    if (live.instrument === "drums") return;
+    try {
+      stop(Math.max(this.ctx.currentTime, at ?? 0));
+    } catch {
+      /* already stopped */
+    }
+  }
+
+  liveAllOff(): void {
+    if (!this.live) return;
+    for (const p of [...this.live.held.keys()]) this.liveOff(p);
+  }
+
+  /**
+   * The beat (felt, on the swung timeline) that was coming out of the speakers at a moment
+   * given on the performance clock (a MIDI event's timestamp, a key press): what the player was
+   * hearing when they played, so their note is placed where they meant it rather than where
+   * the output latency made it land. -Infinity when the band isn't playing.
+   */
+  heardBeatAt(perfMs: number): number {
+    const ctx = this.ctx;
+    if (!ctx || this.state !== "playing") return -Infinity;
+    const heard = this.heardTimeAt(ctx, perfMs);
+    const base = heard >= this.t0 || this.t0 === this.prevT0 ? this.t0 : this.prevT0;
+    return beatAt(this.tempoMap(), heard - base);
+  }
+
+  /** Context time whose sound reached the speakers at `perfMs`. */
+  private heardTimeAt(ctx: AudioContext, perfMs: number): number {
+    try {
+      const stamp = ctx.getOutputTimestamp?.();
+      if (stamp && Number.isFinite(stamp.contextTime) && Number.isFinite(stamp.performanceTime) && stamp.performanceTime! > 0) {
+        return stamp.contextTime! + (perfMs - stamp.performanceTime!) / 1000;
+      }
+    } catch {
+      /* not supported */
+    }
+    const latency = (ctx as AudioContext & { outputLatency?: number }).outputLatency || ctx.baseLatency || 0;
+    return ctx.currentTime - latency - (performance.now() - perfMs) / 1000;
+  }
+
+  /**
+   * When a beat of the chart (straight grid) is played, in context seconds: where to put a
+   * note pulled onto the band's grid. Null when the band isn't playing.
+   */
+  timeOfBeat(beat: number): number | null {
+    if (!this.ctx || this.state !== "playing" || !this.score) return null;
+    const swing = Number.isFinite(this.score.swing) ? this.score.swing : 0.5;
+    return this.t0 + this.sec(applyFeel(beat, swing));
+  }
+
+  /** The swing of the chart that's playing (0.5 = straight). */
+  getSwing(): number {
+    const s = this.score?.swing;
+    return s !== undefined && Number.isFinite(s) ? s : 0.5;
   }
 
   // ─── Scheduler ─────────────────────────────────────────────────────────────

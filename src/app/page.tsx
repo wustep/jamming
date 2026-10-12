@@ -7,12 +7,14 @@ import { BandTalk } from "@/components/BandTalk";
 import { ControlPanel } from "@/components/ControlPanel";
 import { DebugPanel } from "@/components/DebugPanel";
 import { KeyDialog } from "@/components/KeyDialog";
+import { PlayAlong } from "@/components/PlayAlong";
 import { Stage } from "@/components/Stage";
 import { Takes, Transport } from "@/components/Transport";
 import { RoughBox, Squiggle } from "@/components/ui/rough";
 import { useScrollMore } from "@/components/ui/scrollMore";
 import { SheetMusic, type SheetStats } from "@/sheet/SheetMusic";
 import { useDebug } from "@/state/debug";
+import { usePlayAlong } from "@/state/playalong";
 import { useTroop } from "@/state/store";
 
 export default function Home() {
@@ -32,7 +34,7 @@ export default function Home() {
     hydrate();
     // dev-only handle for automated play-throughs (transport + store)
     if (process.env.NODE_ENV !== "production") {
-      (window as unknown as { __jamming?: unknown }).__jamming = { audio: troopAudio, store: useTroop, debug: useDebug };
+      (window as unknown as { __jamming?: unknown }).__jamming = { audio: troopAudio, store: useTroop, debug: useDebug, playAlong: usePlayAlong };
     }
     try {
       if (new URLSearchParams(location.search).has("debug")) setDebugOpen(true);
@@ -79,6 +81,9 @@ export default function Home() {
             <Stage />
             <div className="mt-s">
               <Transport />
+            </div>
+            <div className="mt-s">
+              <PlayAlong />
             </div>
             {debugOpen && <DebugPanel sheetStats={sheetStats} />}
           </div>
