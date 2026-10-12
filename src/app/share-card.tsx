@@ -85,7 +85,7 @@ export async function shareCardImage(card: ShareCard | null): Promise<ImageRespo
         <img src={svgSrc(<Bunting />, { width: 1200, height: 64 })} width={1200} height={64} style={{ position: "absolute", top: 0, left: 0 }} alt="" />
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginTop: 84 }}>
           <div style={{ display: "flex", fontFamily: "Script", fontSize: 48, color: THEME["--pencil-red"] }}>Jamming</div>
-          <div style={{ display: "flex", fontSize: 28, color: soft }}>{card ? "someone sent you a take" : ""}</div>
+          <div style={{ display: "flex", fontSize: 28, color: soft }}>{card ? "someone sent you a jam" : ""}</div>
         </div>
         <div style={{ display: "flex", fontSize: titleSize, lineHeight: 1.05, marginTop: 8 }}>{title}</div>
         <div style={{ display: "flex", fontSize: 32, color: soft, marginTop: 10 }}>{card ? [card.homage, card.facts].filter(Boolean).join(" · ") : "Pick the band, hand them instruments, and let them make something up."}</div>

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Home } from "@/components/Home";
 import { shareCardFor } from "@/state/card";
 
-// A shared take's own address (/s/1.…): the app, which plays the take it carries (see
+// A shared jam's own address (/s/2.…, or an older /s/1.…): the app, which plays the take it carries (see
 // openSharedLink in the store), with a title, description and card for the link's preview.
 
 export async function generateMetadata({ params }: PageProps<"/s/[t]">): Promise<Metadata> {

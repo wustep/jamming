@@ -20,8 +20,9 @@ import { getStandard } from "@/music/standards";
 import { STYLES, swingAt } from "@/music/styles";
 import type { ChatMessage, Member, Score, TroopSettings } from "@/music/types";
 import { useDebug } from "./debug";
-import { arrangeForPlay, arrangeUpdate } from "./playalong";
-import { decodeShare, shareValueAt, type SharedTake } from "./share";
+import { arrangeForPlay, arrangeUpdate, playAlongPrefs, usePlayAlong } from "./playalong";
+import { addSaved, loadSaved, makeSaved, savedConfig, storeSaved, type SavedJam } from "./saved";
+import { decodeShare, encodeJam, shareValueAt, type JamConfig, type SharedJam } from "./share";
 import { addTake, cutShortTake, loadTakes, saveTakes, type Take } from "./takes";
 
 interface GenState {
@@ -82,15 +83,27 @@ interface TroopState {
   /** The arranger is reading a sentence. */
   arranging: boolean;
   arranged: Arranged | null;
-  /** Just arrived from a share link: the take it carried (cleared on play or dismiss). */
-  sharedArrival: { takeId: string } | null;
+  /** Jams saved in this browser, newest first. */
+  saved: SavedJam[];
+  /**
+   * Just arrived from a share link: the take it carried, whether the models played it (the link
+   * has their setup, not their notes), and where your own setup went (cleared on play or dismiss).
+   */
+  sharedArrival: { takeId: string; ai: boolean; backupId: string | null } | null;
   hydrate(): void;
   toggleMute(id: string): void;
   deleteTake(id: string): void;
   dismissIntro(): void;
   dismissArrival(): void;
-  /** Make the shared take's band and settings your own, to jam on from there. */
-  adoptSharedBand(): void;
+  /** Undo a link: back to the setup you had before it (saved as a jam when the link opened). */
+  restoreBeforeLink(): void;
+  /** Everything that makes the jam on stage what it is (null with nobody on stage). */
+  jamConfig(): JamConfig | null;
+  /** Save the jam on stage to the list in this browser. */
+  saveJam(): SavedJam | null;
+  /** Open a saved jam: its whole configuration, and the models' notes when they played it. */
+  openSaved(id: string): void;
+  deleteSaved(id: string): void;
   setSettings(patch: Partial<TroopSettings>): void;
   setStyle(style: TroopSettings["style"]): void;
   /** One sentence to a jam: the arranger picks the settings (one model call, or keywords), then the band plays. */
@@ -137,6 +150,15 @@ type Saved = Pick<TroopState, "members" | "settings" | "apiKey" | "anthropicKey"
  */
 export function shouldAskForKey(v: { asked: boolean; returning: boolean; browserKey: boolean; serverKey: boolean; sharedArrival: boolean }) {
   return !v.asked && !v.returning && !v.browserKey && !v.serverKey && !v.sharedArrival;
+}
+
+/** Someone who's set up a band here before (and so has a setup a link would replace). */
+function returningVisitor() {
+  try {
+    return localStorage.getItem(LS) !== null;
+  } catch {
+    return false;
+  }
 }
 
 function readFlag(key: string) {
@@ -253,9 +275,38 @@ export const useTroop = create<TroopState>((set, get) => {
     else void troopAudio.prepare(members, { sounds: get().sounds, notesHint: notesHintFromScore(score) });
   };
 
-  // A shared link (/s/1.… or an older #t=1.…): replay that take without touching the visitor's own band.
+  /**
+   * A whole configuration becomes yours: band, settings, sounds, play-along, mix and the sentence
+   * it was asked for. With a model-written take, that take goes on stage as it was played;
+   * otherwise the engine plays it from the settings and seed, the same notes every time.
+   */
+  const applyJam = (c: JamConfig, opts: { score?: Score; brains: boolean }) => {
+    if (get().playing) get().stop();
+    const settings = reconcile(c.settings, c.members);
+    set((s) => ({
+      members: c.members,
+      settings,
+      sounds: c.sounds,
+      muted: c.muted.filter((id) => c.members.some((m) => m.id === id)),
+      ...(opts.brains ? { heuristic: c.heuristic } : {}),
+      arranged: c.asked ? { text: c.asked.text, source: c.asked.source, model: c.asked.model, repairs: [], note: c.asked.note } : null,
+      gen: s.gen.error ? { ...s.gen, error: null } : s.gen,
+    }));
+    usePlayAlong.getState().applyPrefs(c.playAlong);
+    persist();
+    if (opts.score) {
+      set({ current: opts.score, isSketch: false, chat: opts.score.chat, readyBars: null, autopilotBars: [] });
+      void troopAudio.prepare(c.members, { sounds: c.sounds, notesHint: notesHintFromScore(opts.score) });
+    } else {
+      set({ readyBars: null, autopilotBars: [] });
+      sketch();
+    }
+  };
+
+  // A shared link (/s/2.…, or an older /s/1.… or #t=1.…): the jam it carries becomes the one on
+  // stage. Your own setup is saved first, so one tap puts it back.
   const openSharedLink = () => {
-    let shared: SharedTake | null = null;
+    let shared: SharedJam | null = null;
     try {
       const value = shareValueAt(location.pathname, location.hash);
       shared = value ? decodeShare(value) : null;
@@ -265,13 +316,31 @@ export const useTroop = create<TroopState>((set, get) => {
       /* ignore */
     }
     if (!shared) return;
-    if (get().playing) get().stop();
-    const settings = reconcile({ ...defaultSettings(shared.members), ...shared.settings }, shared.members);
-    const { score } = generateLocal(settings, shared.members);
-    const take: Take = { id: score.id, score, label: `Shared · ${tuneOf(settings)}`, engine: "local", createdAt: Date.now() };
-    set((s) => ({ current: score, isSketch: false, takes: addTake(s.takes, take), chat: [], sharedArrival: { takeId: take.id } }));
+    const mine = get().jamConfig();
+    const theirs: JamConfig = {
+      ...shared,
+      // an older link has only the music: the rest stays as you have it
+      settings:
+        shared.version === 1
+          ? { ...shared.settings, mode: get().settings.mode, bestOf: get().settings.bestOf, directorModel: get().settings.directorModel, playerModel: get().settings.playerModel }
+          : shared.settings,
+      sounds: shared.sounds ?? get().sounds,
+      playAlong: shared.playAlong ?? playAlongPrefs(),
+      // whether the band calls models is about your keys, so a link doesn't change it
+      heuristic: get().heuristic,
+    };
+    let backupId: string | null = null;
+    if (mine && returningVisitor() && encodeJam(mine) !== encodeJam(theirs)) {
+      const backup = makeSaved(mine, "Your jam before the link", get().isSketch ? null : get().current, Date.now());
+      set((s) => ({ saved: storeSaved(addSaved(s.saved, backup)) }));
+      backupId = backup.id;
+    }
+    applyJam(theirs, { brains: false });
+    const score = get().current;
+    if (!score) return;
+    const take: Take = { id: score.id, score, label: `Shared · ${tuneOf(score.settings)}`, engine: "local", createdAt: Date.now() };
+    set((s) => ({ isSketch: false, takes: addTake(s.takes, take), sharedArrival: { takeId: take.id, ai: shared.engine === "ai", backupId } }));
     saveTakes(get().takes);
-    void troopAudio.prepare(score.members, { sounds: get().sounds, notesHint: notesHintFromScore(score) });
   };
 
   let persistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -310,6 +379,7 @@ export const useTroop = create<TroopState>((set, get) => {
     seenIntro: true,
     arranging: false,
     arranged: null,
+    saved: [],
     sharedArrival: null,
 
     hydrate() {
@@ -338,6 +408,7 @@ export const useTroop = create<TroopState>((set, get) => {
         heuristic: !!saved.heuristic,
         sounds: readSounds(saved.sounds, saved.pianoPack),
         takes: loadTakes(),
+        saved: loadSaved(),
         seenIntro,
       });
       // the key dialog waits to hear whether the server lends a key (if the server can't say, ask)
@@ -745,18 +816,50 @@ export const useTroop = create<TroopState>((set, get) => {
       set({ sharedArrival: null });
     },
 
-    adoptSharedBand() {
-      const take = get().takes.find((t) => t.id === get().sharedArrival?.takeId);
+    restoreBeforeLink() {
+      const id = get().sharedArrival?.backupId;
       set({ sharedArrival: null });
-      if (!take) return;
-      const { members, settings: from } = take.score;
-      const { style, bars, tempo, key, meter, standard, leaderId, soloists, seed, phraseBars } = from;
-      // only the musical choices: the visitor keeps their own mode, models and key
-      const settings = reconcile({ ...get().settings, style, bars, tempo, key, meter, standard, leaderId, soloists, seed, phraseBars }, members);
-      set({ members, settings });
-      persist();
-      // the same settings and seed, so the sketch is the take they were sent
-      sketch();
+      if (id) get().openSaved(id);
+    },
+
+    jamConfig() {
+      const st = get();
+      const score = st.current;
+      if (!score?.members.length) return null;
+      // the sketch on stage follows the brains' dials, which don't re-plan it (setSettings)
+      const { mode, bestOf, directorModel, playerModel, phraseBars } = st.settings;
+      const settings = st.isSketch ? { ...score.settings, mode, bestOf, directorModel, playerModel, phraseBars } : score.settings;
+      return {
+        settings,
+        members: score.members,
+        sounds: st.sounds,
+        playAlong: playAlongPrefs(),
+        heuristic: st.heuristic,
+        muted: st.muted.filter((id) => score.members.some((m) => m.id === id)),
+        engine: score.engine,
+        asked: st.arranged ? { text: st.arranged.text, source: st.arranged.source, model: st.arranged.model, note: st.arranged.note } : null,
+      };
+    },
+
+    saveJam() {
+      const config = get().jamConfig();
+      const score = get().current;
+      if (!config || !score) return null;
+      const entry = makeSaved(config, score.title, score, Date.now());
+      set((s) => ({ saved: storeSaved(addSaved(s.saved, entry)) }));
+      return entry;
+    },
+
+    openSaved(id) {
+      const entry = get().saved.find((s) => s.id === id);
+      const config = entry && savedConfig(entry);
+      if (!entry || !config) return;
+      applyJam(config, { score: entry.score, brains: true });
+      set({ sharedArrival: null });
+    },
+
+    deleteSaved(id) {
+      set((s) => ({ saved: storeSaved(s.saved.filter((x) => x.id !== id)) }));
     },
 
     dismissIntro() {

@@ -5,13 +5,13 @@ import { getPreset } from "@/music/presets";
 import { getStandard } from "@/music/standards";
 import type { Member } from "@/music/types";
 import { listOf, shareCardFor } from "./card";
-import { encodeShare, shareUrl } from "./share";
+import { encodeJam, jamOf, shareUrl } from "./share";
 
 const band: Member[] = defaultMembers();
 
 function linkFor(patch: Partial<ReturnType<typeof defaultSettings>>, members = band) {
   const take = generateLocal({ ...defaultSettings(members), ...patch }, members).score;
-  return { take, value: encodeShare(take) };
+  return { take, value: encodeJam(jamOf(take)) };
 }
 
 describe("a shared take's card", () => {
@@ -55,7 +55,7 @@ describe("a shared take's card", () => {
 
   it("reads the value as it arrives in a path segment, escaped or not", () => {
     const { take, value } = linkFor({ seed: 8 });
-    const segment = new URL(shareUrl(take, "https://example.com/")).pathname.split("/")[2];
+    const segment = new URL(shareUrl(jamOf(take), "https://example.com/")).pathname.split("/")[2];
     expect(shareCardFor(segment)?.title).toBe(take.title);
     expect(shareCardFor(encodeURIComponent(value))?.title).toBe(take.title);
   });

@@ -9,7 +9,7 @@ import { DebugPanel } from "@/components/DebugPanel";
 import { KeyDialog } from "@/components/KeyDialog";
 import { PlayAlong } from "@/components/PlayAlong";
 import { Stage } from "@/components/Stage";
-import { Takes, Transport } from "@/components/Transport";
+import { SavedJams, Takes, Transport } from "@/components/Transport";
 import { RoughBox, Squiggle } from "@/components/ui/rough";
 import { useScrollMore } from "@/components/ui/scrollMore";
 import { SheetMusic, type SheetStats } from "@/sheet/SheetMusic";
@@ -89,7 +89,10 @@ export function Home() {
           </div>
           <div className="order-3 grid min-w-0 gap-m md:grid-cols-[minmax(0,1fr)_260px] lg:order-none lg:mt-l">
             <BandTalk />
-            <Takes />
+            <div className="min-w-0 space-y-m">
+              <Takes />
+              <SavedJams />
+            </div>
           </div>
           <section className="order-4 min-w-0 lg:order-none lg:mt-l" aria-label="Sheet music">
             <div className="mb-xs flex items-baseline gap-s">

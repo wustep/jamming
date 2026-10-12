@@ -24,7 +24,7 @@
 - **Stop hiding affordances behind hover** — Show them on `(hover: none)` and on focus-within. Add undo for delete _(rejected 2026-10-06)_
 - **Cut screen-reader noise in the transport status line** — A hidden polite region that announces milestones only, with a fixed label on the share button _(rejected 2026-10-06)_
 - **Visible focus ring on the sheet scroller** — Remove it and use a negative offset if the ring gets clipped _(rejected 2026-10-06)_
-- **Record and download audio** — Tap the compressor into a MediaStreamDestination and record with MediaRecorder until `onEnded` _(rejected 2026-10-06); **reversed 2026-10-11 at Stephen's request**: built as lever #3, shareable clips and share cards)_
+- **Record and download audio** — Tap the compressor into a MediaStreamDestination and record with MediaRecorder until `onEnded` _(rejected 2026-10-06)_
 - **"Surprise me": random band and style** — A 🎲 that picks a sensible seeded band and a style or standard, then sketches _(rejected 2026-10-06)_
 - **Solo-listen one player** — A `soloListen(id)` toggle on the name tag _(rejected 2026-10-06)_
 - **Reopen the last take on reload** — Remember the selected take id and restore it _(rejected 2026-10-06)_

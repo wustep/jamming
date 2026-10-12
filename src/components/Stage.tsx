@@ -12,7 +12,6 @@ import { canThink, useTroop } from "@/state/store";
 import { FormMap } from "./FormMap";
 import { Bunting } from "./stage/Bunting";
 import { FrameComputer } from "./stage/frames";
-import { headerAt } from "./stage/header";
 import { RoughBox } from "./ui/rough";
 
 function useWidth<T extends HTMLElement>() {
@@ -114,7 +113,7 @@ function SharedNote() {
   const arrival = useTroop((s) => s.sharedArrival);
   const take = useTroop((s) => s.takes.find((t) => t.id === s.sharedArrival?.takeId));
   const play = useTroop((s) => s.play);
-  const adopt = useTroop((s) => s.adoptSharedBand);
+  const restore = useTroop((s) => s.restoreBeforeLink);
   const dismiss = useTroop((s) => s.dismissArrival);
   if (!arrival || !take) return null;
   const names = take.score.members.map((m) => m.name);
@@ -124,17 +123,20 @@ function SharedNote() {
       <button type="button" onClick={dismiss} className="absolute right-xs top-xxs text-l text-ink-soft transition-colors duration-(--motion-duration) hover:text-ink" aria-label="Dismiss">
         ×
       </button>
-      <div className="type-label">Someone sent you a take</div>
+      <div className="type-label">Someone sent you a jam</div>
       <p>
-        <b>{take.score.title}</b>, played by {band}.
+        <b>{take.score.title}</b>, played by {band}, set up just as they had it.
       </p>
+      {arrival.ai && <p className="text-s text-ink-soft">The models played theirs. The link has its setup and seed, so the band plays it here without them, and the parts will differ.</p>}
       <div className="mt-xxs flex flex-wrap gap-x-s">
         <button type="button" className="text-action" onClick={() => void play()}>
           ▶ play it
         </button>
-        <button type="button" className="text-action" onClick={adopt}>
-          jam with this band
-        </button>
+        {arrival.backupId && (
+          <button type="button" className="text-action" onClick={restore} title="Your own band and settings were saved under Saved jams">
+            back to my jam
+          </button>
+        )}
       </div>
     </div>
   );
@@ -230,25 +232,40 @@ export function Stage() {
         if (spot) spot.style.opacity = st.featured && Number.isFinite(beat) && beat >= 0 ? (isPhrasing(st) ? "1" : "0.45") : "0";
       }
       if (score && Number.isFinite(beat)) {
-        const h = headerAt(score, beat);
-        if (h.bar !== lastBar) {
-          lastBar = h.bar;
-          setBar(h.bar);
+        const beats = score.frame.meter.beats;
+        const b = beat < 0 ? -1 : Math.min(score.frame.bars - 1, Math.floor(beat / beats));
+        if (b !== lastBar) {
+          lastBar = b;
+          setBar(b);
           const name = turn?.kind === "answer" ? band.find((m) => m.id === echoer)?.name : null;
-          const label = turn?.kind === "call" ? "Your turn!" : name ? `${name} answers` : h.section;
-          if (labelRef.current) labelRef.current.textContent = h.bar < 0 ? h.section : label;
+          const label = turn?.kind === "call" ? "Your turn!" : name ? `${name} answers` : (score.plan[b]?.section ?? "");
+          if (labelRef.current) labelRef.current.textContent = b < 0 ? "count-in…" : label;
           // the counter has its own fixed width, so the line doesn't shift as the bar number grows
-          if (counterRef.current) counterRef.current.textContent = h.counter;
+          if (counterRef.current) counterRef.current.textContent = b < 0 ? "" : `· bar ${b + 1}/${score.frame.bars}`;
         }
-        if (chordRef.current && h.bar >= 0) {
-          if (chordRef.current.textContent !== h.chord) {
-            chordRef.current.textContent = h.chord;
+        if (chordRef.current && b >= 0) {
+          const inBar = beat - b * beats;
+          const chords = score.frame.chords[b] ?? [];
+          let sym = chords[0]?.symbol ?? "";
+          for (const c of chords) if (c.beat <= inBar + 1e-6) sym = c.symbol;
+          if (chordRef.current.textContent !== sym) {
+            chordRef.current.textContent = sym;
             // a change inks in, so it reads apart from a repeat (restarting the animation, not a React render)
             chordRef.current.classList.remove("chord-ink");
             void chordRef.current.offsetWidth;
             chordRef.current.classList.add("chord-ink");
           }
-          if (nextChordRef.current && nextChordRef.current.textContent !== h.next) nextChordRef.current.textContent = h.next;
+          // read ahead, like the band does: the next change in this bar or the next two
+          let next = "";
+          for (let k = b; k < Math.min(score.frame.bars, b + 3) && !next; k++) {
+            for (const c of score.frame.chords[k] ?? []) {
+              if ((k > b || c.beat > inBar + 1e-6) && c.symbol !== sym) {
+                next = `→ ${c.symbol}`;
+                break;
+              }
+            }
+          }
+          if (nextChordRef.current && nextChordRef.current.textContent !== next) nextChordRef.current.textContent = next;
         }
       } else if (lastBar !== -2) {
         lastBar = -2;
@@ -293,7 +310,7 @@ export function Stage() {
 
   return (
     <RoughBox seed="stage" rough={{ weight: "l" }} className="stage-paper w-full p-s">
-      <div ref={wrapRef} className="relative" data-stage>
+      <div ref={wrapRef} className="relative">
         <Bunting />
         <div className="flex min-h-7 items-baseline justify-between gap-s px-xs pt-9 font-brand font-heavy text-ink-soft">
           <div className="flex min-w-0 items-baseline gap-xxs text-l" aria-live="off">
@@ -328,7 +345,7 @@ export function Stage() {
             const crowded = band.some((o, j) => j !== i && Math.floor(j / perRow) === row && (bubbles[o.id] || thinking.has(o.id)));
             const fit = bubbleFit(i, n, perRow, spriteW, width, crowded);
             return (
-              <div key={`${m.id}:${m.instrument}`} className="band-slot relative flex flex-col items-center" data-member={m.id}>
+              <div key={`${m.id}:${m.instrument}`} className="band-slot relative flex flex-col items-center">
                 <div
                   ref={(el) => {
                     spots.current.set(m.id, el);

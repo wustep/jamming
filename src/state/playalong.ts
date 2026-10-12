@@ -6,6 +6,7 @@ import { hasWebMidi, listenToMidi, requestMidi, type MidiInputInfo } from "@/aud
 import { INSTRUMENTS } from "@/music/instruments";
 import { blockAt, callBlocks, leaveSpace, PhraseCapture, placeNote, QUANTIZE, type Block, type MidiMessage, type QuantizeMode } from "@/music/live";
 import type { InstrumentId, NoteEvent, OnsetInfo, Score } from "@/music/types";
+import type { PlayAlongPrefs } from "./share";
 
 // You, in the band: notes from a MIDI keyboard, the on-screen keys or the computer keyboard
 // sound on an instrument of your choosing over whatever the band is playing, placed on the
@@ -282,6 +283,8 @@ interface PlayAlongState {
   setCallResponse(patch: Partial<CallResponse>): void;
   shiftOctave(by: number): void;
   connectMidi(): Promise<void>;
+  /** A saved or shared jam's way of playing along (its instrument, quantize, call and response). */
+  applyPrefs(prefs: PlayAlongPrefs): void;
 }
 
 const LS = "jamming:play-along";
@@ -303,6 +306,22 @@ function save(s: Saved) {
   } catch {
     /* private mode */
   }
+}
+
+/** The prefs saved in this browser, over what the store has (it reads them when the panel opens). */
+function readPrefs(cur: Saved): PlayAlongPrefs {
+  const saved = load();
+  return {
+    instrument: saved.instrument && INSTRUMENTS[saved.instrument] ? saved.instrument : cur.instrument,
+    quantize: saved.quantize === "light" ? "light" : saved.quantize === "off" ? "off" : cur.quantize,
+    callResponse: saved.callResponse ? { on: !!saved.callResponse.on, every: saved.callResponse.every === 4 ? 4 : 2 } : cur.callResponse,
+  };
+}
+
+/** How you play along, for saving a jam: what's set, even before the panel has been opened. */
+export function playAlongPrefs(): PlayAlongPrefs {
+  const st = usePlayAlong.getState();
+  return st.open ? { instrument: st.instrument, quantize: st.quantize, callResponse: st.callResponse } : readPrefs(st);
 }
 
 let unlisten: (() => void) | null = null;
@@ -344,10 +363,7 @@ export const usePlayAlong = create<PlayAlongState>((set, get) => {
     setOpen(open) {
       if (open === get().open) return;
       if (open) {
-        const saved = load();
-        const instrument = saved.instrument && INSTRUMENTS[saved.instrument] ? saved.instrument : get().instrument;
-        const quantize: QuantizeMode = saved.quantize === "light" ? "light" : "off";
-        const cr = saved.callResponse ? { on: !!saved.callResponse.on, every: saved.callResponse.every === 4 ? 4 : 2 } : get().callResponse;
+        const { instrument, quantize, callResponse: cr } = readPrefs(get());
         core.quantize = quantize;
         set({ open, instrument, quantize, callResponse: cr, midi: hasWebMidi() ? get().midi : "unsupported" });
         core.setCallResponse(cr);
@@ -384,6 +400,19 @@ export const usePlayAlong = create<PlayAlongState>((set, get) => {
       set({ callResponse });
       persist();
       if (get().open) core.setCallResponse(callResponse);
+    },
+
+    applyPrefs({ instrument, quantize, callResponse }) {
+      const changed = instrument !== get().instrument;
+      core.quantize = quantize;
+      set({ instrument, quantize, callResponse });
+      persist();
+      if (!get().open) return;
+      core.setCallResponse(callResponse);
+      if (changed) {
+        core.allOff(performance.now());
+        void loadInstrument(instrument);
+      }
     },
 
     shiftOctave(by) {
