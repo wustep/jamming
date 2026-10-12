@@ -42,7 +42,7 @@ export function Transport() {
     void troopAudio.prepare(members, { sounds });
   };
 
-  const goLabel = hasKey ? (mode === "composer" ? "Compose!" : "Let them jam!") : "Sketch a new take";
+  const goLabel = hasKey ? (mode === "composer" ? "Compose!" : "Let them jam!") : "New sketch";
 
   // Space toggles play/stop (unless typing, or pressing a button reached by keyboard).
   // A button focused by a mouse click would otherwise be clicked again by Space.
@@ -102,8 +102,8 @@ export function Transport() {
             {gen.running ? gen.status : current ? current.title : ""}
           </span>
           {gen.running ? (
-            <RoughButton seed="dock-cancel" tone="quiet" className="shrink-0 px-s py-xxs font-brand text-l font-heavy" onClick={cancel}>
-              stop thinking
+            <RoughButton seed="dock-cancel" tone="quiet" className="shrink-0 px-s py-xxs font-brand text-l font-heavy" onClick={cancel} aria-label="Stop thinking">
+              Stop
             </RoughButton>
           ) : (
             <RoughButton seed="dock-go" tone="primary" className="shrink-0 px-s py-xxs font-brand text-l font-heavy text-on-accent" onClick={() => void generate()}>
@@ -126,8 +126,8 @@ export function Transport() {
       </RoughButton>
 
       {gen.running ? (
-        <RoughButton seed="cancel" tone="quiet" className="px-m py-xs font-brand text-xl font-heavy" onClick={cancel}>
-          stop thinking
+        <RoughButton seed="cancel" tone="quiet" className="px-m py-xs font-brand text-xl font-heavy" onClick={cancel} aria-label="Stop thinking">
+          Stop
         </RoughButton>
       ) : (
         <RoughButton
@@ -136,15 +136,15 @@ export function Transport() {
           className="px-l py-xs font-brand text-xl font-heavy text-on-accent"
           onClick={() => void generate()}
           data-after-key
-          title={hasKey ? "Ask the band (calls the model)" : "Add an AI Gateway or Anthropic key in “Brains & sounds” to let the animals think — until then they play from their sketchbook."}
+          title={hasKey ? "Ask the band (calls the model)" : "A new take from the sketchbook. Add a key in Settings to let them think."}
         >
           {goLabel}
         </RoughButton>
       )}
 
       {!hasKey && !gen.running && (
-        <button type="button" className="text-action text-s" onClick={() => useTroop.getState().openKeyDialog()} aria-haspopup="dialog">
-          {heuristic ? "use an AI key" : "add an AI key"}
+        <button type="button" className="tap text-action text-s" onClick={() => useTroop.getState().openKeyDialog()} aria-haspopup="dialog" title="Let the band think with a model">
+          {heuristic ? "Use a key" : "Add a key"}
         </button>
       )}
 
@@ -159,15 +159,15 @@ export function Transport() {
             </span>
             {isKeyProblem(gen.error) ? (
               <button type="button" className="text-action" onClick={openBrains}>
-                {/pick a Claude model/.test(gen.error) ? "pick a model" : "check the key"}
+                {/pick a Claude model/.test(gen.error) ? "Pick a model" : "Check key"}
               </button>
             ) : (
               <button type="button" className="text-action" onClick={() => void generate()}>
-                try again
+                Retry
               </button>
             )}
             <button type="button" className="text-action" onClick={playSketchInstead}>
-              play the sketch instead
+              Play sketch
             </button>
           </span>
         ) : audioError ? (
@@ -176,25 +176,24 @@ export function Transport() {
               <span aria-hidden className="text-(--error)">✗ </span>No sound: {audioError}.
             </span>
             <button type="button" className="text-action" onClick={() => void play()}>
-              press play again
+              Retry
             </button>
           </span>
         ) : loading.length ? (
           <span className="flex items-center gap-xs">
-            <span>unpacking instruments…</span>
+            <span>Loading</span>
             <span
               role="progressbar"
               aria-label="Unpacking instruments"
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={loadPct}
+              title={`${loads.length - loading.length - failed.length} of ${loads.length} ready: waiting on ${loading.map((l) => l.instrument).join(", ")}`}
               className="relative inline-block h-2.5 w-28 overflow-hidden rounded-full shadow-[inset_0_0_0_var(--border-m)_var(--border-default-color)]"
             >
               <span className="absolute inset-y-0 left-0 bg-(--color-2)" style={{ width: `${loadPct}%` }} />
             </span>
-            <span className="text-xs" title={loading.map((l) => l.instrument).join(", ")}>
-              {loads.length - loading.length - failed.length} of {loads.length} ready
-            </span>
+
           </span>
         ) : current && !isSketch ? (
           // the stage already says what's loaded; here, only whose take it is and how it scored
@@ -210,10 +209,10 @@ export function Transport() {
                 ✗{" "}
               </span>
               {failed.map((l) => `${members.find((m) => m.id === l.memberId)?.name ?? l.memberId}'s ${INSTRUMENTS[l.instrument].name.toLowerCase()}`).join(", ")}{" "}
-              didn&apos;t load, so {failed.length > 1 ? "they play" : "it plays"} silent.
+              {failed.length > 1 ? "are" : "is"} silent.
             </span>
             <button type="button" className="text-action" onClick={retryLoads}>
-              try again
+              Retry
             </button>
           </span>
         )}
@@ -235,14 +234,13 @@ function KeepMenu() {
   const running = useTroop((s) => s.gen.running);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const toggle = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!open) return;
     const onDown = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       setOpen(false);
-      toggle.current?.focus();
+      document.getElementById("keep-toggle")?.focus();
     };
     window.addEventListener("pointerdown", onDown);
     window.addEventListener("keydown", onKey);
@@ -254,9 +252,9 @@ function KeepMenu() {
   if (!current || running) return null;
   return (
     <div ref={ref} className="relative">
-      <button ref={toggle} type="button" className="text-action inline-block py-xs text-m" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls="keep-menu">
-        save &amp; share {open ? "▴" : "▾"}
-      </button>
+      <RoughButton id="keep-toggle" seed="keep" tone="quiet" active={open} className="tap px-s py-xxs text-m" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls="keep-menu" aria-pressed={undefined}>
+        Share <span aria-hidden>{open ? "▴" : "▾"}</span>
+      </RoughButton>
       <div id="keep-menu" hidden={!open} className="menu-paper absolute right-0 top-full z-30 mt-xs w-max min-w-full p-xs">
         <ul className="flex flex-col">
           <li>
@@ -319,13 +317,13 @@ function SaveAudio() {
       window.setTimeout(async () => {
         const blob = await rec?.stop();
         setPhase("idle");
-        if (!blob) return setNote("nothing was recorded");
+        if (!blob) return setNote("Nothing recorded");
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
         a.download = audioFileName(score.title, blob.type);
         a.click();
         window.setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-        setNote("saved");
+        setNote("Saved");
       }, TAIL_MS);
     });
     // start on the downbeat, after the count-in; a stop before the end throws it away
@@ -336,7 +334,7 @@ function SaveAudio() {
         offEnded();
         rec?.cancel();
         setPhase("idle");
-        setNote("stopped, nothing saved");
+        setNote("Stopped, not saved");
         return;
       }
       if (!rec && troopAudio.getBeat() >= 0) {
@@ -345,20 +343,20 @@ function SaveAudio() {
           window.clearInterval(timer);
           offEnded();
           setPhase("idle");
-          setNote("this browser can't record audio");
+          setNote("Can't record here");
         }
       }
     }, 20);
   };
 
-  const label = phase === "recording" ? "recording… (stop to cancel)" : phase === "saving" ? "saving…" : (note ?? "save as audio");
+  const label = phase === "recording" ? "Recording…" : phase === "saving" ? "Saving…" : (note ?? "Download audio");
   return (
     <button
       type="button"
       className="pick block w-full px-xs py-xs text-left text-m"
       disabled={phase !== "idle"}
       onClick={() => void record()}
-      title="Play the take from the top and save it as an audio file"
+      title={phase === "recording" ? "Stop to cancel" : "Plays the take from the top and saves it as an audio file"}
     >
       <span aria-live="polite">{label}</span>
     </button>
@@ -387,9 +385,9 @@ async function sendLink(url: string, title: string): Promise<string | null> {
       return null;
     }
     await navigator.clipboard.writeText(url);
-    return "link copied";
+    return "Link copied";
   } catch (e) {
-    return (e as Error).name === "AbortError" ? null : "couldn't copy the link";
+    return (e as Error).name === "AbortError" ? null : "Couldn't copy";
   }
 }
 
@@ -404,10 +402,10 @@ function SaveJam() {
     <button
       type="button"
       className="pick block w-full px-xs py-xs text-left text-m"
-      onClick={() => setNote({ id: current.id, text: saveJam() ? "saved under Saved jams" : "couldn't save it" })}
-      title="Save this jam's whole setup (band, settings, sounds, brains and seed) in this browser"
+      onClick={() => setNote({ id: current.id, text: saveJam() ? "Saved" : "Couldn't save" })}
+      title="Keep this jam's whole setup (band, settings, sounds, brains and seed) in this browser"
     >
-      <span aria-live="polite">{note?.id === current.id ? note.text : "save it in this browser"}</span>
+      <span aria-live="polite">{note?.id === current.id ? note.text : "Save here"}</span>
     </button>
   );
 }
@@ -424,7 +422,7 @@ function ShareLink() {
     const config = useTroop.getState().jamConfig();
     if (!config) return;
     const said = await sendLink(shareUrl(config, location.href), current.title);
-    if (said) setNote({ id: current.id, text: ai && said === "link copied" ? `link copied: ${AI_LINK_NOTE}` : said });
+    if (said) setNote({ id: current.id, text: said });
   };
 
   return (
@@ -434,7 +432,7 @@ function ShareLink() {
       onClick={() => void share()}
       title={ai ? `Copy a link to this jam. It carries ${AI_LINK_NOTE}.` : "Copy a link that plays this jam again, note for note"}
     >
-      <span aria-live="polite">{note?.id === current.id ? note.text : "share a link"}</span>
+      <span aria-live="polite">{note?.id === current.id ? note.text : "Copy link"}</span>
     </button>
   );
 }
@@ -455,7 +453,7 @@ export function SavedJams() {
   if (!saved.length) return null;
   return (
     <div>
-      <h2 className="type-section mb-xs">Saved jams</h2>
+      <h2 className="type-section mb-xs">Saved</h2>
       <ol className="space-y-xxs">
         {saved.map((entry) => {
           const c = savedConfig(entry);
@@ -467,19 +465,19 @@ export function SavedJams() {
                 <span className="block truncate">{entry.name}</span>
                 <span className="block text-xs text-ink-soft">
                   {jamFacts(c)}
-                  {ai ? (entry.score ? " · the models' take, as played" : " · setup only: the models' parts will differ") : ""}
+                  {ai ? (entry.score ? " · as played" : " · setup only") : ""}
                 </span>
               </button>
               <button
                 type="button"
-                className="text-action shrink-0 px-xxs pt-xxs text-s"
+                className="tap text-action shrink-0 px-xxs pt-xxs text-s"
                 onClick={async () => {
                   const said = await sendLink(`${location.origin}/s/${entry.jam}${location.search}`, entry.name);
-                  if (said) setNote({ id: entry.id, text: said === "link copied" ? "copied" : said });
+                  if (said) setNote({ id: entry.id, text: said === "Link copied" ? "Copied" : said });
                 }}
                 title={ai ? `Copy a link to this jam. It carries ${AI_LINK_NOTE}.` : "Copy a link to this jam"}
               >
-                <span aria-live="polite">{note?.id === entry.id ? note.text : "link"}</span>
+                <span aria-live="polite">{note?.id === entry.id ? note.text : "Link"}</span>
               </button>
               <button
                 type="button"

@@ -9,7 +9,7 @@ import { useDebug } from "@/state/debug";
 import { keyAccess, useTroop } from "@/state/store";
 import { RoughButton } from "./ui/rough";
 
-// “Brains & sounds”: everything past the music itself, in a sheet off the side of the page (the
+// “Settings”: everything past the music itself, in a sheet off the side of the page (the
 // bottom on a phone). The keys and the models, how the band thinks, the samples and the room,
 // and the debug panel. The panel on the page keeps to the band and the tune.
 
@@ -21,7 +21,7 @@ const useSheet = create<{ open: boolean; focus: string | null; setOpen: (open: b
 
 export const openSheet = () => useSheet.getState().setOpen(true);
 
-/** Open “Brains & sounds” with the cursor in the key field they're using. */
+/** Open “Settings” with the cursor in the key field they're using. */
 export function openBrains() {
   const { apiKey, anthropicKey } = useTroop.getState();
   useSheet.getState().setOpen(true, !apiKey && anthropicKey ? "anthropic-key" : "gateway-key");
@@ -76,12 +76,12 @@ function KeyField({ id, label, hint, value, placeholder, onChange, mismatch, not
           spellCheck={false}
           id={id}
         />
-        <button type="button" className="text-action px-xxs text-s" onClick={() => setShow((v) => !v)}>
-          {show ? "hide" : "show"}
+        <button type="button" className="tap text-action px-xxs text-s" onClick={() => setShow((v) => !v)} aria-label={`${show ? "Hide" : "Show"} the ${label}`}>
+          {show ? "Hide" : "Show"}
         </button>
         {value && (
-          <button type="button" className="text-action px-xxs text-s" onClick={() => onChange("")} aria-label={`Clear the ${label}`}>
-            clear
+          <button type="button" className="tap text-action px-xxs text-s" onClick={() => onChange("")} aria-label={`Clear the ${label}`}>
+            Clear
           </button>
         )}
       </div>
@@ -148,38 +148,36 @@ function Brain() {
       <div className="flex flex-wrap items-baseline justify-between gap-x-s gap-y-xxs">
         <p className="text-m">
           {heuristic
-            ? "The heuristic band: no model calls."
+            ? "Heuristic band, no model calls"
             : apiKey
-              ? "Your Vercel AI Gateway key."
+              ? "Your AI Gateway key"
               : anthropicKey
-                ? "Your Anthropic key (Claude models)."
+                ? "Your Anthropic key"
                 : serverKey || serverAnthropicKey
-                  ? "A key this server lends."
-                  : "The heuristic band, until you add a key."}
+                  ? "The server's key"
+                  : "Heuristic band, no key yet"}
         </p>
-        <button type="button" className="text-action text-s" onClick={openKeyDialog} aria-haspopup="dialog">
-          {apiKey || anthropicKey ? "change key" : "add a key"}
+        <button type="button" className="tap text-action text-s" onClick={openKeyDialog} aria-haspopup="dialog">
+          {apiKey || anthropicKey ? "Change key" : "Add key"}
         </button>
       </div>
       {heuristic && (apiKey || anthropicKey || serverKey || serverAnthropicKey) && (
         <p className="text-s text-ink-soft">
-          {apiKey || anthropicKey ? "Your key is still saved here." : "This server lends a key."}{" "}
+          {apiKey || anthropicKey ? "Your key is still saved." : "The server lends a key."}{" "}
           <button type="button" className="text-action" onClick={() => setHeuristic(false)}>
-            Let them think with it
+            Use it
           </button>
         </p>
       )}
 
       <div>
-        <FieldLabel hint={thinks ? undefined : "once they have a key"}>How they think</FieldLabel>
+        <FieldLabel hint={thinks ? undefined : "needs a key"}>Mode</FieldLabel>
         <div className="grid grid-cols-2 gap-xs">
-          <RoughButton seed="mode-imp" active={!composer} onClick={() => set({ mode: "improviser" })} className="px-xs py-xs text-left">
-            <div className="type-label">Improviser</div>
-            <div className="text-xs text-ink-soft">the animals talk it out</div>
+          <RoughButton seed="mode-imp" active={!composer} onClick={() => set({ mode: "improviser" })} className="type-label tap px-xs py-xxs" title="The animals talk it out, phrase by phrase">
+            Improviser
           </RoughButton>
-          <RoughButton seed="mode-comp" active={composer} onClick={() => set({ mode: "composer" })} className="px-xs py-xs text-left">
-            <div className="type-label">Composer</div>
-            <div className="text-xs text-ink-soft">a director writes the chart</div>
+          <RoughButton seed="mode-comp" active={composer} onClick={() => set({ mode: "composer" })} className="type-label tap px-xs py-xxs" title="A director writes the whole chart">
+            Composer
           </RoughButton>
         </div>
       </div>
@@ -197,14 +195,14 @@ function Brain() {
       {composer ? (
         <label className="flex cursor-pointer items-center gap-xs text-m">
           <input type="checkbox" className="sketch-check" checked={s.bestOf > 1} onChange={(e) => set({ bestOf: e.target.checked ? 4 : 1 })} />
-          Best of 4: write four charts and let a judge pick
+          <span title="Write four charts and let a judge pick">Best of 4</span>
         </label>
       ) : (
         <div>
-          <FieldLabel hint="before the band answers">Phrase</FieldLabel>
+          <FieldLabel>Phrase</FieldLabel>
           <div className="flex gap-xs">
             {[2, 4, 8].map((p) => (
-              <RoughButton key={p} seed={`phrase-${p}`} active={s.phraseBars === p} onClick={() => set({ phraseBars: p })} className="px-xs py-xxs text-m">
+              <RoughButton key={p} seed={`phrase-${p}`} active={s.phraseBars === p} onClick={() => set({ phraseBars: p })} className="tap px-xs py-xxs text-m" title="Bars before the band answers">
                 {p} bars
               </RoughButton>
             ))}
@@ -222,10 +220,10 @@ function Brain() {
         mismatch={keyMismatch("gateway", apiKey)}
         note={
           apiKey ? null : serverKey && !heuristic ? (
-            "This server lends one. Yours spends your own credits."
+            "Optional: the server lends one"
           ) : (
-            <a className="text-action" href="https://vercel.com/ai-gateway" target="_blank" rel="noreferrer">
-              Get one from Vercel
+            <a className="tap text-action" href="https://vercel.com/ai-gateway" target="_blank" rel="noreferrer">
+              Get one
             </a>
           )
         }
@@ -242,13 +240,13 @@ function Brain() {
           anthropicKey ? (
             apiKey ? "Used if you remove the gateway key." : null
           ) : (
-            <a className="text-action" href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer">
-              Get one from Anthropic
+            <a className="tap text-action" href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer">
+              Get one
             </a>
           )
         }
       />
-      <p className="text-xs text-ink-soft">Keys stay in this browser and go only with each model call, straight on to the provider.</p>
+      <p className="text-xs text-ink-soft" title="Sent only with each model call, straight on to the provider">Keys stay in this browser.</p>
     </Section>
   );
 }
@@ -289,7 +287,7 @@ function SoundsSection() {
       </div>
       <label className="flex cursor-pointer items-center gap-xs text-m">
         <input type="checkbox" className="sketch-check" checked={countIn} onChange={(e) => setSounds({ countIn: e.target.checked })} />
-        Count me in: a bar of clicks before a take from the top
+        <span title="A bar of clicks before a take from the top">Count-in</span>
       </label>
     </Section>
   );
@@ -299,8 +297,8 @@ function SoundsSection() {
 export function BrainsButton() {
   const open = useSheet((x) => x.open);
   return (
-    <RoughButton seed="brains" tone="quiet" className="px-s py-xs text-m" onClick={openSheet} aria-haspopup="dialog" aria-expanded={open} aria-controls="brains">
-      Brains &amp; sounds
+    <RoughButton seed="brains" tone="quiet" className="tap px-s py-xxs text-m" onClick={openSheet} aria-haspopup="dialog" aria-expanded={open} aria-controls="brains">
+      Settings
     </RoughButton>
   );
 }
@@ -350,12 +348,12 @@ export function BrainsSheet() {
         <div className="min-h-full">
           <div className="sheet-head sticky top-0 z-10 flex items-center justify-between gap-s px-l py-s">
             <h2 id="brains-title" className="type-section">
-              Brains &amp; sounds
+              Settings
             </h2>
             <button
               type="button"
               onClick={close}
-              className="flex min-h-xl min-w-xl items-center justify-center text-l text-ink-soft transition-colors duration-(--motion-duration) hover:text-ink"
+              className="tap text-l text-ink-soft transition-colors duration-(--motion-duration) hover:text-ink"
               aria-label="Close"
             >
               ×
@@ -363,11 +361,11 @@ export function BrainsSheet() {
           </div>
           <Brain />
           <SoundsSection />
-          <Section title="Under the hood">
-            <p className="text-s text-ink-soft">Every model call, the plan, the chart, the audio clock and what got repaired, in a panel under the stage.</p>
+          <Section title="Debug">
             <button
               type="button"
-              className="text-action text-m"
+              className="tap text-action text-m"
+              title="Every model call, the plan, the chart, the audio clock and what got repaired, under the stage"
               aria-pressed={debugOpen}
               onClick={() => {
                 setDebugOpen(!debugOpen);
@@ -379,7 +377,7 @@ export function BrainsSheet() {
                 });
               }}
             >
-              {debugOpen ? "hide the debug panel" : "peek under the hood"}
+              {debugOpen ? "Hide debug panel" : "Show debug panel"}
             </button>
           </Section>
         </div>

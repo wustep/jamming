@@ -114,7 +114,7 @@ describe("llm route", () => {
     const res = await post({ model: "anthropic/claude-sonnet-5.5", anthropicKey: "sk-ant-test-wrong" });
     const text = await res.text();
     expect(res.status).toBe(401);
-    expect(JSON.parse(text).error).toBe("Anthropic rejected your Anthropic key — check it in “Brains & sounds”.");
+    expect(JSON.parse(text).error).toBe("Anthropic rejected your Anthropic key — check it in “Settings”.");
     expect(text).not.toContain("sk-ant-test-wrong");
     for (const spy of logs) expect(JSON.stringify(spy.mock.calls)).not.toContain("sk-ant-test-wrong");
   });

@@ -140,6 +140,7 @@
   --motion-large-easing: cubic-bezier(0.2, 0.9, 0.3, 1.3);
   --motion-popup-scale: 0.96;
   --motion-press-distance: 1px;
+  --motion-press-scale: 0.97;
 
   --focus-ring-outline: 2px dashed var(--cte-focus);
 
@@ -257,6 +258,13 @@ body {
     font-size: var(--size-l);
     line-height: var(--line-l);
     letter-spacing: var(--letter-spacing-l);
+  }
+
+  /* a finger-sized hit area for small controls: 40px on a touch screen, the label centred in it */
+  .tap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
   /* quiet text actions ("peek under the hood", "fold it up") */
@@ -522,7 +530,7 @@ body {
   background: var(--cte-canvas);
   box-shadow: var(--shadow-l);
 }
-/* “Brains & sounds” (BrainsSheet.tsx): a sheet of paper slid in from the right, or up from the
+/* “Settings” (BrainsSheet.tsx): a sheet of paper slid in from the right, or up from the
    bottom on a phone, over the same dimmed page */
 .sheet-dialog {
   position: fixed;
@@ -574,11 +582,35 @@ body {
   }
 }
 
-/* a small menu off a text action (save & share) */
+/* on a touch screen, small controls get a finger-sized hit area (unlayered, so it beats a
+   utility's smaller min size); form fields get the same height */
+@media (pointer: coarse) {
+  .tap {
+    min-height: 2.5rem;
+    min-width: 2.5rem;
+  }
+  .sketch-select,
+  .sketch-input {
+    min-height: 2.5rem;
+  }
+  .sketch-range {
+    height: 2.5rem;
+  }
+}
+
+/* a small menu off a button (Share): it grows out of the corner it hangs from */
 .menu-paper {
   background: var(--neutral-1);
   border-radius: var(--radius-s);
   box-shadow: var(--border-shadow-m), var(--shadow-m);
+  transform-origin: top right;
+  transition:
+    opacity var(--motion-duration) var(--motion-easing),
+    transform var(--motion-duration) var(--motion-easing);
+  @starting-style {
+    opacity: 0;
+    transform: scale(var(--motion-popup-scale));
+  }
 }
 
 /* the provider the pasted key belongs to, in highlighter */
@@ -599,6 +631,16 @@ body {
   .key-dialog[open],
   .sheet-dialog[open] {
     animation: none;
+  }
+  /* menus still fade, but don't grow; buttons don't shrink on press */
+  .menu-paper {
+    transform: none;
+    @starting-style {
+      transform: none;
+    }
+  }
+  .press:active {
+    scale: none;
   }
 }
 

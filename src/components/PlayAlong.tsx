@@ -92,7 +92,7 @@ function LiveKeys() {
 
   return (
     <div className="flex items-stretch gap-xxs">
-      <button type="button" className="pick shrink-0 px-xxs text-l text-ink-soft" onClick={() => shiftOctave(-1)} aria-label="Octave down" title="Octave down (Z)">
+      <button type="button" className="pick tap shrink-0 px-xxs text-l text-ink-soft" onClick={() => shiftOctave(-1)} aria-label="Octave down" title="Octave down (Z)">
         ‹
       </button>
       <div
@@ -144,7 +144,7 @@ function LiveKeys() {
             );
           })}
       </div>
-      <button type="button" className="pick shrink-0 px-xxs text-l text-ink-soft" onClick={() => shiftOctave(1)} aria-label="Octave up" title="Octave up (X)">
+      <button type="button" className="pick tap shrink-0 px-xxs text-l text-ink-soft" onClick={() => shiftOctave(1)} aria-label="Octave up" title="Octave up (X)">
         ›
       </button>
     </div>
@@ -157,34 +157,33 @@ function MidiStatusLine() {
   const connect = usePlayAlong((s) => s.connectMidi);
   if (midi === "unsupported")
     return (
-      <p className="text-s">
-        <b>No MIDI in this browser</b> (Safari and iPhone don&rsquo;t have it). Play the keys below, or type: the A–K row is the white keys. To plug in a keyboard, open this page in Chrome, Edge or Firefox on a computer.
+      <p className="text-s text-ink-soft" title="Safari and iPhone don’t have MIDI. To plug in a keyboard, use Chrome, Edge or Firefox on a computer. The A–K row plays the white keys.">
+        No MIDI here: play the keys.
       </p>
     );
-  if (midi === "asking") return <p className="text-s text-ink-soft">Asking the browser to let the page hear MIDI…</p>;
+  if (midi === "asking") return <p className="text-s text-ink-soft">Asking for MIDI…</p>;
   if (midi === "denied")
     return (
-      <p className="text-s">
+      <p className="text-s" title="Allow MIDI in the site settings (the icon left of the address). The keys work either way.">
         <span aria-hidden className="text-(--error)">✗ </span>
-        The browser said no to MIDI. Allow it in the site settings (the icon left of the address), then{" "}
-        <button type="button" className="text-action" onClick={() => void connect()}>
-          try again
+        MIDI blocked.{" "}
+        <button type="button" className="tap text-action" onClick={() => void connect()}>
+          Retry
         </button>
-        . The keys below work either way.
       </p>
     );
   if (midi === "ready" && inputs.length)
     return (
       <p className="text-s">
         <span aria-hidden className="text-(--success)">✓ </span>
-        Listening to <b>{inputs.map((i) => i.name).join(", ")}</b>
+        <b>{inputs.map((i) => i.name).join(", ")}</b>
       </p>
     );
-  if (midi === "ready") return <p className="text-s text-ink-soft">Plug in a MIDI keyboard or pad and it&rsquo;ll show up here. Until then, the keys below (or A–K on your keyboard).</p>;
+  if (midi === "ready") return <p className="text-s text-ink-soft" title="It shows up here when plugged in. Until then, the keys (or A–K).">No MIDI keyboard yet</p>;
   return (
     <p className="text-s text-ink-soft">
       <button type="button" className="text-action" onClick={() => void connect()}>
-        listen for a MIDI keyboard
+        Connect MIDI
       </button>
     </p>
   );
@@ -196,9 +195,9 @@ export function PlayAlongToggle() {
   const setOpen = usePlayAlong((s) => s.setOpen);
   if (open) return null;
   return (
-    <button type="button" className="text-action inline-block py-xs text-m" onClick={() => setOpen(true)} aria-expanded={false} aria-controls="play-along">
-      play along
-    </button>
+    <RoughButton seed="play-along-open" tone="quiet" className="tap px-s py-xxs text-m" onClick={() => setOpen(true)} aria-expanded={false} aria-controls="play-along" aria-pressed={undefined}>
+      Play along
+    </RoughButton>
   );
 }
 
@@ -219,16 +218,21 @@ export function PlayAlong() {
 
   return (
     <RoughBox seed="play-along" rough={{ weight: "m" }} className="panel-paper p-s" as="section" aria-label="Play along" id="play-along">
-      <div className="mb-xs flex items-baseline justify-between gap-s">
+      <div className="mb-xxs flex items-center justify-between gap-s">
         <h2 className="type-label">Play along</h2>
-        <button type="button" className="text-action text-s" onClick={() => setOpen(false)} aria-expanded>
-          put it down
+        <button
+          type="button"
+          className="tap text-l text-ink-soft transition-colors duration-(--motion-duration) hover:text-ink"
+          onClick={() => setOpen(false)}
+          aria-expanded
+          aria-label="Close play along"
+        >
+          ×
         </button>
       </div>
       <MidiStatusLine />
       <div className="mt-xs flex flex-wrap items-center gap-x-m gap-y-xs">
         <label className="flex items-baseline gap-xs text-s">
-          <span className="text-ink-soft">You play</span>
           <select className="sketch-select" value={instrument} onChange={(e) => setInstrument(e.target.value as typeof instrument)} aria-label="Your instrument">
             {INSTRUMENT_LIST.map((id) => (
               <option key={id} value={id}>
@@ -236,7 +240,7 @@ export function PlayAlong() {
               </option>
             ))}
           </select>
-          {loading && <span className="text-xs text-ink-soft">tuning up…</span>}
+          {loading && <span className="text-xs text-ink-soft">loading…</span>}
           {loadError && (
             <span className="text-xs">
               <span aria-hidden className="text-(--error)">✗ </span>
@@ -246,14 +250,14 @@ export function PlayAlong() {
         </label>
         <div className="flex items-center gap-xxs text-s">
           <span className="text-ink-soft" id="pa-grid">
-            Snap to the beat
+            Snap
           </span>
           <div role="group" aria-labelledby="pa-grid" className="flex gap-xxs">
-            <RoughButton seed="pa-q-off" active={quantize === "off"} onClick={() => setQuantize("off")} className="px-xs py-xxs text-s" title="Your notes land exactly where you play them">
+            <RoughButton seed="pa-q-off" active={quantize === "off"} onClick={() => setQuantize("off")} className="tap px-xs py-xxs text-s" title="Your notes land exactly where you play them">
               off
             </RoughButton>
-            <RoughButton seed="pa-q-light" active={quantize === "light"} onClick={() => setQuantize("light")} className="px-xs py-xxs text-s" title="Nudges each note halfway to the nearest 8th">
-              a little
+            <RoughButton seed="pa-q-light" active={quantize === "light"} onClick={() => setQuantize("light")} className="tap px-xs py-xxs text-s" title="Nudges each note halfway to the nearest 8th">
+              light
             </RoughButton>
           </div>
         </div>
@@ -262,15 +266,15 @@ export function PlayAlong() {
             seed="pa-cr"
             active={cr.on}
             onClick={() => setCr({ on: !cr.on })}
-            className="px-xs py-xxs text-s"
-            title="The band leaves you a few bars, then the soloist answers with what you played"
+            className="tap px-xs py-xxs text-s"
+            title="The band leaves you a few bars (marked “your turn”), then the soloist answers with what you played"
           >
-            call and response
+            Call &amp; response
           </RoughButton>
           {cr.on && (
             <div role="group" aria-label="Bars per turn" className="flex gap-xxs">
               {[2, 4].map((n) => (
-                <RoughButton key={n} seed={`pa-every-${n}`} active={cr.every === n} onClick={() => setCr({ every: n })} className="px-xs py-xxs text-s">
+                <RoughButton key={n} seed={`pa-every-${n}`} active={cr.every === n} onClick={() => setCr({ every: n })} className="tap px-xs py-xxs text-s">
                   {n} bars
                 </RoughButton>
               ))}
@@ -282,7 +286,6 @@ export function PlayAlong() {
         <LiveKeys />
       </div>
       {/* the typing letters are drawn on the keys, and Z / X are on the octave buttons */}
-      {cr.on && <p className="mt-xxs text-xs text-ink-soft">Play in the bars marked “your turn”; the band answers in the next ones.</p>}
     </RoughBox>
   );
 }
