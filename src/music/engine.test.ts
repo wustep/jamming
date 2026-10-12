@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildFrame, defaultStandardLength, FREE_LENGTHS, lengthOptions, snapLength } from "./form";
+import { buildFrame, defaultStandardLength, FREE_LENGTHS, lengthLabel, lengthOptions, lengthTitle, snapLength } from "./form";
 import { DRUM, INSTRUMENTS, defaultMembers } from "./instruments";
 import { defaultSettings, generateLocal } from "./local";
 import { parseDrumGrid, parseNotes } from "./notation";
@@ -94,6 +94,14 @@ describe("frame", () => {
   it("snaps standards to whole choruses", () => {
     expect(lengthOptions("f-blues")).toEqual([12, 24, 36, 48, 60, 72]);
     expect(lengthOptions("autumn")).toEqual([32, 64, 96, 128, 160]);
+  });
+  it("labels lengths in bars, the unit on the first only (a standard's are choruses × its form)", () => {
+    expect(lengthOptions("autumn").map((b) => lengthLabel("autumn", b))).toEqual(["32 bars", "64", "96", "128", "160"]);
+    expect(lengthOptions("f-blues").map((b) => lengthLabel("f-blues", b))).toEqual(["12 bars", "24", "36", "48", "60", "72"]);
+    expect(FREE_LENGTHS.map((b) => lengthLabel(null, b))).toEqual(["8 bars", "16", "24", "32", "48", "64"]);
+    expect(lengthTitle("autumn", 32)).toBe("32 bars, once through");
+    expect(lengthTitle("autumn", 96)).toBe("96 bars, 3 choruses");
+    expect(lengthTitle(null, 24)).toBe("24 bars");
   });
 });
 
