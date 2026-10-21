@@ -57,3 +57,17 @@ describe("the takes list", () => {
     expect(useTroop.getState().takes[0].label).toBe("Swing sketch");
   });
 });
+
+describe("asking for a jam with no key", () => {
+  it("an ask it can't read leaves the band alone and says what it listens for", async () => {
+    useTroop.getState().applyPreset("basie");
+    const before = useTroop.getState().current;
+    await useTroop.getState().arrangeFrom("surprise me");
+    expect(useTroop.getState().current).toBe(before);
+    expect(useTroop.getState().settings.preset).toBe("basie");
+    expect(useTroop.getState().arranged).toMatchObject({ text: "surprise me", missed: true });
+    await useTroop.getState().arrangeFrom("christmas music");
+    expect(useTroop.getState().settings.standard).toBe("jingle-bells");
+    expect(useTroop.getState().arranged?.missed).toBeUndefined();
+  });
+});

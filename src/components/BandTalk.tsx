@@ -21,6 +21,19 @@ export function BandTalk() {
   // nothing said yet: the panel waits for a take with talk in it (the intro note says how)
   if (!msgs.length && !running) return null;
 
+  // the judge picked one of the director's charts: its word goes with the plan, before the playing
+  const judge = current?.critic?.summary && !running && (
+    <li key="judge" className="flex gap-xs">
+      <span className="inline-block w-[30px] shrink-0 text-center text-l">⚖</span>
+      <div className="text-m">
+        <span className="font-heavy">Judge</span>
+        <div>{current.critic.summary}</div>
+      </div>
+    </li>
+  );
+  const firstPlaying = msgs.findIndex((c) => c.phase !== "setup");
+  const judgeAt = firstPlaying < 0 ? msgs.length : firstPlaying;
+
   const nameOf = (id: string) => (id === "director" ? "Director" : id === "critic" ? "Judge" : (members.find((m) => m.id === id)?.name ?? id));
   return (
     <div>
@@ -45,7 +58,8 @@ export function BandTalk() {
                     ? "the plan"
                     : null
               : null;
-          return (
+          return [
+            i === judgeAt && judge,
             <li key={c.id} className="flex flex-col gap-xxs">
               {divider && (
                 <div className="flex items-center gap-xs text-xs text-ink-soft">
@@ -62,18 +76,10 @@ export function BandTalk() {
                   <div>{c.text}</div>
                 </div>
               </div>
-            </li>
-          );
+            </li>,
+          ];
         })}
-        {current?.critic?.summary && !running && (
-          <li className="flex gap-xs">
-            <span className="inline-block w-[30px] shrink-0 text-center text-l">⚖</span>
-            <div className="text-m">
-              <span className="font-heavy">Judge</span>
-              <div>{current.critic.summary}</div>
-            </div>
-          </li>
-        )}
+        {judgeAt === msgs.length && judge}
       </ol>
     </div>
   );

@@ -81,38 +81,38 @@ export function normalizeTonic(raw: string): string | null {
 const ARTIST_WORDS: Record<PresetId, string[]> = {
   basie: ["count basie", "basie", "kansas city"],
   jobim: ["jobim", "antonio carlos jobim", "tom jobim"],
-  ray: ["ray charles", "gospel"],
+  ray: ["ray charles", "gospel", "soul", "soul music", "r b", "rnb", "rhythm and blues"],
   laufey: ["laufey"],
-  bach: ["bach", "fugue", "well tempered"],
-  chopin: ["chopin", "nocturne"],
-  debussy: ["debussy", "clair de lune", "impressionist"],
+  bach: ["bach", "fugue", "well tempered", "toccata", "brandenburg"],
+  chopin: ["chopin", "nocturne", "mazurka", "polonaise"],
+  debussy: ["debussy", "clair de lune", "impressionist", "impressionism", "paris", "parisian"],
   glass: ["philip glass", "glassworks"],
-  zimmer: ["hans zimmer", "zimmer", "interstellar", "inception", "film score", "cinematic", "epic"],
+  zimmer: ["hans zimmer", "zimmer", "interstellar", "inception", "film score", "cinematic", "epic", "movie", "soundtrack", "trailer", "blockbuster"],
   fox: ["elijah fox"],
   evans: ["bill evans", "evans", "waltz for debby"],
   monk: ["thelonious monk", "thelonious", "monk", "monkish"],
   miles: ["miles davis", "miles", "kind of blue"],
   herbie: ["herbie hancock", "herbie", "hancock", "head hunters", "chameleon", "fusion", "rhodes"],
-  guaraldi: ["vince guaraldi", "guaraldi", "charlie brown", "peanuts", "linus and lucy"],
-  stevie: ["stevie wonder", "stevie", "motown", "superstition", "clavinet", "clav"],
+  guaraldi: ["vince guaraldi", "guaraldi", "charlie brown", "peanuts", "linus and lucy", "snoopy", "cartoon", "cartoons"],
+  stevie: ["stevie wonder", "stevie", "motown", "superstition", "clavinet", "clav", "neo soul"],
   sakamoto: ["ryuichi sakamoto", "sakamoto", "mr lawrence"],
-  hisaishi: ["joe hisaishi", "hisaishi", "ghibli", "studio ghibli", "totoro", "spirited away", "anime"],
+  hisaishi: ["joe hisaishi", "hisaishi", "ghibli", "studio ghibli", "totoro", "spirited away", "anime", "miyazaki", "japanese", "japan"],
   frahm: ["nils frahm", "frahm", "felt piano"],
-  einaudi: ["ludovico einaudi", "einaudi", "nuvole bianche", "una mattina"],
+  einaudi: ["ludovico einaudi", "einaudi", "nuvole bianche", "una mattina", "neoclassical", "neo classical"],
   satie: ["erik satie", "satie", "gymnopedie", "gymnopédie", "gnossienne"],
-  fela: ["fela kuti", "fela", "afrobeat", "afro beat", "tony allen", "lagos"],
-  son: ["buena vista", "son cubano", "cuban", "cuba", "havana", "salsa", "montuno", "clave", "chan chan"],
+  fela: ["fela kuti", "fela", "afrobeat", "afro beat", "tony allen", "lagos", "highlife", "african", "nigeria"],
+  son: ["buena vista", "son cubano", "cuban", "cuba", "havana", "salsa", "montuno", "clave", "chan chan", "mambo", "cha cha", "rumba"],
 };
 
 const STYLE_WORDS: Record<StyleId, string[]> = {
-  swing: ["swing", "swinging", "swingin", "bebop", "bop", "hard bop", "big band", "jazz club", "walking bass"],
-  bossa: ["bossa", "bossa nova", "samba", "brazil", "brazilian", "latin", "rio"],
-  funk: ["funk", "funky", "groove", "groovy", "disco", "dance", "hip hop", "boom bap"],
-  pop: ["pop", "rock", "lofi", "lo fi", "singer songwriter", "indie", "soft rock"],
-  neworleans: ["new orleans", "dixieland", "dixie", "second line", "trad jazz", "mardi gras", "nola", "marching band", "street parade"],
-  minimal: ["minimal", "minimalist", "minimalism", "phasing", "steve reich", "reich", "ostinato", "arpeggios"],
-  baroque: ["baroque", "counterpoint", "harpsichord", "vivaldi", "handel"],
-  ambient: ["ambient", "dreamy", "drone", "meditative", "meditation", "ethereal", "sleep", "sleepy", "calm", "spa", "floating", "romantic"],
+  swing: ["swing", "swinging", "swingin", "bebop", "bop", "hard bop", "big band", "jazz club", "walking bass", "django", "manouche", "gypsy jazz", "hot club", "lindy hop", "jitterbug"],
+  bossa: ["bossa", "bossa nova", "samba", "brazil", "brazilian", "latin", "rio", "beach", "tropical", "seaside", "poolside", "summer", "cocktail", "cocktails", "elevator", "muzak", "lounge music", "coffee", "coffee shop", "coffeehouse", "brunch", "dinner"],
+  funk: ["funk", "funky", "groove", "groovy", "disco", "dance", "hip hop", "boom bap", "edm", "house music", "techno", "trance", "rave", "electro", "breakbeat", "trap", "reggae", "ska"],
+  pop: ["pop", "rock", "lofi", "lo fi", "singer songwriter", "indie", "soft rock", "country", "folk", "bluegrass", "americana", "punk", "metal", "grunge", "anthem"],
+  neworleans: ["new orleans", "dixieland", "dixie", "second line", "trad jazz", "mardi gras", "nola", "marching band", "street parade", "ragtime", "circus", "vaudeville", "silent film", "roaring twenties", "charleston", "brass band", "jazz funeral", "sousa", "march", "polka"],
+  minimal: ["minimal", "minimalist", "minimalism", "phasing", "steve reich", "reich", "ostinato", "arpeggios", "video game", "8 bit", "chiptune", "arcade", "electronic", "electronica"],
+  baroque: ["baroque", "counterpoint", "harpsichord", "vivaldi", "handel", "renaissance", "medieval", "telemann", "scarlatti"],
+  ambient: ["ambient", "dreamy", "drone", "meditative", "meditation", "ethereal", "sleep", "sleepy", "calm", "spa", "floating", "romantic", "peaceful", "tranquil", "serene", "yoga", "zen", "study", "studying", "focus", "snow", "snowy", "winter", "outer space", "starry"],
 };
 
 /** A loose word that only counts when nothing more specific names a style. */
@@ -190,6 +190,12 @@ const PACE_WORDS: [string, Pace][] = [
   ["bouncy", "fast"],
   ["lively", "fast"],
   ["party", "fast"],
+  ["loud", "fast"],
+  ["intense", "fast"],
+  ["wild", "fast"],
+  ["quiet", "slow"],
+  ["soft", "slow"],
+  ["tender", "slow"],
 ];
 
 /** Mood words set the mode when no key is named, and a pace when no tempo is. */
@@ -209,6 +215,12 @@ const MOOD: [string, KeySig["mode"], Pace | null][] = [
   ["mysterious", "minor", null],
   ["haunting", "minor", null],
   ["spooky", "minor", null],
+  ["halloween", "minor", null],
+  ["creepy", "minor", null],
+  ["scary", "minor", null],
+  ["eerie", "minor", null],
+  ["sultry", "minor", "slow"],
+  ["tango", "minor", null],
   ["tense", "minor", null],
   ["stormy", "minor", "fast"],
   ["happy", "major", null],
@@ -247,6 +259,18 @@ const TUNE_ALIASES: [string, string][] = [
   ["dorian vamp", "dorian-vamp"],
   ["frere jacques", "frere-jacques"],
   ["fly me to the moon", "fly-me"],
+  // occasions a tune here belongs to
+  ["christmas", "jingle-bells"],
+  ["xmas", "jingle-bells"],
+  ["holiday", "jingle-bells"],
+  ["holidays", "jingle-bells"],
+  ["sleigh", "jingle-bells"],
+  ["santa", "jingle-bells"],
+  ["wedding", "canon"],
+  ["beethoven", "ode-to-joy"],
+  ["mozart", "twinkle"],
+  ["nursery rhyme", "twinkle"],
+  ["hymn", "amazing-grace"],
 ];
 
 /** Lowercase, accents off, hyphens and punctuation to spaces, padded so `has(" x ")` matches whole words. */
@@ -794,6 +818,13 @@ function castPreset(presetBand: { animal: AnimalId; instrument: InstrumentId }[]
 }
 
 /** What the brief named, as words for the debug log ("preset monk · pace slow · add drums"). */
+/** Nothing in it to act on: no setting, no band change (a model's note alone doesn't count). */
+export function briefIsEmpty(b: Brief): boolean {
+  return describeBrief(b) === NOTHING;
+}
+
+const NOTHING = "nothing it recognised";
+
 export function describeBrief(b: Brief): string {
   const parts: string[] = [];
   for (const k of ["preset", "style", "standard", "tonic", "mode", "tempo", "pace", "meter", "room", "feel", "bars", "choruses"] as const) {
@@ -802,5 +833,5 @@ export function describeBrief(b: Brief): string {
   if (b.band) parts.push(`band ${b.band.join("+")}`);
   if (b.add.length) parts.push(`add ${b.add.join("+")}`);
   if (b.drop.length) parts.push(`drop ${b.drop.join("+")}`);
-  return parts.join(" · ") || "nothing it recognised";
+  return parts.join(" · ") || NOTHING;
 }

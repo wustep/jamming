@@ -320,7 +320,8 @@ export function Stage() {
         <Bunting />
         <div className="flex min-h-7 items-baseline justify-between gap-s px-xs pt-9 font-brand font-heavy text-ink-soft">
           <div className="flex min-w-0 items-baseline gap-xxs text-l" aria-live="off">
-            <span ref={labelRef} className="truncate" />
+            {/* Caveat's d leans past its box: room for it inside the clip, given back outside */}
+            <span ref={labelRef} className="-mr-xxs truncate pr-xxs" />
             <span ref={counterRef} className="shrink-0 tabular-nums" style={{ minWidth: score ? `${`· bar ${score.frame.bars}/${score.frame.bars}`.length}ch` : undefined }} />
           </div>
           <div className="flex shrink-0 items-baseline gap-xs">
@@ -345,6 +346,8 @@ export function Stage() {
           {band.map((m, i) => {
             const inst = INSTRUMENTS[m.instrument];
             const bubble = bubbles[m.id];
+            // what a player says wins over the dots: in a live jam their next phrase is nearly always
+            // being thought up, which would otherwise hide every line they say while they play
             const isThinking = thinking.has(m.id);
             const isMuted = muted.includes(m.id);
             const row = Math.floor(i / perRow);
@@ -362,11 +365,11 @@ export function Stage() {
                 {(bubble || isThinking) && (
                   <div
                     // a new line is a new bubble: it pops in rather than swapping its words in place
-                    key={bubble && !isThinking ? `say:${bubble}` : "thinking"}
+                    key={bubble ? `say:${bubble}` : "thinking"}
                     className={`bubble absolute z-10 ${fit.right ? "bubble-right right-xs" : "left-xs"} w-max px-s py-xs text-m`}
                     style={{ bottom: spriteW * 1.04, maxWidth: fit.maxWidth }}
                   >
-                    {bubble && !isThinking ? bubble : <span className="thinking-dots" aria-label={`${m.name} is thinking`}><i>.</i><i>.</i><i>.</i></span>}
+                    {bubble ? bubble : <span className="thinking-dots" aria-label={`${m.name} is thinking`}><i>.</i><i>.</i><i>.</i></span>}
                   </div>
                 )}
                 <div className={`transition-opacity duration-(--motion-large-duration) ease-small ${isMuted ? "opacity-40 grayscale-[0.6]" : ""}`}>

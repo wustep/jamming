@@ -102,6 +102,25 @@ describe("parseBrief: the keyword reading", () => {
     expect(b.band).not.toContain("drums");
   });
 
+  it("hears everyday asks as the nearest thing the band plays", () => {
+    // occasions find their tune, genres the band doesn't play find the nearest style or artist
+    expect(parseBrief("christmas music").standard).toBe("jingle-bells");
+    expect(parseBrief("a Charlie Brown Christmas")).toMatchObject({ preset: "guaraldi", standard: "jingle-bells" });
+    expect(parseBrief("music for our wedding").standard).toBe("canon");
+    expect(parseBrief("soul").preset).toBe("ray");
+    expect(parseBrief("neo soul").preset).toBe("stevie");
+    expect(parseBrief("R&B").preset).toBe("ray");
+    expect(parseBrief("beach vibes").style).toBe("bossa");
+    expect(parseBrief("coffee shop").style).toBe("bossa");
+    expect(parseBrief("techno").style).toBe("funk");
+    expect(parseBrief("folk song").style).toBe("pop");
+    expect(parseBrief("video game music").style).toBe("minimal");
+    expect(parseBrief("circus").style).toBe("neworleans");
+    expect(parseBrief("a rainy day in Paris")).toMatchObject({ preset: "debussy", mode: "minor", pace: "slow" });
+    expect(parseBrief("something quiet").pace).toBe("slow");
+    expect(parseBrief("spooky halloween").mode).toBe("minor");
+  });
+
   it("returns an empty brief for nothing, junk or only punctuation", () => {
     for (const s of ["", "   ", "!!!", "asdf qwerty", "🎷🎷"]) {
       const b = parseBrief(s);

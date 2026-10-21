@@ -1,6 +1,7 @@
 import { newMemory, type PlayerMemory } from "@/music/context";
 import { ritFor } from "@/music/ending";
 import { buildFrame, sectionAt } from "@/music/form";
+import { getPreset } from "@/music/presets";
 import { getStandard } from "@/music/standards";
 import { INSTRUMENTS } from "@/music/instruments";
 import { motifForFrame, newScoreId } from "@/music/local";
@@ -114,7 +115,7 @@ export function startImproviser(settings: TroopSettings, members: Member[], hook
 
   const snapshot = (final: boolean): Score => ({
     id: scoreId,
-    title: `${frame.standard ? (getStandard(frame.standard)?.name ?? style.name) : style.name} · improvised`,
+    title: `${frame.standard ? (getStandard(frame.standard)?.name ?? style.name) : (getPreset(settings.preset)?.name ?? style.name)} · improvised`,
     createdAt: Date.now(),
     settings,
     members,

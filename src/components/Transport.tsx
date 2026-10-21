@@ -517,7 +517,8 @@ export function Takes() {
             >
               <span className="mr-xxs text-ink-soft">#{takes.length - i}</span>
               {t.label}
-              <span className="ml-xxs text-xs text-ink-soft">
+              {/* the time and the judge's score wrap as one, never "judge" on one line and "8.6" on the next */}
+              <span className="ml-xxs inline-block whitespace-nowrap text-xs text-ink-soft">
                 {new Date(t.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
                 {t.score.critic?.scores.length ? ` · judge ${t.score.critic.scores.find((x) => x.candidate === t.score.critic!.chosen)?.score ?? ""}` : ""}
               </span>

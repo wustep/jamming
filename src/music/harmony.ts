@@ -52,11 +52,13 @@ export function contextScale(c: Chord, next: Chord | null, key: KeySig, style: S
   const toFourthUp = !!next && mod(next.root - c.root, 12) === 5 && next.symbol !== c.symbol;
   const nextMinor = !!next && MINORISH.has(next.quality);
   const jazz = JAZZ.includes(style);
+  // a major chord built on V of a minor key, or resolving to a minor chord, borrows that key:
+  // b9 and b13 (A in D minor is A Bb C# D E F G, not A major's B and F#)
+  const minorDominant = (toFourthUp && nextMinor) || (key.mode === "minor" && mod(c.root - tonic, 12) === 7);
 
   switch (c.quality) {
     case "dom":
-      // a dominant resolving to a minor chord borrows that chord's key: b9 and b13
-      if (toFourthUp && nextMinor) return PHRYG_DOM;
+      if (minorDominant) return PHRYG_DOM;
       return MIXO;
     case "min7":
     case "min": {
@@ -67,8 +69,10 @@ export function contextScale(c: Chord, next: Chord | null, key: KeySig, style: S
     }
     case "m7b5":
       return LOCRIAN;
-    case "maj7":
     case "maj":
+      if (minorDominant) return PHRYG_DOM;
+    // falls through: a triad elsewhere takes its colours from the key, as below
+    case "maj7":
     case "6": {
       // the key decides ionian vs lydian (IV), and for a plain triad, the 7th (bVII in minor is mixolydian)
       const fourth = pick([5, 6], 5);
@@ -253,7 +257,7 @@ export function fitOctave<T extends { pitch: number }>(notes: T[], lo: number, h
     const s = k * 12;
     const out = Math.max(0, lo - (min + s)) + Math.max(0, max + s - hi);
     const ref = near ?? (lo + hi) / 2;
-    const cost = out * 10 + Math.abs(mid + s - ref) * 0.5 + (near !== undefined && near !== null ? Math.abs(ps[0] + s - near) * 0.5 : 0);
+    const cost = out * 25 + Math.abs(mid + s - ref) * 0.5 + (near !== undefined && near !== null ? Math.abs(ps[0] + s - near) * 0.5 : 0);
     if (cost < bestCost) {
       bestCost = cost;
       best = s;

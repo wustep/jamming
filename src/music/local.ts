@@ -7,6 +7,7 @@ import { narrateLocal } from "./narrate";
 import { planLocal } from "./planner";
 import { realize, type RealizeIssue } from "./realize";
 import { makeRng } from "./rng";
+import { getPreset } from "./presets";
 import { getStandard } from "./standards";
 import { STYLES, swingAt } from "./styles";
 import { mod, pcOf } from "./theory";
@@ -67,10 +68,13 @@ export interface LocalResult {
   timings: { frameMs: number; planMs: number; realizeMs: number };
 }
 
-/** What a local take is called: its style, and the tune when it plays a standard. */
-export function takeTitle(style: StyleId, standard: string | null): string {
+/**
+ * What a local take is called: its style, and the tune when it plays a standard. Played like an
+ * artist, the take says who (the takes list does too), unless the caller names them itself.
+ */
+export function takeTitle(style: StyleId, standard: string | null, preset?: string | null): string {
   const tune = getStandard(standard)?.name;
-  return `${STYLES[style].name}${tune ? ` · ${tune}` : ""}`;
+  return `${getPreset(preset)?.name ?? STYLES[style].name}${tune ? ` · ${tune}` : ""}`;
 }
 
 /** The stub band: plays a full chart with no model calls. Same settings + seed = same take. */
@@ -86,7 +90,7 @@ export function generateLocal(settings: TroopSettings, members: Member[]): Local
   const style = STYLES[settings.style];
   const score: Score = {
     id: newScoreId(),
-    title: takeTitle(settings.style, frame.standard),
+    title: takeTitle(settings.style, frame.standard, settings.preset),
     // eslint-disable-next-line no-restricted-properties -- when it was made, not what it plays
     createdAt: Date.now(),
     settings,

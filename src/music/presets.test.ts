@@ -6,6 +6,7 @@ import { ANIMALS, INSTRUMENTS } from "./instruments";
 import { defaultSettings, generateLocal } from "./local";
 import { FEELS } from "./playing";
 import { PRESET_GROUPS, PRESETS, searchPresets, type PresetId } from "./presets";
+import { harmonyOf } from "./realize";
 import { STYLES } from "./styles";
 import { chordPcs, mod, parseChord, pcOf } from "./theory";
 import type { Member, NoteEvent, Score } from "./types";
@@ -50,6 +51,8 @@ describe("artist presets", () => {
       const settings = { ...defaultSettings(band), style: p.style, feel: p.feel, harmony: p.harmony, preset: p.id, tempo: p.tempo, key: p.key, meter: { beats: p.meter ?? 4 }, leaderId: band[0].id, soloists: p.soloists, seed: 11, bars: 32 };
       const { score } = generateLocal(settings, band);
       expect(score.frame.feel ?? score.frame.style, p.id).toBe(p.feel === p.style ? p.style : p.feel);
+      // named for the artist, as the takes list names it (not "Minimalist" for Hans Zimmer)
+      expect(score.title, p.id).toBe(p.name);
       for (const m of band) expect(score.parts[m.id].length, `${p.id} ${m.instrument}`).toBeGreaterThan(0);
       const shared = decodeShare(encodeJam(jamOf(score)))!;
       expect(shared.settings).toMatchObject({ feel: p.feel, harmony: p.harmony, preset: p.id });
@@ -144,6 +147,14 @@ describe("artist presets", () => {
         const on = (bar: number, pos: number) => s.parts.frog.some((n) => barOf(s, n) === bar && posOf(s, n) === pos);
         expect(share(bars.map((b) => on(b, 1.5) && on(b, 3)))).toBeGreaterThan(0.9);
         expect(share(bars.map((b) => !on(b, 0)))).toBeGreaterThan(0.6);
+        // the 4 is the next bar's root, a beat early (not bent onto the chord it's leaving), and
+        // the line around it stays inside an octave
+        for (const b of bars.filter((b) => s.frame.chords[b + 1]?.[0].beat === 0)) {
+          const four = s.parts.frog.find((n) => barOf(s, n) === b && posOf(s, n) === 3);
+          if (four) expect(mod(four.pitch, 12), `bar ${b + 1}`).toBe(parseChord(s.frame.chords[b + 1][0].symbol).bass);
+        }
+        const line = s.parts.frog.filter((n) => n.art !== "ghost").sort((x, y) => x.start - y.start);
+        expect(line.every((n, i) => i === 0 || Math.abs(n.pitch - line[i - 1].pitch) <= 12)).toBe(true);
         const rim = s.parts.owl.filter((n) => n.pitch === 37);
         const sides = new Set(s.plan.map((_, b) => rim.filter((n) => barOf(s, n) === b).length));
         expect([...sides].filter((k) => k === 2 || k === 3).length).toBe(2);
@@ -305,6 +316,54 @@ describe("artist presets", () => {
         }
       }
       expect(rubs, p.id).toBe(0);
+    }
+  });
+
+  it("a walking line steps off a held note instead of leaping an octave away from it", () => {
+    // Basie, Evans, Miles, Monk and Bach: an approach note that rubbed against the piano used to
+    // drop an octave (Ab2, A1, Bb2): 41 leaps past the octave in these takes, now 4.
+    let leaps = 0;
+    for (const id of ["basie", "evans", "miles", "monk", "bach"]) {
+      const p = PRESETS.find((x) => x.id === id)!;
+      for (const seed of [1, 2, 3, 4, 5, 6]) {
+        const score = takeOf(p, seed);
+        const beats = score.frame.meter.beats;
+        for (const m of score.members) {
+          const line = score.parts[m.id].filter((n) => n.art !== "ghost" && score.plan[Math.floor(n.start / beats + 1e-9)]?.roles[m.id] === "bass").sort((a, b) => a.start - b.start);
+          for (let i = 1; i < line.length; i++) {
+            if (line[i].start - line[i - 1].start <= 2 && Math.abs(line[i].pitch - line[i - 1].pitch) > 12) leaps++;
+          }
+        }
+      }
+    }
+    expect(leaps).toBeLessThanOrEqual(4);
+  });
+
+  it("a bossa line leans on half steps now and then, not on every beat", () => {
+    // every pair of beat notes a step apart had a chromatic note between them: Laufey's lines
+    // crawled (F#, G#, G, F, F#, F, E over Gmaj9) with 31 of 1000 notes outside chord and key
+    for (const [id, most] of [["laufey", 0.012], ["jobim", 0.015]] as const) {
+      const p = PRESETS.find((x) => x.id === id)!;
+      let n = 0;
+      let out = 0;
+      for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+        const score = takeOf(p, seed);
+        const H = harmonyOf(score.frame, score.plan);
+        const beats = score.frame.meter.beats;
+        const tonic = pcOf(score.frame.key.tonic);
+        const key = (score.frame.key.mode === "minor" ? [0, 2, 3, 5, 7, 8, 9, 10, 11] : [0, 2, 4, 5, 7, 9, 11]).map((i) => mod(tonic + i, 12));
+        for (const m of score.members) {
+          for (const x of score.parts[m.id]) {
+            const role = score.plan[Math.floor(x.start / beats + 1e-9)]?.roles[m.id];
+            if ((role !== "solo" && role !== "lead") || x.written) continue;
+            const h = H.at(x.start);
+            const pc = mod(x.pitch, 12);
+            n++;
+            if (!h.scale.includes(pc) && !h.blue.includes(pc) && !key.includes(pc)) out++;
+          }
+        }
+      }
+      expect(out / n, `${id}: ${out} of ${n}`).toBeLessThan(most);
     }
   });
 

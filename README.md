@@ -2,7 +2,7 @@
 
 A band of hand-drawn animals that improvise music together. Pick the players, hand them instruments, choose a style (or a standard), and press play. Every movement on stage follows the notes actually being played.
 
-Live: https://jamming-wustep.vercel.app
+Live: https://jamming.wustep.me
 
 ## How it works
 
