@@ -130,9 +130,15 @@ export function notToSelf(line: string, name: string): string | null {
   return out === line.trim() ? line : out[0].toUpperCase() + out.slice(1);
 }
 
-/** Band talk kept in bar order: a line for an earlier bar that arrives late goes before later bars. */
+/**
+ * Band talk kept in bar order: a line for an earlier bar that arrives late goes before later bars,
+ * and a reply to the count-off that comes in once the band is playing goes before the playing.
+ */
 export function insertByBar(chat: ChatMessage[], msg: ChatMessage): ChatMessage[] {
-  if (msg.bar === undefined) return [...chat, msg];
+  if (msg.bar === undefined) {
+    const playing = msg.phase === "setup" || msg.phase === "count-off" ? chat.findIndex((c) => c.phase === "jam") : -1;
+    return playing < 0 ? [...chat, msg] : [...chat.slice(0, playing), msg, ...chat.slice(playing)];
+  }
   let i = chat.length;
   while (i > 0 && chat[i - 1].bar !== undefined && chat[i - 1].bar! > msg.bar) i--;
   return [...chat.slice(0, i), msg, ...chat.slice(i)];

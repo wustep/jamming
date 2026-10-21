@@ -67,6 +67,9 @@ describe("who talks", () => {
     let chat: ChatMessage[] = [];
     for (const m of [at(undefined, "c"), at(4, "b5"), at(0, "b1"), at(8, "b9"), at(4, "b5'")]) chat = insertByBar(chat, m);
     expect(chat.map((c) => c.id)).toEqual(["c", "b1", "b5", "b5'", "b9"]);
+    // a count-off reply that comes in after the band has started goes with the count-off
+    chat = insertByBar(chat, at(undefined, "c'"));
+    expect(chat.map((c) => c.id)).toEqual(["c", "c'", "b1", "b5", "b5'", "b9"]);
   });
 });
 

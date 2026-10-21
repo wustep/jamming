@@ -50,6 +50,8 @@ describe("artist presets", () => {
       const settings = { ...defaultSettings(band), style: p.style, feel: p.feel, harmony: p.harmony, preset: p.id, tempo: p.tempo, key: p.key, meter: { beats: p.meter ?? 4 }, leaderId: band[0].id, soloists: p.soloists, seed: 11, bars: 32 };
       const { score } = generateLocal(settings, band);
       expect(score.frame.feel ?? score.frame.style, p.id).toBe(p.feel === p.style ? p.style : p.feel);
+      // named for the artist, as the takes list names it (not "Minimalist" for Hans Zimmer)
+      expect(score.title, p.id).toBe(p.name);
       for (const m of band) expect(score.parts[m.id].length, `${p.id} ${m.instrument}`).toBeGreaterThan(0);
       const shared = decodeShare(encodeJam(jamOf(score)))!;
       expect(shared.settings).toMatchObject({ feel: p.feel, harmony: p.harmony, preset: p.id });
