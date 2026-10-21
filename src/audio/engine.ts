@@ -97,6 +97,20 @@ const START_DELAY_SEC = 0.12;
 const READY_WAIT_MS = 8000;
 /** How long to wait for a suspended AudioContext to resume (browsers leave the promise pending without a gesture). */
 const RESUME_WAIT_MS = 1500;
+/**
+ * iOS plays Web Audio as "ambient" sound, which the ring/silent switch mutes, so on a phone set
+ * to silent the band made no sound at all. A music app plays as "playback" (Safari 16.4+); other
+ * browsers have no audio session and carry on as they were.
+ */
+function playThroughSilentSwitch() {
+  try {
+    const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
+    if (session && session.type !== "playback") session.type = "playback";
+  } catch {
+    /* not settable here */
+  }
+}
+
 /** +4 dB after the bus compressor (the limiter adds ~2.3 dB of its own make-up): see ensureContext. */
 const MAKEUP_GAIN = 1.6;
 const END_TAIL_SEC = 0.8;
@@ -229,6 +243,7 @@ export class TroopAudio {
   private ensureContext(): AudioContext | null {
     if (!isBrowser()) return null;
     if (this.ctx && this.ctx.state !== "closed") return this.ctx;
+    playThroughSilentSwitch();
     const ctx = new AudioContext({ latencyHint: "interactive" });
     this.ctx = ctx;
     const compressor = ctx.createDynamicsCompressor();
