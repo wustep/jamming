@@ -130,3 +130,21 @@ export async function shareCardImage(card: ShareCard | null): Promise<ImageRespo
     },
   );
 }
+
+/**
+ * The app's icon: Rusty the fox (the default band's leader) on the paper, for the browser tab,
+ * a phone's home screen and an installed app. `inset` is the face's share of the square: an
+ * Android maskable icon is cropped to a circle and keeps its middle 80%.
+ */
+export function appIcon(px: number, inset = 0.82): ImageResponse {
+  const face = Math.round(px * inset);
+  return new ImageResponse(
+    (
+      <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: THEME["--paper"] }}>
+        {/* eslint-disable-next-line @next/next/no-img-element -- next/og draws plain <img> */}
+        <img src={svgSrc(<AnimalPortrait animal="fox" size={face} />)} width={face} height={Math.round((face * 170) / 180)} alt="" />
+      </div>
+    ),
+    { width: px, height: px },
+  );
+}
