@@ -320,7 +320,8 @@ export function Stage() {
         <Bunting />
         <div className="flex min-h-7 items-baseline justify-between gap-s px-xs pt-9 font-brand font-heavy text-ink-soft">
           <div className="flex min-w-0 items-baseline gap-xxs text-l" aria-live="off">
-            <span ref={labelRef} className="truncate" />
+            {/* Caveat's d leans past its box: room for it inside the clip, given back outside */}
+            <span ref={labelRef} className="-mr-xxs truncate pr-xxs" />
             <span ref={counterRef} className="shrink-0 tabular-nums" style={{ minWidth: score ? `${`· bar ${score.frame.bars}/${score.frame.bars}`.length}ch` : undefined }} />
           </div>
           <div className="flex shrink-0 items-baseline gap-xs">

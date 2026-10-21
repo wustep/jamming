@@ -276,7 +276,9 @@ export function ensemble(o: EnsembleInput): EnsembleFix[] {
 
   // ── 5. The bass doesn't strike a half step against a note someone is holding ──
   // A pulse jumping up the octave onto the piano's held 7th (E3 against D#3 under Emaj7): the same
-  // note an octave away keeps the line's harmony and loses the rub. Every pitched note is filed
+  // note an octave away keeps the line's harmony and loses the rub. A walking line can't jump like
+  // that (Ab2, A1, Bb2 is two leaps past the octave), so there the note takes a neighbour instead:
+  // a chord tone a step away, or the other side of the next note. Every pitched note is filed
   // under each bar it sounds in, so a long standard doesn't compare every note with every note.
   const byBar = new Map<number, { id: string; x: NoteEvent }[]>();
   for (const other of members) {
@@ -291,9 +293,10 @@ export function ensemble(o: EnsembleInput): EnsembleFix[] {
   for (const m of members) {
     const inst = INSTRUMENTS[m.instrument];
     if (inst.fn === "rhythm") continue;
-    for (const n of parts[m.id] ?? []) {
+    const line = (parts[m.id] ?? []).filter((x) => x.art !== "ghost").sort((a, b) => a.start - b.start);
+    line.forEach((n, i) => {
       const bar = barOf(n.start);
-      if (!bars.has(bar) || plan[bar]?.roles[m.id] !== "bass" || n.written) continue;
+      if (!bars.has(bar) || plan[bar]?.roles[m.id] !== "bass" || n.written) return;
       const held: number[] = [];
       const sounding: number[] = [];
       for (const { id, x } of byBar.get(bar) ?? []) {
@@ -302,12 +305,24 @@ export function ensemble(o: EnsembleInput): EnsembleFix[] {
         if (x.dur >= HELD && x.start < n.start - EPS) held.push(x.pitch);
       }
       const rub = (ps: number[], p: number) => ps.some((h) => Math.abs(h - p) === 1 || Math.abs(h - p) === 13);
-      if (!rub(held, n.pitch)) continue;
-      const moved = [n.pitch - 12, n.pitch + 12].find((p) => p >= inst.range[0] && p <= inst.range[1] && !rub(sounding, p));
-      if (moved === undefined) continue;
-      note(bar, m.id, `${pitchName(n.pitch, flats)} rubbed against a held note; played an octave ${moved < n.pitch ? "down" : "up"}`);
+      if (!rub(held, n.pitch)) return;
+      // the notes either side, when they're close enough to be heard as one line with it
+      const prev = i > 0 && n.start - line[i - 1].start <= 2 + EPS ? line[i - 1].pitch : null;
+      const next = i + 1 < line.length && line[i + 1].start - n.start <= 2 + EPS ? line[i + 1].pitch : null;
+      const keepsLine = (p: number) => (prev === null || Math.abs(p - prev) <= 12) && (next === null || Math.abs(next - p) <= 12);
+      const fits = (p: number) => p >= inst.range[0] && p <= inst.range[1] && !rub(sounding, p) && keepsLine(p);
+      let moved = [n.pitch - 12, n.pitch + 12].find(fits);
+      if (moved === undefined) {
+        const home = homeOf(harmony, n);
+        // a step to a chord tone, or a half step either side of where the line is going
+        const near = [-1, 1, -2, 2].map((d) => n.pitch + d).filter((p) => p !== prev && p !== next && (holdable(home, mod(p, 12), style) || (next !== null && Math.abs(next - p) === 1)));
+        moved = near.find(fits);
+      }
+      if (moved === undefined) return;
+      const how = Math.abs(moved - n.pitch) === 12 ? `played an octave ${moved < n.pitch ? "down" : "up"}` : `played ${pitchName(moved, flats)}`;
+      note(bar, m.id, `${pitchName(n.pitch, flats)} rubbed against a held note; ${how}`);
       n.pitch = moved;
-    }
+    });
   }
 
   // ── 6. A chord isn't struck a half step against a note another player is still holding ──

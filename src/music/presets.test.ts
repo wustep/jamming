@@ -308,6 +308,26 @@ describe("artist presets", () => {
     }
   });
 
+  it("a walking line steps off a held note instead of leaping an octave away from it", () => {
+    // Basie, Evans, Miles, Monk and Bach: an approach note that rubbed against the piano used to
+    // drop an octave (Ab2, A1, Bb2): 41 leaps past the octave in these takes, now 4.
+    let leaps = 0;
+    for (const id of ["basie", "evans", "miles", "monk", "bach"]) {
+      const p = PRESETS.find((x) => x.id === id)!;
+      for (const seed of [1, 2, 3, 4, 5, 6]) {
+        const score = takeOf(p, seed);
+        const beats = score.frame.meter.beats;
+        for (const m of score.members) {
+          const line = score.parts[m.id].filter((n) => n.art !== "ghost" && score.plan[Math.floor(n.start / beats + 1e-9)]?.roles[m.id] === "bass").sort((a, b) => a.start - b.start);
+          for (let i = 1; i < line.length; i++) {
+            if (line[i].start - line[i - 1].start <= 2 && Math.abs(line[i].pitch - line[i - 1].pitch) > 12) leaps++;
+          }
+        }
+      }
+    }
+    expect(leaps).toBeLessThanOrEqual(4);
+  });
+
   it("a comping chord isn't struck a half step against a note another player is still holding", () => {
     // Jobim: the piano anticipates G13 with its 7th (F4) and the guitar's own voicing strikes the
     // 13th (E4) under it; or the guitar comps against the soloing piano's left hand
