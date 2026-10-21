@@ -346,6 +346,8 @@ export function Stage() {
           {band.map((m, i) => {
             const inst = INSTRUMENTS[m.instrument];
             const bubble = bubbles[m.id];
+            // what a player says wins over the dots: in a live jam their next phrase is nearly always
+            // being thought up, which would otherwise hide every line they say while they play
             const isThinking = thinking.has(m.id);
             const isMuted = muted.includes(m.id);
             const row = Math.floor(i / perRow);
@@ -363,11 +365,11 @@ export function Stage() {
                 {(bubble || isThinking) && (
                   <div
                     // a new line is a new bubble: it pops in rather than swapping its words in place
-                    key={bubble && !isThinking ? `say:${bubble}` : "thinking"}
+                    key={bubble ? `say:${bubble}` : "thinking"}
                     className={`bubble absolute z-10 ${fit.right ? "bubble-right right-xs" : "left-xs"} w-max px-s py-xs text-m`}
                     style={{ bottom: spriteW * 1.04, maxWidth: fit.maxWidth }}
                   >
-                    {bubble && !isThinking ? bubble : <span className="thinking-dots" aria-label={`${m.name} is thinking`}><i>.</i><i>.</i><i>.</i></span>}
+                    {bubble ? bubble : <span className="thinking-dots" aria-label={`${m.name} is thinking`}><i>.</i><i>.</i><i>.</i></span>}
                   </div>
                 )}
                 <div className={`transition-opacity duration-(--motion-large-duration) ease-small ${isMuted ? "opacity-40 grayscale-[0.6]" : ""}`}>
