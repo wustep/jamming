@@ -745,7 +745,12 @@ export function runLine(ctx: BarCtx, opts: LineOpts = {}): NoteEvent[] {
   return out;
 }
 
-/** Baroque spinning-out: a whole bar of 16ths straight up or down the scale, landing on a chord tone. */
+/**
+ * Baroque spinning-out: a whole bar of 16ths up or down the scale, landing on a chord tone. It
+ * turns back once it has gone an octave, so the bar arches and ends near where it began: run
+ * straight up for a whole bar it climbed two octaves to the instrument's ceiling, and the next
+ * bar's figure fell back two octaves to start.
+ */
 function spinOut(ctx: BarCtx, opts: LineOpts = {}): NoteEvent[] {
   const step = 0.25;
   const featured = ctx.role === "solo" || ctx.role === "lead";
@@ -756,12 +761,17 @@ function spinOut(ctx: BarCtx, opts: LineOpts = {}): NoteEvent[] {
   let dir: 1 | -1 = hi - p >= p - lo ? 1 : -1;
   const vel = velFor(ctx, 0.8) * (opts.vel ?? 1);
   const out: NoteEvent[] = [];
+  let from = p;
+  let turned = false;
   for (let i = 0; i < n; i++) {
     const t = i * step;
     const h = harmAt(ctx, t);
-    if (i === 0) p = nearestIn(p, h.tones);
+    if (i === 0) from = p = nearestIn(p, h.tones);
     else {
-      if (p + dir * 2 > hi || p + dir * 2 < lo) dir = (-dir) as 1 | -1;
+      if (p + dir * 2 > hi || p + dir * 2 < lo || (!turned && Math.abs(p - from) >= 12)) {
+        dir = (-dir) as 1 | -1;
+        turned = true;
+      }
       p = stepIn(p, dir, h.scale);
     }
     // beat notes that land on an avoid note slip to the neighbouring chord tone
@@ -772,6 +782,9 @@ function spinOut(ctx: BarCtx, opts: LineOpts = {}): NoteEvent[] {
   const last = out[out.length - 1];
   const hl = harmAt(ctx, last.start);
   if (!hl.tones.includes(mod(last.pitch, 12))) last.pitch = nearestIn(last.pitch, hl.tones, dir);
+  // the arrival moves on from the note before it rather than striking it again
+  const before = out[out.length - 2];
+  if (before && last.pitch === before.pitch) last.pitch = nearestIn(last.pitch + dir, hl.tones, dir, 6);
   ctx.mem.phrase = null;
   ctx.mem.lastPitch = last.pitch;
   return out;

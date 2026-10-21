@@ -4,11 +4,12 @@ import { DRUM, INSTRUMENTS, defaultMembers } from "./instruments";
 import { defaultSettings, generateLocal } from "./local";
 import { parseDrumGrid, parseNotes } from "./notation";
 import { shapePhrase } from "./context";
+import { PRESETS } from "./presets";
 import { playableKit } from "./patterns/drums";
 import { STANDARDS, melodyBar } from "./standards";
 import { STYLES, STYLE_LIST, swingAt } from "./styles";
 import { homeOf } from "./ensemble";
-import { fitOctave, holdable } from "./harmony";
+import { contextScale, fitOctave, holdable } from "./harmony";
 import { harmonyOf, topLine } from "./realize";
 import { chordPcs, keyScale as keyScaleOf, mod, parseChord, parsePitch } from "./theory";
 import type { Member, StyleId } from "./types";
@@ -1245,6 +1246,42 @@ describe("baroque prelude", () => {
   });
   it("holds the bass itself when nobody else does", () => {
     expect(lowPreludeNotes(band.filter((m) => m.instrument !== "bass")).length).toBeGreaterThan(0);
+  });
+});
+
+describe("baroque runs", () => {
+  it("V in a minor key takes the key's notes: A in D minor is A Bb C# D E F G", () => {
+    const dMinor = { tonic: "D", mode: "minor" as const };
+    const PHRYG_DOM = [0, 1, 4, 5, 7, 8, 10];
+    expect(contextScale(parseChord("A"), parseChord("Dm"), dMinor, "baroque")).toEqual(PHRYG_DOM);
+    expect(contextScale(parseChord("A"), parseChord("Gm"), dMinor, "baroque")).toEqual(PHRYG_DOM);
+    expect(contextScale(parseChord("A7"), parseChord("Bb"), dMinor, "swing")).toEqual(PHRYG_DOM);
+    // E going to Am in C major borrows A minor's; V of a major key stays itself
+    expect(contextScale(parseChord("E"), parseChord("Am"), { tonic: "C", mode: "major" }, "pop")).toEqual(PHRYG_DOM);
+    expect(contextScale(parseChord("A"), parseChord("D"), { tonic: "D", mode: "major" }, "baroque")).toEqual([0, 2, 4, 5, 7, 9, 10]);
+  });
+
+  it("a bar of 16ths turns after an octave and ends near where it began", () => {
+    // Bach's runs climbed two octaves to the violin's ceiling (G4 to G6, G6 struck twice) and the
+    // next bar fell back two octaves
+    const bach = PRESETS.find((p) => p.id === "bach")!;
+    const members: Member[] = bach.band.map((b) => ({ id: b.animal, animal: b.animal, name: b.animal, instrument: b.instrument }));
+    let runs = 0;
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      const { score } = generateLocal({ ...defaultSettings(members), style: bach.style, feel: bach.feel, harmony: bach.harmony, preset: bach.id, key: bach.key, leaderId: members[0].id, soloists: bach.soloists, seed, bars: 32 }, members);
+      for (const bp of score.plan) {
+        for (const m of members) {
+          if (!bp.directives?.[m.id]?.startsWith("@line run")) continue;
+          const ps = score.parts[m.id].filter((n) => Math.floor(n.start / 4 + 1e-9) === bp.index).map((n) => n.pitch);
+          if (ps.length < 12) continue;
+          runs++;
+          expect(Math.max(...ps) - Math.min(...ps), `seed ${seed} bar ${bp.index + 1}`).toBeLessThanOrEqual(17); // an octave, and the arrival a fourth past where it began
+          expect(Math.abs(ps[ps.length - 1] - ps[0]), `seed ${seed} bar ${bp.index + 1}`).toBeLessThanOrEqual(9);
+          expect(ps[ps.length - 1]).not.toBe(ps[ps.length - 2]);
+        }
+      }
+    }
+    expect(runs).toBeGreaterThan(5);
   });
 });
 
