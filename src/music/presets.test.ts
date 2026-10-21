@@ -6,6 +6,7 @@ import { ANIMALS, INSTRUMENTS } from "./instruments";
 import { defaultSettings, generateLocal } from "./local";
 import { FEELS } from "./playing";
 import { PRESET_GROUPS, PRESETS, searchPresets, type PresetId } from "./presets";
+import { harmonyOf } from "./realize";
 import { STYLES } from "./styles";
 import { chordPcs, mod, parseChord, pcOf } from "./theory";
 import type { Member, NoteEvent, Score } from "./types";
@@ -336,6 +337,34 @@ describe("artist presets", () => {
       }
     }
     expect(leaps).toBeLessThanOrEqual(4);
+  });
+
+  it("a bossa line leans on half steps now and then, not on every beat", () => {
+    // every pair of beat notes a step apart had a chromatic note between them: Laufey's lines
+    // crawled (F#, G#, G, F, F#, F, E over Gmaj9) with 31 of 1000 notes outside chord and key
+    for (const [id, most] of [["laufey", 0.012], ["jobim", 0.015]] as const) {
+      const p = PRESETS.find((x) => x.id === id)!;
+      let n = 0;
+      let out = 0;
+      for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+        const score = takeOf(p, seed);
+        const H = harmonyOf(score.frame, score.plan);
+        const beats = score.frame.meter.beats;
+        const tonic = pcOf(score.frame.key.tonic);
+        const key = (score.frame.key.mode === "minor" ? [0, 2, 3, 5, 7, 8, 9, 10, 11] : [0, 2, 4, 5, 7, 9, 11]).map((i) => mod(tonic + i, 12));
+        for (const m of score.members) {
+          for (const x of score.parts[m.id]) {
+            const role = score.plan[Math.floor(x.start / beats + 1e-9)]?.roles[m.id];
+            if ((role !== "solo" && role !== "lead") || x.written) continue;
+            const h = H.at(x.start);
+            const pc = mod(x.pitch, 12);
+            n++;
+            if (!h.scale.includes(pc) && !h.blue.includes(pc) && !key.includes(pc)) out++;
+          }
+        }
+      }
+      expect(out / n, `${id}: ${out} of ${n}`).toBeLessThan(most);
+    }
   });
 
   it("a comping chord isn't struck a half step against a note another player is still holding", () => {

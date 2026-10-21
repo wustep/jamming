@@ -547,9 +547,10 @@ export function planPhrase(
         else if (steps - 1 === remaining) next = stepIn(cur, dir, pcs);
         else if (steps === 0) next = stepIn(cur, rng.chance(0.5) ? 1 : -1, pcs); // neighbor note
         else if (remaining === 1) {
-          // one note to spare before the goal: a chromatic approach (in styles that use them),
+          // one note to spare before the goal: a chromatic approach (as often as the style uses
+          // them: in a dense bossa line, every one of these made the line crawl by half steps),
           // otherwise the goal's scale neighbour from the far side — a little turn into it
-          if (ps.chromatic >= 0.1) {
+          if (rng.chance(Math.min(1, ps.chromatic * 2))) {
             next = goal + (cur > goal ? 1 : -1);
             if (next === cur) next = goal + (cur > goal ? -1 : 1);
           } else {
