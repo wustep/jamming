@@ -253,7 +253,7 @@ export function fitOctave<T extends { pitch: number }>(notes: T[], lo: number, h
     const s = k * 12;
     const out = Math.max(0, lo - (min + s)) + Math.max(0, max + s - hi);
     const ref = near ?? (lo + hi) / 2;
-    const cost = out * 10 + Math.abs(mid + s - ref) * 0.5 + (near !== undefined && near !== null ? Math.abs(ps[0] + s - near) * 0.5 : 0);
+    const cost = out * 25 + Math.abs(mid + s - ref) * 0.5 + (near !== undefined && near !== null ? Math.abs(ps[0] + s - near) * 0.5 : 0);
     if (cost < bestCost) {
       bestCost = cost;
       best = s;

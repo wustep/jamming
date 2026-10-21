@@ -8,7 +8,7 @@ import { playableKit } from "./patterns/drums";
 import { STANDARDS, melodyBar } from "./standards";
 import { STYLES, STYLE_LIST, swingAt } from "./styles";
 import { homeOf } from "./ensemble";
-import { holdable } from "./harmony";
+import { fitOctave, holdable } from "./harmony";
 import { harmonyOf, topLine } from "./realize";
 import { chordPcs, keyScale as keyScaleOf, mod, parseChord, parsePitch } from "./theory";
 import type { Member, StyleId } from "./types";
@@ -204,6 +204,15 @@ describe("cello", () => {
 });
 
 describe("melodic hygiene", () => {
+  it("a figure that pokes over its ceiling moves down an octave whole, not one note of it", () => {
+    // New Orleans: the trumpet's riff C5 Eb5 C5 under a ceiling of D5 came out C5 Eb4 C5
+    const riff = [72, 75, 72].map((pitch) => ({ pitch }));
+    expect(fitOctave(riff, 58, 74, 72).map((n) => n.pitch)).toEqual([60, 63, 60]);
+    // still nearest to where the line was when it fits as it is
+    expect(fitOctave(riff, 58, 80, 60).map((n) => n.pitch)).toEqual([60, 63, 60]);
+    expect(fitOctave(riff, 58, 80, 74).map((n) => n.pitch)).toEqual([72, 75, 72]);
+  });
+
   const band: Member[] = [...defaultMembers(), { id: "sheep", animal: "sheep", name: "Olive", instrument: "cello" }];
   it("restates the head motif in one register (no octave jumps between statements)", () => {
     for (const style of STYLE_LIST) {
