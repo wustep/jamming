@@ -84,8 +84,15 @@ export function Arranger() {
       {arranged && (
         <p className="mt-xxs flex items-center gap-xxs text-xs text-ink-soft" role="status">
           <span className="min-w-0 flex-1 truncate" title={[arranged.note && `“${arranged.note}”`, howRead(arranged), arranged.repairs.length > 0 && arranged.source === "model" && `mended: ${arranged.repairs.join("; ")}`].filter(Boolean).join("\n")}>
-            {arranged.note && <span className="italic text-ink">“{arranged.note}” · </span>}
-            {howReadShort(arranged)}
+            {arranged.missed ? (
+              // nothing was read, so nothing changed: say what it listens for
+              <span className="text-ink">Try a style, an artist or a tune</span>
+            ) : (
+              <>
+                {arranged.note && <span className="italic text-ink">“{arranged.note}” · </span>}
+                {howReadShort(arranged)}
+              </>
+            )}
           </span>
           <button
             type="button"

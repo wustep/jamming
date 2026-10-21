@@ -14,7 +14,7 @@ import { notesHintFromScore, troopAudio } from "@/audio/engine";
 import { DEFAULT_SOUNDS, readSounds, type Sounds } from "@/audio/packs";
 import { defaultStandardLength, snapLength } from "@/music/form";
 import { ANIMALS, defaultMembers, INSTRUMENTS } from "@/music/instruments";
-import { describeBrief, resolveBrief } from "@/music/brief";
+import { briefIsEmpty, describeBrief, resolveBrief } from "@/music/brief";
 import { defaultSettings, generateLocal } from "@/music/local";
 import { getStandard } from "@/music/standards";
 import { STYLES, swingAt } from "@/music/styles";
@@ -42,6 +42,8 @@ export interface Arranged {
   /** What was mended in the model's reply, or why it wasn't used. */
   repairs: string[];
   note: string | null;
+  /** Nothing in the sentence could be read as a setting, so nothing changed. */
+  missed?: boolean;
 }
 
 interface TroopState {
@@ -497,6 +499,12 @@ export const useTroop = create<TroopState>((set, get) => {
         const r = await arrange(text, { runId, access: keyAccess(st), apiKey: st.apiKey, anthropicKey: st.anthropicKey, signal: ctl.signal });
         if (ctl.signal.aborted) return;
         dbg.step(runId, `${r.source === "model" ? "the model" : r.source === "fallback" ? "keywords (the model's answer couldn't be used)" : "keywords"}: ${describeBrief(r.brief)}`);
+        // nothing to go on: say so and leave the band as it is, rather than replay it as if asked
+        if (briefIsEmpty(r.brief)) {
+          set({ arranging: false, arranged: { text, source: r.source, model: r.model, usage: r.usage, repairs: r.repairs, note: null, missed: true } });
+          dbg.endRun(runId, "done");
+          return;
+        }
         const a = resolveBrief(r.brief, get());
         const settings = reconcile(a.settings, a.members);
         set((s) => ({

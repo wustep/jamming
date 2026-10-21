@@ -818,6 +818,13 @@ function castPreset(presetBand: { animal: AnimalId; instrument: InstrumentId }[]
 }
 
 /** What the brief named, as words for the debug log ("preset monk · pace slow · add drums"). */
+/** Nothing in it to act on: no setting, no band change (a model's note alone doesn't count). */
+export function briefIsEmpty(b: Brief): boolean {
+  return describeBrief(b) === NOTHING;
+}
+
+const NOTHING = "nothing it recognised";
+
 export function describeBrief(b: Brief): string {
   const parts: string[] = [];
   for (const k of ["preset", "style", "standard", "tonic", "mode", "tempo", "pace", "meter", "room", "feel", "bars", "choruses"] as const) {
@@ -826,5 +833,5 @@ export function describeBrief(b: Brief): string {
   if (b.band) parts.push(`band ${b.band.join("+")}`);
   if (b.add.length) parts.push(`add ${b.add.join("+")}`);
   if (b.drop.length) parts.push(`drop ${b.drop.join("+")}`);
-  return parts.join(" · ") || "nothing it recognised";
+  return parts.join(" · ") || NOTHING;
 }
