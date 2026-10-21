@@ -522,9 +522,13 @@ function tumbao(ctx: BarCtx): NoteEvent[] {
   if (ctx.firstBar || ctx.sectionStart) out.push({ pitch: r, start: 0, dur: 1.5, vel });
   const h2 = harmAt(ctx, 1.5);
   const r2 = rootIn(ctx, h2, r);
-  const fifth = fold(r2 + fifthOf(h2), ...bassRange(ctx));
+  const next = ctx.lastBar ? r2 : rootIn(ctx, harmNext(ctx), r2);
+  // the fifth above or below, whichever sits between the two roots (C3 then G1 is a twelfth down)
+  const [lo, hi] = bassRange(ctx);
+  const fifth = [r2 + fifthOf(h2), r2 + fifthOf(h2) - 12]
+    .filter((p) => p >= lo && p <= hi)
+    .reduce((a, b) => (Math.abs(b - r2) + Math.abs(b - next) < Math.abs(a - r2) + Math.abs(a - next) ? b : a), fold(r2 + fifthOf(h2), lo, hi));
   out.push({ pitch: fifth, start: 1.5, dur: 1.5, vel: vel * 0.95 });
-  const next = ctx.lastBar ? r2 : rootIn(ctx, harmNext(ctx), fifth);
   out.push({ pitch: next, start: 3, dur: 1, vel: vel * 1.05, art: "accent" });
   ctx.mem.lastPitch = next;
   return out;

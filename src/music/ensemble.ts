@@ -106,6 +106,9 @@ export function ensemble(o: EnsembleInput): EnsembleFix[] {
           const stepTo = joined && Math.abs(nxt!.pitch - n.pitch) <= 2 && holdable(homeOf(harmony, nxt!), mod(nxt!.pitch, 12), style);
           const inScale = home.scale.includes(pc) || home.blue.includes(pc);
           if (stepTo && n.dur <= 1.05 + EPS && (!strong || inScale || Math.abs(nxt!.pitch - n.pitch) === 1)) ok = true;
+          // an anticipation: the next chord's note, struck a beat or less before it arrives (a tumbao's 4)
+          const change = harmony.spans.find((s) => s.start > n.start + EPS && Math.abs(s.start - (n.start + n.dur)) < 0.06);
+          if (change && n.dur <= 1.05 + EPS && holdable(change, pc, style)) ok = true;
         }
         if (!ok && home.scale.includes(pc) && !home.avoid.includes(pc) && n.dur < 1.5 && !strong) ok = true;
         if (!ok) {
@@ -312,8 +315,11 @@ export function ensemble(o: EnsembleInput): EnsembleFix[] {
       const keepsLine = (p: number) => (prev === null || Math.abs(p - prev) <= 12) && (next === null || Math.abs(next - p) <= 12);
       const fits = (p: number) => p >= inst.range[0] && p <= inst.range[1] && !rub(sounding, p) && keepsLine(p);
       let moved = [n.pitch - 12, n.pitch + 12].find(fits);
-      if (moved === undefined) {
-        const home = homeOf(harmony, n);
+      const home = homeOf(harmony, n);
+      // the next chord's root struck early (a tumbao's 4, a push) is that chord's: it keeps its name
+      const after = harmony.at(n.start + n.dur + EPS);
+      const anticipates = home !== harmony.at(n.start) || (after !== home && mod(n.pitch, 12) === after.chord.bass);
+      if (moved === undefined && !anticipates) {
         // a step to a chord tone, or a half step either side of where the line is going
         const near = [-1, 1, -2, 2].map((d) => n.pitch + d).filter((p) => p !== prev && p !== next && (holdable(home, mod(p, 12), style) || (next !== null && Math.abs(next - p) === 1)));
         moved = near.find(fits);

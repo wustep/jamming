@@ -144,6 +144,14 @@ describe("artist presets", () => {
         const on = (bar: number, pos: number) => s.parts.frog.some((n) => barOf(s, n) === bar && posOf(s, n) === pos);
         expect(share(bars.map((b) => on(b, 1.5) && on(b, 3)))).toBeGreaterThan(0.9);
         expect(share(bars.map((b) => !on(b, 0)))).toBeGreaterThan(0.6);
+        // the 4 is the next bar's root, a beat early (not bent onto the chord it's leaving), and
+        // the line around it stays inside an octave
+        for (const b of bars.filter((b) => s.frame.chords[b + 1]?.[0].beat === 0)) {
+          const four = s.parts.frog.find((n) => barOf(s, n) === b && posOf(s, n) === 3);
+          if (four) expect(mod(four.pitch, 12), `bar ${b + 1}`).toBe(parseChord(s.frame.chords[b + 1][0].symbol).bass);
+        }
+        const line = s.parts.frog.filter((n) => n.art !== "ghost").sort((x, y) => x.start - y.start);
+        expect(line.every((n, i) => i === 0 || Math.abs(n.pitch - line[i - 1].pitch) <= 12)).toBe(true);
         const rim = s.parts.owl.filter((n) => n.pitch === 37);
         const sides = new Set(s.plan.map((_, b) => rim.filter((n) => barOf(s, n) === b).length));
         expect([...sides].filter((k) => k === 2 || k === 3).length).toBe(2);
