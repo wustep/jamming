@@ -13,6 +13,7 @@ import { Stage } from "@/components/Stage";
 import { SavedJams, Takes, Transport } from "@/components/Transport";
 import { RoughBox, Squiggle } from "@/components/ui/rough";
 import { useScrollMore } from "@/components/ui/scrollMore";
+import { useWakeLock } from "@/components/ui/wakeLock";
 import { SheetMusic, type SheetStats } from "@/sheet/SheetMusic";
 import { useDebug } from "@/state/debug";
 import { usePlayAlong } from "@/state/playalong";
@@ -30,6 +31,7 @@ export function Home() {
   const [showSheet, setShowSheet] = useState(true);
   const panelRef = useRef<HTMLDivElement>(null);
   useScrollMore(panelRef);
+  useWakeLock(playing);
 
   useEffect(() => {
     hydrate();
