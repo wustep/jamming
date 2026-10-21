@@ -97,6 +97,8 @@ const START_DELAY_SEC = 0.12;
 const READY_WAIT_MS = 8000;
 /** How long to wait for a suspended AudioContext to resume (browsers leave the promise pending without a gesture). */
 const RESUME_WAIT_MS = 1500;
+/** +4 dB after the bus compressor (the limiter adds ~2.3 dB of its own make-up): see ensureContext. */
+const MAKEUP_GAIN = 1.6;
 const END_TAIL_SEC = 0.8;
 const PAN_WIDTH = 0.65;
 
@@ -183,7 +185,8 @@ const RECORD_TYPES = ["audio/webm;codecs=opus", "audio/mp4;codecs=mp4a.40.2", "a
 export class TroopAudio {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
-  private compressor: DynamicsCompressorNode | null = null;
+  /** The end of the mix, what the speakers get: the level meter and recordings listen here. */
+  private output: DynamicsCompressorNode | null = null;
   private analyser: AnalyserNode | null = null;
   private levelBuf: Float32Array<ArrayBuffer> | null = null;
   private reverb: ReturnType<typeof Reverb> | null = null;
@@ -234,17 +237,30 @@ export class TroopAudio {
     compressor.ratio.value = 3;
     compressor.attack.value = 0.005;
     compressor.release.value = 0.2;
-    compressor.connect(ctx.destination);
+    // The packs are level-matched low (~−31 dB RMS each), so a whole band came out at −21 to
+    // −28 LUFS with peaks 6–14 dB under full scale: quieter than anything else on a phone.
+    // Make-up gain brings it to about −15 to −22 LUFS, and a fast limiter (the compressor's own
+    // 6 ms look-ahead, 20:1 from −4 dB; Web Audio adds make-up of its own) holds a full band's
+    // loudest hits near −1.5 dBFS.
+    const loudness = ctx.createGain();
+    loudness.gain.value = MAKEUP_GAIN;
+    const limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -4;
+    limiter.knee.value = 0;
+    limiter.ratio.value = 20;
+    limiter.attack.value = 0.001;
+    limiter.release.value = 0.08;
+    compressor.connect(loudness).connect(limiter).connect(ctx.destination);
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 1024;
-    compressor.connect(analyser);
+    limiter.connect(analyser);
     this.analyser = analyser;
     this.levelBuf = new Float32Array(analyser.fftSize);
     const master = ctx.createGain();
     master.gain.value = this.masterVolume;
     master.connect(compressor);
     this.master = master;
-    this.compressor = compressor;
+    this.output = limiter;
     try {
       const reverb = Reverb(ctx);
       reverb.connect(master);
@@ -851,13 +867,13 @@ export class TroopAudio {
   }
 
   /**
-   * Record what the band plays, from the end of the mix (after the compressor, so the file
+   * Record what the band plays, from the end of the mix (after the limiter, so the file
    * sounds like the speakers). Null where the browser can't record audio. `stop` resolves with
    * the file; `cancel` throws it away.
    */
   startRecording(): { mimeType: string; stop(): Promise<Blob | null>; cancel(): void } | null {
     const ctx = this.ctx;
-    const out = this.compressor;
+    const out = this.output;
     if (!ctx || !out || typeof MediaRecorder === "undefined") return null;
     const mimeType = RECORD_TYPES.find((t) => MediaRecorder.isTypeSupported(t));
     if (!mimeType) return null;
