@@ -246,6 +246,12 @@ export class TroopAudio {
     playThroughSilentSwitch();
     const ctx = new AudioContext({ latencyHint: "interactive" });
     this.ctx = ctx;
+    // A phone suspends audio (iOS "interrupts" it) when the app goes to the background or a call
+    // comes in. The clock stops with it, so the take stops too rather than sitting frozen and
+    // silent behind a Stop button; Play starts it again (and resumes the audio).
+    ctx.addEventListener("statechange", () => {
+      if (this.ctx === ctx && ctx.state !== "running" && this.state === "playing") this.halt(true);
+    });
     const compressor = ctx.createDynamicsCompressor();
     compressor.threshold.value = -10;
     compressor.knee.value = 12;
