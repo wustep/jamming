@@ -340,7 +340,7 @@ export function ControlPanel() {
         <div>
           <Label>Key</Label>
           <div className="flex gap-xxs">
-            <select className="sketch-select min-w-0 flex-1" value={s.key.tonic} onChange={(e) => set({ key: { ...s.key, tonic: e.target.value } })} aria-label="Key">
+            <select className="sketch-select min-w-0 flex-1" value={s.key.tonic} onChange={(e) => set({ key: { ...s.key, tonic: e.target.value }, keyChosen: true })} aria-label="Key">
               {TONICS.map((t) => (
                 <option key={t}>{t}</option>
               ))}
@@ -348,7 +348,7 @@ export function ControlPanel() {
             <select
               className="sketch-select min-w-0 flex-1"
               value={s.key.mode}
-              onChange={(e) => set({ key: { ...s.key, mode: e.target.value as "major" | "minor" } })}
+              onChange={(e) => set({ key: { ...s.key, mode: e.target.value as "major" | "minor" }, keyChosen: true })}
               aria-label="Mode"
               disabled={!!s.standard}
               title={s.standard ? "A standard keeps its own mode; pick any key for it" : undefined}

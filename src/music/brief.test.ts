@@ -162,11 +162,12 @@ describe("repairBrief: checking a model's reply", () => {
     expect(out.repairs.join("\n")).toMatch(/tempo: 900 clamped to 300/);
   });
 
-  it("treats 'none' and unknown tunes as an original chart", () => {
-    expect(repairBrief({ style: "swing", standard: "none" })!.brief.standard).toBeNull();
+  it("reads 'none' and unknown tunes as no tune named, and 'original' as something new", () => {
+    expect(repairBrief({ style: "swing", standard: "none" })!.brief).toMatchObject({ standard: null, original: false });
     const out = repairBrief({ style: "swing", standard: "Stairway to Heaven" })!;
-    expect(out.brief.standard).toBeNull();
+    expect(out.brief).toMatchObject({ standard: null, original: false });
     expect(out.repairs[0]).toMatch(/standard/);
+    expect(repairBrief({ style: "swing", standard: "original" })!.brief).toMatchObject({ standard: null, original: true });
   });
 
   it("accepts a flat tonic/mode as well as a key object", () => {
@@ -260,6 +261,76 @@ describe("resolveBrief: from a brief to settings", () => {
   it("is deterministic", () => {
     const b = parseBrief("sunny bossa with flute in F, club");
     expect(resolveBrief(b, cur())).toEqual(resolveBrief(b, cur()));
+  });
+});
+
+describe("a tune and a style combine, with or without a key", () => {
+  // what's on stage: Fly Me to the Moon, in its own swing
+  const onFlyMe = () => {
+    const c = cur();
+    return { ...c, settings: resolveBrief(brief({ standard: "fly-me" }), c).settings };
+  };
+
+  it("hears a tune and an artist together, and plays the tune at the artist's pace", () => {
+    const einaudi = getPreset("einaudi")!;
+    const fly = getStandard("fly-me")!;
+    for (const ask of ["Fly Me to the Moon like Ludovico Einaudi", "fly me to the moon in the style of einaudi", "Einaudi plays Fly Me to the Moon"]) {
+      const b = parseBrief(ask);
+      expect(b, ask).toMatchObject({ standard: "fly-me", preset: "einaudi" });
+      const { settings: s, members } = resolveBrief(b, cur());
+      expect(s, ask).toMatchObject({ standard: "fly-me", preset: "einaudi", style: einaudi.style, feel: einaudi.feel, tempo: einaudi.tempo, key: fly.key, meter: { beats: fly.meter } });
+      expect(members.map((m) => m.instrument)).toEqual(einaudi.band.map((x) => x.instrument));
+    }
+  });
+
+  it("plays a tune in a style named with it, at that style's pace", () => {
+    expect(resolveBrief(parseBrief("Autumn Leaves as a bossa"), cur()).settings).toMatchObject({ standard: "autumn", style: "bossa", key: getStandard("autumn")!.key });
+    const ipanema = resolveBrief(parseBrief("the girl from ipanema as baroque"), cur()).settings;
+    expect(ipanema).toMatchObject({ standard: "girl-from-ipanema", style: "baroque", tempo: STYLES.baroque.tempo.default });
+    expect(resolveBrief(parseBrief("summertime like bach"), cur()).settings).toMatchObject({ standard: "summertime", preset: "bach", style: "baroque" });
+    expect(resolveBrief(parseBrief("jingle bells like basie"), cur()).settings).toMatchObject({ standard: "jingle-bells", preset: "basie", style: "swing" });
+  });
+
+  it("a new artist or style later plays the same tune, in the same key", () => {
+    const on = onFlyMe();
+    expect(resolveBrief(parseBrief("now like Einaudi"), on).settings).toMatchObject({ standard: "fly-me", preset: "einaudi", key: on.settings.key });
+    expect(resolveBrief(parseBrief("make it a bossa"), on).settings).toMatchObject({ standard: "fly-me", style: "bossa", key: on.settings.key });
+    // the same from a model's reply, which says null for the tune when the ask doesn't name one
+    const model = repairBrief({ preset: "einaudi", style: "ambient", standard: null, key: { tonic: "C", mode: "major" }, tempo: 70, meter: 4, band: null, room: null, feel: null, bars: null, note: "Einaudi's Fly Me" })!;
+    expect(resolveBrief(model.brief, on).settings).toMatchObject({ standard: "fly-me", preset: "einaudi", tempo: 70 });
+  });
+
+  it("a new tune keeps the artist or the style that was picked; with neither, it brings its own", () => {
+    const withEinaudi = { ...cur(), settings: resolveBrief(brief({ preset: "einaudi" }), cur()).settings };
+    expect(resolveBrief(parseBrief("play Fly Me to the Moon"), withEinaudi).settings).toMatchObject({ standard: "fly-me", preset: "einaudi", style: getPreset("einaudi")!.style });
+    const inFunk = { ...cur(), settings: resolveBrief(brief({ style: "funk" }), cur()).settings };
+    expect(resolveBrief(parseBrief("autumn leaves"), inFunk).settings).toMatchObject({ standard: "autumn", style: "funk" });
+    // nothing picked yet: Girl from Ipanema comes as a bossa
+    expect(resolveBrief(parseBrief("the girl from ipanema"), cur()).settings).toMatchObject({ standard: "girl-from-ipanema", style: "bossa" });
+  });
+
+  it("drops the tune only when something new is asked for", () => {
+    const on = onFlyMe();
+    for (const ask of ["something new, in funk", "an original bossa", "make one up"]) {
+      expect(parseBrief(ask).original, ask).toBe(true);
+      expect(resolveBrief(parseBrief(ask), on).settings.standard, ask).toBeNull();
+    }
+    expect(parseBrief("fly me to the moon in its original key").original).toBe(false);
+  });
+
+  it("combines a tune with a tempo, a band and a key", () => {
+    expect(resolveBrief(parseBrief("giant steps slow"), cur()).settings.tempo).toBeLessThan(getStandard("giant-steps")!.tempo);
+    expect(resolveBrief(parseBrief("autumn leaves in D minor"), cur()).settings).toMatchObject({ standard: "autumn", key: { tonic: "D", mode: "minor" } });
+    const strings = resolveBrief(parseBrief("fly me to the moon with strings and a flute"), cur());
+    expect(strings.settings.standard).toBe("fly-me");
+    expect(strings.members.map((m) => m.instrument)).toEqual(expect.arrayContaining(["flute", "pad"]));
+    expect(resolveBrief(parseBrief("autumn leaves with vibes like basie"), cur()).members.map((m) => m.instrument)).toContain("vibes");
+  });
+
+  it("a key that was asked for stays through a new style or artist", () => {
+    const inEb = { ...cur(), settings: resolveBrief(parseBrief("in Eb minor"), cur()).settings };
+    expect(resolveBrief(parseBrief("bossa"), inEb).settings.key).toEqual({ tonic: "Eb", mode: "minor" });
+    expect(resolveBrief(parseBrief("like chopin"), inEb).settings.key).toEqual({ tonic: "Eb", mode: "minor" });
   });
 });
 

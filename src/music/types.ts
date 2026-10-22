@@ -207,6 +207,13 @@ export interface TroopSettings {
   harmony?: BookId;
   /** The artist preset these settings came from, if any (presets.ts). */
   preset?: PresetId;
+  /**
+   * The style was picked (a style, an artist, or asked for in words): a new tune is played in it.
+   * Until then a tune comes in its own style (Girl from Ipanema as a bossa).
+   */
+  styleChosen?: boolean;
+  /** The key was picked: a new style or artist keeps it rather than bringing its own. */
+  keyChosen?: boolean;
 }
 
 export type SwingFeel = "light" | "medium" | "hard";

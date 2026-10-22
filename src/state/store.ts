@@ -478,9 +478,9 @@ export const useTroop = create<TroopState>((set, get) => {
     setStyle(style) {
       const s = STYLES[style];
       const std = getStandard(get().settings.standard);
-      // a style of your own: the preset's feel and changes go with it
-      const patch: Partial<TroopSettings> = { style, tempo: s.tempo.default, feel: undefined, harmony: undefined, preset: undefined };
-      if (!std) patch.key = { ...s.key };
+      // a style of your own: the preset's feel and changes go with it; the tune stays
+      const patch: Partial<TroopSettings> = { style, tempo: s.tempo.default, feel: undefined, harmony: undefined, preset: undefined, styleChosen: true };
+      if (!std && !get().settings.keyChosen) patch.key = { ...s.key };
       get().setSettings(patch);
     },
 
@@ -538,6 +538,9 @@ export const useTroop = create<TroopState>((set, get) => {
       if (!p) return;
       const members: Member[] = p.band.map((b) => ({ id: b.animal, animal: b.animal, name: ANIMALS[b.animal].name, instrument: b.instrument }));
       const cur = get().settings;
+      // the artist plays the tune that's up (Fly Me to the Moon like Einaudi): its changes, key
+      // and meter stay; the artist brings the style, the feel, the band, the pace and the room
+      const std = getStandard(cur.standard);
       const settings = reconcile(
         {
           ...cur,
@@ -545,11 +548,10 @@ export const useTroop = create<TroopState>((set, get) => {
           feel: p.feel,
           harmony: p.harmony,
           preset: p.id,
+          styleChosen: true,
           tempo: p.tempo,
-          key: { ...p.key },
-          meter: { beats: p.meter ?? 4 },
-          standard: null,
-          bars: cur.standard ? 32 : cur.bars,
+          key: std || cur.keyChosen ? cur.key : { ...p.key },
+          meter: { beats: std ? std.meter : (p.meter ?? 4) },
           swingFeel: undefined,
           leaderId: members[0].id,
           soloists: p.soloists.filter((a) => members.some((m) => m.id === a)),
@@ -563,18 +565,23 @@ export const useTroop = create<TroopState>((set, get) => {
 
     setStandard(id) {
       const std = getStandard(id);
+      const cur = get().settings;
       const patch: Partial<TroopSettings> = { standard: id };
       if (std) {
+        // a tune comes in its own key (a key picked before it was for the last chart)
         patch.key = { ...std.key };
+        patch.keyChosen = undefined;
         patch.meter = { beats: std.meter };
-        patch.style = std.style;
-        patch.tempo = std.tempo;
-        // a tune in another style is a style of your own: the preset's feel and changes go, as in
-        // setStyle (Laufey's bossa lilt has no place on Autumn Leaves; Basie's swing keeps it)
-        if (std.style !== get().settings.style) Object.assign(patch, { feel: undefined, harmony: undefined, preset: undefined });
+        // the artist or the style you picked plays it, at their pace; with neither, the tune
+        // comes in its own style and tempo
+        if (!cur.preset && !cur.styleChosen) {
+          patch.style = std.style;
+          patch.tempo = std.tempo;
+          if (std.style !== cur.style) Object.assign(patch, { feel: undefined, harmony: undefined, swingFeel: undefined });
+        }
         // a chorus for each soloist (the drummer's turn is a trading chorus)
-        const { settings, members } = get();
-        const soloists = settings.soloists.filter((sid) => members.some((m) => m.id === sid));
+        const { members } = get();
+        const soloists = cur.soloists.filter((sid) => members.some((m) => m.id === sid));
         patch.bars = defaultStandardLength(id, soloists.length);
       } else {
         patch.bars = 16;

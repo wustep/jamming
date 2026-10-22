@@ -35,7 +35,7 @@ export const BRIEF_SCHEMA: JSONSchema7 = {
   properties: {
     preset: nullable({ type: "string", enum: PRESETS.map((p) => p.id) }),
     style: { type: "string", enum: [...STYLE_LIST] },
-    standard: nullable({ type: "string", enum: STANDARDS.map((s) => s.id) }),
+    standard: nullable({ type: "string", enum: [...STANDARDS.map((s) => s.id), "original"] }),
     key: {
       type: "object",
       additionalProperties: false,
@@ -57,7 +57,8 @@ export const ARRANGER_SYSTEM = `You arrange jams for a band of cartoon animals. 
 Fields:
 - preset: an artist to play like (sets their feel, changes, band and room), or null. Use one when the sentence names or clearly evokes them.
 - style: the groove family.
-- standard: a tune to play (the band plays its changes, and its written melody when it has one), or null for an original chart. Only pick a tune the sentence names or clearly asks for.
+- standard: a tune to play (the band plays its changes, and its written melody when it has one); "original" when the sentence asks for something new (the band writes the changes); null when it says nothing about the tune (the band keeps playing the one it's on). Only pick a tune the sentence names or clearly asks for.
+- A tune and an artist or a style combine: "Fly Me to the Moon like Einaudi" is standard fly-me with preset einaudi; "Autumn Leaves as a bossa" is standard autumn with style bossa. The tune gives the changes, the melody, the key and the meter; the artist or style gives the groove, the feel, the band, the tempo and the room. Pick the tempo for the artist or style, not the tune.
 - key: tonic and mode. A standard keeps its own mode. Mood guides the mode (rain, night, sad: minor).
 - tempo: beats per minute, within 20 of the style's range below. "Slow" and "ballad" go below the bottom of the range; "fast" goes near the top.
 - meter: 3 for a waltz, else 4 (a standard keeps its own).

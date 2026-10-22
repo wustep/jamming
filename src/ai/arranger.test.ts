@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { PRESETS } from "@/music/presets";
 import { STANDARDS } from "@/music/standards";
+import { resolveBrief } from "@/music/brief";
+import { defaultMembers } from "@/music/instruments";
+import { defaultSettings } from "@/music/local";
 import { ARRANGER_SYSTEM, arrangerModel, BRIEF_SCHEMA, briefFromReply } from "./arranger";
 import { fakeModel } from "./mock";
 import { callCost, modelInfo } from "./models";
@@ -24,7 +27,8 @@ describe("arranger", () => {
     const props = BRIEF_SCHEMA.properties as Record<string, { anyOf?: { enum?: string[] }[] }>;
     expect(BRIEF_SCHEMA.required).toEqual(Object.keys(props));
     expect(props.preset.anyOf![0].enum).toHaveLength(PRESETS.length);
-    expect(props.standard.anyOf![0].enum).toHaveLength(STANDARDS.length);
+    // every tune, and "original" for something new (null keeps the tune that's up)
+    expect(props.standard.anyOf![0].enum).toHaveLength(STANDARDS.length + 1);
     for (const p of PRESETS) expect(ARRANGER_SYSTEM).toContain(`${p.id}: ${p.name}`);
   });
 
@@ -45,5 +49,17 @@ describe("arranger", () => {
     expect(out.brief).toMatchObject({ preset: "monk", tonic: "Bb", tempo: 40 });
     expect(out.brief.band).not.toContain("kazoo");
     expect(out.repairs.length).toBeGreaterThan(0);
+  });
+
+  it("tells the model a tune and an artist or a style combine, and a reply naming both plays both", () => {
+    expect(ARRANGER_SYSTEM).toMatch(/Fly Me to the Moon like Einaudi/);
+    const out = briefFromReply(JSON.stringify({ preset: "einaudi", style: "ambient", standard: "fly-me", key: { tonic: "C", mode: "major" }, tempo: 72, meter: 4, band: null, room: "hall", feel: null, bars: 64, note: "Einaudi's Fly Me" }))!;
+    const members = defaultMembers();
+    const { settings } = resolveBrief(out.brief, { settings: defaultSettings(members), members, sounds: { room: "club" } });
+    expect(settings).toMatchObject({ standard: "fly-me", preset: "einaudi", style: "ambient", tempo: 72 });
+    // the mock's reply names an artist and no tune: the tune that's up stays
+    const on = { settings: { ...defaultSettings(members), standard: "autumn" }, members, sounds: { room: "club" as const } };
+    const mock = briefFromReply(fakeModel({ system: ARRANGER_SYSTEM, prompt: 'The jam: "like Monk"' }))!;
+    expect(resolveBrief(mock.brief, on).settings).toMatchObject({ standard: "autumn", preset: "monk" });
   });
 });

@@ -18,8 +18,10 @@ export type Pace = "very slow" | "slow" | "medium" | "fast" | "very fast";
 export interface Brief {
   preset: PresetId | null;
   style: StyleId | null;
-  /** A tune from standards.ts; null is an original chart (the band writes the changes). */
+  /** A tune from standards.ts; null when none is named (the band keeps the one it's on). */
   standard: string | null;
+  /** An original chart asked for ("something new"): the band writes the changes, no tune. */
+  original: boolean;
   tonic: string | null;
   mode: KeySig["mode"] | null;
   tempo: number | null;
@@ -45,6 +47,7 @@ export const emptyBrief = (): Brief => ({
   preset: null,
   style: null,
   standard: null,
+  original: false,
   tonic: null,
   mode: null,
   tempo: null,
@@ -351,6 +354,8 @@ export function parseBrief(text: string): Brief {
       break;
     }
   }
+  // something new rather than a tune
+  if (!b.standard && /\b(an? )?(original(?! (key|tempo|version|style|changes|melody|feel))|new (tune|song|one|chart)|something new|own (tune|song)|make (one|it|something) up|no tune)\b/.test(t)) b.original = true;
   // "a blues" with no tune named: the session blues
   if (!b.standard && at(t, "blues") >= 0 && at(t, "rhythm and blues") < 0) {
     b.standard = "f-blues";
@@ -594,12 +599,13 @@ export function repairBrief(raw: unknown): { brief: Brief; repairs: string[] } |
   if (b.style && b.style !== raw.style) repairs.push(`style: read "${raw.style}" as ${b.style}`);
   if (!b.style) fix("style", raw.style, "not a style, dropped");
 
-  if (typeof raw.standard === "string" && raw.standard.trim() && !/^(none|null|free|original)$/i.test(raw.standard.trim())) {
+  if (typeof raw.standard === "string" && /^(free|original)$/i.test(raw.standard.trim())) b.original = true;
+  else if (typeof raw.standard === "string" && raw.standard.trim() && !/^(none|null)$/i.test(raw.standard.trim())) {
     const id = matchId(raw.standard, STANDARDS.map((s) => s.id), (sid) => [getStandard(sid)!.name, tuneName(getStandard(sid)!.name)]);
     if (id) {
       b.standard = id;
       if (id !== raw.standard) repairs.push(`standard: read "${raw.standard}" as ${id}`);
-    } else fix("standard", raw.standard, "not a tune we have, playing an original");
+    } else fix("standard", raw.standard, "not a tune we have, kept the one that's up");
   }
 
   const key = isObj(raw.key) ? raw.key : { tonic: raw.tonic, mode: raw.mode };
@@ -719,19 +725,26 @@ export const tempoRange = (style: StyleId): [number, number] => [STYLES[style].t
 /**
  * Turn a brief into settings, a band and a room, starting from what's on stage now. What the
  * brief names wins; then the artist's choice, the tune's, the style's; whatever nobody named
- * stays as it was (the band, most often). Pure, so the same brief always plays the same jam.
+ * stays as it was (the band, most often). The tune and the style are separate choices: a new
+ * style or artist plays the tune that's up, and a new tune is played in the artist or the style
+ * that was picked (in its own style only when none was). Pure, so the same brief always plays the
+ * same jam.
  */
 export function resolveBrief(brief: Brief, cur: { settings: TroopSettings; members: Member[]; sounds: Pick<Sounds, "room"> }): Arrangement {
   const preset = getPreset(brief.preset);
-  // naming nothing about the music ("faster, in a hall") keeps the tune, the style and the artist
-  const restyled = !!(brief.preset || brief.style || brief.feel || brief.standard);
+  const curPreset = getPreset(cur.settings.preset);
+  // a new style, artist or feel (asking only for a tune, or "faster, in a hall", keeps them)
+  const restyled = !!(brief.preset || brief.style || brief.feel);
   const newTune = getStandard(brief.standard);
-  const std = newTune ?? (restyled ? null : getStandard(cur.settings.standard));
-  const style: StyleId = brief.style ?? preset?.style ?? newTune?.style ?? (brief.feel && Object.hasOwn(STYLES, brief.feel) ? (brief.feel as StyleId) : cur.settings.style);
+  const std = newTune ?? (brief.original ? null : getStandard(cur.settings.standard));
+  // a tune on its own comes in its own style, unless an artist or a style was picked
+  const ownStyle = newTune && !restyled && !curPreset && !cur.settings.styleChosen ? newTune.style : null;
+  const style: StyleId = brief.style ?? preset?.style ?? (brief.feel && Object.hasOwn(STYLES, brief.feel) ? (brief.feel as StyleId) : null) ?? ownStyle ?? cur.settings.style;
+  const sameStyle = style === cur.settings.style;
   // an artist in someone else's style lends their feel and changes, not their name
-  const keepPreset = !restyled ? getPreset(cur.settings.preset) : preset && preset.style === style ? preset : null;
-  const feel: FeelId | undefined = !restyled ? cur.settings.feel : (brief.feel ?? preset?.feel ?? undefined);
-  const harmony = !restyled ? cur.settings.harmony : preset && (!std || keepPreset) ? preset.harmony : undefined;
+  const keepPreset = !restyled ? (sameStyle ? curPreset : null) : preset && preset.style === style ? preset : null;
+  const feel: FeelId | undefined = !restyled ? (sameStyle ? cur.settings.feel : undefined) : (brief.feel ?? preset?.feel ?? undefined);
+  const harmony = !restyled ? (sameStyle ? cur.settings.harmony : undefined) : preset && (!std || keepPreset) ? preset.harmony : undefined;
 
   // the band: named outright, else the artist's, else whoever's on stage; then the additions
   let band: InstrumentId[] = brief.band ?? preset?.band.map((x) => x.instrument) ?? cur.members.map((m) => m.instrument);
@@ -754,15 +767,17 @@ export function resolveBrief(brief: Brief, cur: { settings: TroopSettings; membe
       ? castPreset(preset.band, band)
       : castBand(band, cur.members);
 
-  // key: the tune keeps its mode; a mood word changes the mode, not the home note
-  const homeKey = newTune?.key ?? preset?.key ?? (brief.style && brief.style !== cur.settings.style ? STYLES[style].key : cur.settings.key);
+  // key: the tune keeps its mode (and the key it's in, under a new artist or style); a mood word
+  // changes the mode, not the home note
+  const homeKey = newTune?.key ?? (std || cur.settings.keyChosen ? cur.settings.key : (preset?.key ?? (brief.style && brief.style !== cur.settings.style ? STYLES[style].key : cur.settings.key)));
   const tonic = brief.tonic ?? homeKey.tonic;
   const mode = std ? std.key.mode : (brief.mode ?? homeKey.mode);
 
   const meter = std ? std.meter : (brief.meter ?? preset?.meter ?? (brief.style || preset ? 4 : cur.settings.meter.beats));
 
   const [lo, hi] = tempoRange(style);
-  const base = newTune?.tempo ?? preset?.tempo ?? (brief.style || brief.feel ? STYLES[style].tempo.default : cur.settings.tempo);
+  // the pace: the artist's; the tune's in its own style; a new style's own; else as it was
+  const base = preset?.tempo ?? (newTune && style === newTune.style ? newTune.tempo : brief.style || brief.feel ? STYLES[style].tempo.default : cur.settings.tempo);
   let tempo = brief.tempo ?? (brief.pace ? paceTempo(style, brief.pace, base) : base);
   tempo = Math.min(hi, Math.max(lo, Math.round(tempo)));
 
@@ -795,7 +810,9 @@ export function resolveBrief(brief: Brief, cur: { settings: TroopSettings; membe
     feel,
     harmony,
     preset: keepPreset?.id,
-    swingFeel: restyled ? undefined : cur.settings.swingFeel,
+    styleChosen: brief.style || brief.preset ? true : ownStyle ? undefined : cur.settings.styleChosen,
+    keyChosen: brief.tonic || brief.mode ? true : newTune ? undefined : cur.settings.keyChosen,
+    swingFeel: restyled || !sameStyle ? undefined : cur.settings.swingFeel,
     leaderId: members.find((m) => m.instrument !== "drums")?.id ?? members[0]?.id ?? "",
     soloists,
   };
@@ -830,6 +847,7 @@ export function describeBrief(b: Brief): string {
   for (const k of ["preset", "style", "standard", "tonic", "mode", "tempo", "pace", "meter", "room", "feel", "bars", "choruses"] as const) {
     if (b[k] !== null) parts.push(`${k} ${b[k]}`);
   }
+  if (b.original) parts.push("an original");
   if (b.band) parts.push(`band ${b.band.join("+")}`);
   if (b.add.length) parts.push(`add ${b.add.join("+")}`);
   if (b.drop.length) parts.push(`drop ${b.drop.join("+")}`);
