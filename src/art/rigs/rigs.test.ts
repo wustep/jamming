@@ -10,7 +10,7 @@ import { RIGS } from ".";
 import { rigTake } from "./take";
 import { auditTake, summarize } from "./audit";
 import { barX } from "./vibes";
-import { Bag, type Frame, type RigCtx } from "./types";
+import { Bag, type Frame, type RigCtx, armOf } from "./types";
 
 // Drive a rig frame by frame (60 fps) through a real take, the way the stage does, and
 // record what it draws. Then check each onset against what's on screen at that moment.
@@ -53,11 +53,11 @@ function perform(inst: InstrumentId, style: StyleId, seed = 3, solo = false, rec
     const prev = { L: { ...hands.L.hand }, R: { ...hands.R.hand } };
     const s = fc.compute(id, t / spb, true, spb);
     const pose = motion.pose(s, t, 1 / FPS);
-    const f: Frame = { s, t, dt: 1 / FPS, M: pose.M, arms: { L: { hand: { ...prev.L } }, R: { hand: { ...prev.R } } }, look: { mouthCovered: false, cheeks: 0, inhale: 0, bliss: false, lean: 0, dip: 0 } };
+    const f: Frame = { s, t, dt: 1 / FPS, M: pose.M, arms: { L: { hand: { ...prev.L } }, R: { hand: { ...prev.R } } }, shoulders: pose.shoulders, reach: armOf(RIGS[inst]).reach, look: { mouthCovered: false, cheeks: 0, inhale: 0, bliss: false, lean: 0, dip: 0 } };
     RIGS[inst].update(ctx, f);
     motion.settle(f.look, 1 / FPS);
     // the first frames settle from the default pose
-    const kinds = i > 5 ? glitchesOf({ L: f.arms.L.hand, R: f.arms.R.hand }, prev, pose.shoulders) : [];
+    const kinds = i > 5 ? glitchesOf({ L: f.arms.L.hand, R: f.arms.R.hand }, prev, pose.shoulders, f.reach) : [];
     if (kinds.length) glitches.push({ beat: +(t / spb).toFixed(2), kinds });
     for (const k of ["L", "R"] as const) {
       const v = { x: f.arms[k].hand.x - prev[k].x, y: f.arms[k].hand.y - prev[k].y };

@@ -39,6 +39,7 @@ const STOOL_INK = "#5b3a20";
 
 export const piano: Rig = {
   follow: "world",
+  arm: { reach: 56 },
   seated: true,
   hideFeet: true,
   render(c: RigCtx) {

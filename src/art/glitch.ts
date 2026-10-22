@@ -1,12 +1,13 @@
 import type { Pt } from "./affine";
 import { ANCHOR } from "./animals";
+import { ARM_REACH } from "./arm";
 
 // What looks wrong in a drawn frame. Used by the art lab's scrubber (to stop on a bad frame) and
 // by the rig tests (so a take never shows one).
 
 /**
- * crossed: the arms cross each other. jump: a paw teleports. reach: an arm stretched longer than
- * an arm could be. across: an arm laid straight across the chest to the far side. shake: a paw
+ * crossed: the arms cross each other. jump: a paw teleports. reach: a paw past the end of its
+ * arm. across: an arm laid straight across the chest to the far side. shake: a paw
  * going back and forth again and again. flicker: a paw darting sideways and straight back.
  */
 export type Glitch = "crossed" | "jump" | "reach" | "across" | "shake" | "flicker";
@@ -15,10 +16,11 @@ export type Glitch = "crossed" | "jump" | "reach" | "across" | "shake" | "flicke
 export const JUMP_PX = 25;
 
 /**
- * Farther than this from its shoulder, a paw is out of reach: the arm turns into a noodle. The
- * shoulders are 58 apart; a resting arm hangs about 45.
+ * A paw asked to go this much past the end of its arm (the rig's reach) is out of reach: the
+ * arm stops short of where the rig wanted it, off its key or away from what it holds. Arms never
+ * stretch (arm.ts), so the rig has to bring the body or the instrument closer instead.
  */
-export const REACH_PX = 88;
+export const OVERREACH_PX = 1.5;
 
 /** A paw this far past the other shoulder, at chest height, has its arm laid across the chest. */
 export const ACROSS_PX = 8;
@@ -60,12 +62,13 @@ export function glitchesOf(
   now: Record<"L" | "R", Pt>,
   prev: Record<"L" | "R", Pt> | null,
   sh: Record<"L" | "R", Pt> = { L: ANCHOR.shoulderL, R: ANCHOR.shoulderR },
+  reach = ARM_REACH,
 ): Glitch[] {
   const out: Glitch[] = [];
   const x = crossing(sh.L, now.L, sh.R, now.R);
   if (x && Math.min(Math.hypot(x.x - sh.L.x, x.y - sh.L.y), Math.hypot(x.x - sh.R.x, x.y - sh.R.y)) > NEAR_SHOULDER) out.push("crossed");
   if (prev && Math.max(Math.hypot(now.L.x - prev.L.x, now.L.y - prev.L.y), Math.hypot(now.R.x - prev.R.x, now.R.y - prev.R.y)) > JUMP_PX) out.push("jump");
-  if (Math.max(Math.hypot(now.L.x - sh.L.x, now.L.y - sh.L.y), Math.hypot(now.R.x - sh.R.x, now.R.y - sh.R.y)) > REACH_PX) out.push("reach");
+  if (Math.max(Math.hypot(now.L.x - sh.L.x, now.L.y - sh.L.y), Math.hypot(now.R.x - sh.R.x, now.R.y - sh.R.y)) > reach + OVERREACH_PX) out.push("reach");
   if (Math.max(acrossBy("L", now.L, sh), acrossBy("R", now.R, sh)) > ACROSS_PX) out.push("across");
   return out;
 }

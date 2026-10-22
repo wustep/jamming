@@ -3,12 +3,13 @@
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef } from "react";
 import type { AnimalId, InstrumentId, MemberFrameState } from "@/music/types";
 import { ANIMALS, INSTRUMENTS } from "@/music/instruments";
-import { ANCHOR, Blush, animalArt, mouthPath } from "./animals";
-import { L, PENCIL, S, ellipsePath, hash, mix, tint } from "./sketch";
+import { ANCHOR, Blush, Mouth, animalArt } from "./animals";
+import { PENCIL, S, ellipsePath, hash, mix, tint } from "./sketch";
 import { type Pt, approach, attr, clamp } from "./affine";
 import { Motion, randAt } from "./motion";
 import { RIGS } from "./rigs";
-import { Bag, type Frame, type RigCtx } from "./rigs/types";
+import { ARM_W, type ArmState, armPaths, poseArm } from "./arm";
+import { Bag, type Frame, type RigCtx, armOf } from "./rigs/types";
 
 export interface SpriteHandle {
   /**
@@ -20,6 +21,8 @@ export interface SpriteHandle {
   hands(): Record<"L" | "R", Pt>;
   /** Where the shoulders were last drawn: the body leans, dips and bows, so they move too. */
   shoulders(): Record<"L" | "R", Pt>;
+  /** How far this player's paws reach at this instrument (arm.ts). */
+  reach(): number;
   /** The take just ended: a happy little hop, eyes squeezed shut. */
   cheer(): void;
 }
@@ -67,76 +70,6 @@ const SPARKS: Pt[] = [
   { x: 196, y: 132 },
 ];
 
-/** Elbow control point: the arm bows outward, more when the hand is close to the shoulder. */
-function elbow(s: Pt, h: Pt, side: -1 | 1, bend: number): Pt {
-  const dx = h.x - s.x;
-  const dy = h.y - s.y;
-  const d = Math.hypot(dx, dy) || 1;
-  let px = -dy / d;
-  let py = dx / d;
-  if (side * px + 0.6 * py < 0) {
-    px = -px;
-    py = -py;
-  }
-  const amt = Math.abs(bend) + Math.max(0, 62 - d) * 0.45;
-  return { x: (s.x + h.x) / 2 + px * amt, y: (s.y + h.y) / 2 + py * amt };
-}
-
-const ARM_SAMPLES = 8;
-const f1 = (n: number) => n.toFixed(1);
-
-/** Smooth a polyline with quadratic midpoints (keeps the doodle soft, not polygonal). */
-function smooth(pts: Pt[], start = true): string {
-  let d = start ? `M${f1(pts[0].x)} ${f1(pts[0].y)}` : `L${f1(pts[0].x)} ${f1(pts[0].y)}`;
-  for (let i = 1; i < pts.length - 1; i++) {
-    const mx = (pts[i].x + pts[i + 1].x) / 2;
-    const my = (pts[i].y + pts[i + 1].y) / 2;
-    d += ` Q${f1(pts[i].x)} ${f1(pts[i].y)} ${f1(mx)} ${f1(my)}`;
-  }
-  const e = pts[pts.length - 1];
-  return d + ` L${f1(e.x)} ${f1(e.y)}`;
-}
-
-/**
- * A chubby, tapered limb from shoulder to hand along a soft quadratic elbow:
- * fill (closed), outline (open at the shoulder so it melts into the body), hatch strokes.
- */
-function armShape(s: Pt, h: Pt, side: -1 | 1, bend: number) {
-  const c = elbow(s, h, side, bend);
-  const left: Pt[] = [];
-  const right: Pt[] = [];
-  const hatch: string[] = [];
-  let tx = 0;
-  let ty = 0;
-  for (let i = 0; i <= ARM_SAMPLES; i++) {
-    const t = i / ARM_SAMPLES;
-    const u = 1 - t;
-    const x = u * u * s.x + 2 * u * t * c.x + t * t * h.x;
-    const y = u * u * s.y + 2 * u * t * c.y + t * t * h.y;
-    tx = 2 * u * (c.x - s.x) + 2 * t * (h.x - c.x);
-    ty = 2 * u * (c.y - s.y) + 2 * t * (h.y - c.y);
-    const tl = Math.hypot(tx, ty) || 1;
-    tx /= tl;
-    ty /= tl;
-    // shoulder 7.2 → wrist 4.6, with a soft forearm swell
-    const w = 7.2 - 2.6 * t + 0.7 * Math.sin(Math.PI * t);
-    left.push({ x: x - ty * w, y: y + tx * w });
-    right.push({ x: x + ty * w, y: y - tx * w });
-    if (i === 2 || i === 4 || i === 6) {
-      const k = w * 0.62;
-      hatch.push(`M${f1(x - ty * k - tx * 2)} ${f1(y + tx * k - ty * 2)} L${f1(x + ty * k + tx * 2)} ${f1(y - tx * k + ty * 2)}`);
-    }
-  }
-  const L = left[left.length - 1];
-  const R = right[right.length - 1];
-  const capW = 4.6 * 1.25;
-  const cap = ` Q${f1((L.x + R.x) / 2 + tx * capW)} ${f1((L.y + R.y) / 2 + ty * capW)} ${f1(R.x)} ${f1(R.y)}`;
-  const rev = [...right].reverse();
-  const sideL = smooth(left);
-  const outline = sideL + cap + " " + smooth(rev, false);
-  return { fill: outline + " Z", outline, hatch: hatch.join(" ") };
-}
-
 export const AnimalSprite = forwardRef<SpriteHandle, AnimalSpriteProps>(function AnimalSprite(
   { animal, instrument, name, size = 240, className },
   ref,
@@ -178,15 +111,22 @@ export const AnimalSprite = forwardRef<SpriteHandle, AnimalSpriteProps>(function
     oh: 0,
     brow: 0,
     browUp: 0,
+    purse: 0,
     hands: { L: { x: 100, y: 205 }, R: { x: 140, y: 205 } } as Record<"L" | "R", Pt>,
     shoulders: { L: { ...ANCHOR.shoulderL }, R: { ...ANCHOR.shoulderR } } as Record<"L" | "R", Pt>,
+    /** Where each elbow was last frame (arm.ts); undefined before the first. */
+    elbows: { L: undefined, R: undefined } as Record<"L" | "R", ArmState | undefined>,
   });
 
+  const arms = useMemo(() => armOf(rig), [rig]);
   const step = useMemo(() => {
     return (s: MemberFrameState, clock?: { t: number; reset?: boolean }) => {
       const r = rt.current;
       const t = clock ? clock.t : performance.now() / 1000;
-      if (clock?.reset) r.last = 0;
+      if (clock?.reset) {
+        r.last = 0;
+        r.elbows = { L: undefined, R: undefined };
+      }
       const dt = r.last ? clamp(t - r.last, 0, 0.1) : 0.016;
       r.last = t;
       const playing = s.playing;
@@ -216,23 +156,29 @@ export const AnimalSprite = forwardRef<SpriteHandle, AnimalSpriteProps>(function
         dt,
         M: pose.M,
         arms: { L: { hand: r.hands.L, bend: 12 }, R: { hand: r.hands.R, bend: 12 } },
+        shoulders: pose.shoulders,
+        reach: arms.reach,
         look: { mouthCovered: false, cheeks: 0, inhale: 0, bliss: false, lean: 0, dip: 0 },
       };
       rig.update(ctx, f);
       motion.settle(f.look, dt);
 
-      // ── arms ──
+      // ── arms: a fixed length each, the elbow bending to put the paw where the rig wants it ──
       for (const side of ["L", "R"] as const) {
         const a = f.arms[side];
-        r.hands[side] = a.hand;
         const sh = pose.shoulders[side];
         r.shoulders[side] = sh;
-        const arm = armShape(sh, a.hand, side === "L" ? -1 : 1, a.bend ?? 12);
-        me.set("armFill" + side, "d", arm.fill);
-        me.set("arm" + side, "d", arm.outline);
-        me.set("armHatch" + side, "d", arm.hatch);
+        const arm = poseArm(sh, a.hand, arms, side === "L" ? -1 : 1, r.elbows[side], dt);
+        r.elbows[side] = arm.state;
+        r.hands[side] = arm.hand;
+        const p = armPaths(sh, arm.elbow, arm.hand);
+        me.set("armInk" + side, "d", p.inkWhole);
+        me.set("armInkU" + side, "d", p.inkUpper);
+        me.set("armFill" + side, "d", p.whole);
+        me.set("armFillU" + side, "d", p.upper);
+        me.set("armHatch" + side, "d", p.hatch);
         const spread = a.spread ?? 1;
-        me.tf("paw" + side, `translate(${a.hand.x.toFixed(1)} ${a.hand.y.toFixed(1)}) rotate(${(a.pawRot ?? 0).toFixed(1)}) scale(${spread.toFixed(2)} 1)`);
+        me.tf("paw" + side, `translate(${arm.hand.x.toFixed(1)} ${arm.hand.y.toFixed(1)}) rotate(${(a.pawRot ?? 0).toFixed(1)}) scale(${spread.toFixed(2)} 1)`);
         me.op("paw" + side, a.hidePaw ? 0 : 1);
       }
 
@@ -296,6 +242,11 @@ export const AnimalSprite = forwardRef<SpriteHandle, AnimalSpriteProps>(function
       me.op("grin", grin);
       me.op("oh", r.oh * (f.look.mouthCovered ? 0 : 1) * (1 - grin));
       me.op("mouth", f.look.mouthCovered ? 0 : (1 - r.oh) * (1 - grin));
+      // the mouth purses a little through a fast passage, and smiles wider over a long sung note
+      r.purse += (focus - r.purse) * approach(dt, 0.15);
+      const ms = art.face.mouth;
+      const smile = motion.bliss * (1 - r.purse);
+      me.tf("mouth", `translate(${ms.x} ${ms.y}) scale(${(1 - 0.22 * r.purse + 0.08 * smile).toFixed(3)} ${(1 - 0.12 * r.purse + 0.3 * smile).toFixed(3)}) translate(${-ms.x} ${-ms.y})`);
       const ch = motion.cheeks;
       me.op("cheeks", ch > 0.02 ? 1 : 0);
       const cs = (0.35 + 0.65 * ch).toFixed(3);
@@ -318,7 +269,7 @@ export const AnimalSprite = forwardRef<SpriteHandle, AnimalSpriteProps>(function
         me.tf("spark" + i, `translate(${SPARKS[i].x} ${SPARKS[i].y}) scale(${(0.7 + 0.4 * Math.max(0, tw)).toFixed(2)}) rotate(${((t * 40 + i * 60) % 360).toFixed(1)})`);
       }
     };
-  }, [ctx, rig, me, art, motion, instrument]);
+  }, [ctx, rig, me, art, motion, instrument, arms]);
 
   useImperativeHandle(
     ref,
@@ -337,8 +288,11 @@ export const AnimalSprite = forwardRef<SpriteHandle, AnimalSpriteProps>(function
       shoulders() {
         return { L: { ...rt.current.shoulders.L }, R: { ...rt.current.shoulders.R } };
       },
+      reach() {
+        return arms.reach;
+      },
     }),
-    [step, motion],
+    [step, motion, arms],
   );
 
   // Arms and instrument placement are posed per frame, so the server-rendered sprite is only
@@ -374,7 +328,6 @@ export const AnimalSprite = forwardRef<SpriteHandle, AnimalSpriteProps>(function
   const eyeR0 = art.face.eyeR;
   const feet = art.feet ?? fill;
   const sd = hash(animal + "sprite");
-  const mp = mouthPath(art.face.mouthStyle, art.face.mouth);
   const eyeR = art.face.eyeR;
 
   return (
@@ -437,25 +390,30 @@ export const AnimalSprite = forwardRef<SpriteHandle, AnimalSpriteProps>(function
             ))}
           </g>
           {art.front}
-          {mp && (
+          {art.face.mouthStyle !== "none" && (
             <g ref={me.r("mouth")}>
-              <L d={mp} ink={PENCIL} seed={sd + 5} w={1.8} />
+              <Mouth face={art.face} seed={sd + 5} />
             </g>
           )}
-          <g ref={me.r("grin")} style={{ opacity: 0 }}>
-            <path
-              d={`M${art.face.mouth.x - 8} ${art.face.mouth.y - 1} Q${art.face.mouth.x} ${art.face.mouth.y + 1} ${art.face.mouth.x + 8} ${art.face.mouth.y - 1} Q${art.face.mouth.x + 7} ${art.face.mouth.y + 9} ${art.face.mouth.x} ${art.face.mouth.y + 10} Q${art.face.mouth.x - 7} ${art.face.mouth.y + 9} ${art.face.mouth.x - 8} ${art.face.mouth.y - 1} Z`}
-              fill="#5a2b2b"
-              stroke={PENCIL}
-              strokeWidth={1.5}
-              strokeLinejoin="round"
-            />
-            <path d={`M${art.face.mouth.x - 4} ${art.face.mouth.y + 7.5} Q${art.face.mouth.x} ${art.face.mouth.y + 4} ${art.face.mouth.x + 4} ${art.face.mouth.y + 7.5}`} fill="#e9858f" />
-          </g>
-          <g ref={me.r("oh")} style={{ opacity: 0 }}>
-            <ellipse cx={art.face.mouth.x} cy={art.face.mouth.y + 2} rx={3.6} ry={4.4} fill="#5a2b2b" stroke={PENCIL} strokeWidth={1.4} />
-            <ellipse cx={art.face.mouth.x} cy={art.face.mouth.y + 4} rx={2} ry={1.4} fill="#e9858f" />
-          </g>
+          {/* a beak or a trunk has no mouth under it to open or grin with */}
+          {art.face.mouthStyle !== "none" && (
+            <>
+              <g ref={me.r("grin")} style={{ opacity: 0 }}>
+                <path
+                  d={`M${art.face.mouth.x - 8} ${art.face.mouth.y - 1} Q${art.face.mouth.x} ${art.face.mouth.y + 1} ${art.face.mouth.x + 8} ${art.face.mouth.y - 1} Q${art.face.mouth.x + 7} ${art.face.mouth.y + 9} ${art.face.mouth.x} ${art.face.mouth.y + 10} Q${art.face.mouth.x - 7} ${art.face.mouth.y + 9} ${art.face.mouth.x - 8} ${art.face.mouth.y - 1} Z`}
+                  fill="#5a2b2b"
+                  stroke={PENCIL}
+                  strokeWidth={1.5}
+                  strokeLinejoin="round"
+                />
+                <path d={`M${art.face.mouth.x - 4} ${art.face.mouth.y + 7.5} Q${art.face.mouth.x} ${art.face.mouth.y + 4} ${art.face.mouth.x + 4} ${art.face.mouth.y + 7.5}`} fill="#e9858f" />
+              </g>
+              <g ref={me.r("oh")} style={{ opacity: 0 }}>
+                <ellipse cx={art.face.mouth.x} cy={art.face.mouth.y + 2} rx={3.6} ry={4.4} fill="#5a2b2b" stroke={PENCIL} strokeWidth={1.4} />
+                <ellipse cx={art.face.mouth.x} cy={art.face.mouth.y + 4} rx={2} ry={1.4} fill="#e9858f" />
+              </g>
+            </>
+          )}
           <g ref={me.r("brows")} style={{ opacity: 0 }}>
             {(["L", "R"] as const).map((k) => (
               <g key={k} ref={me.r("brow" + k)}>
@@ -474,20 +432,14 @@ export const AnimalSprite = forwardRef<SpriteHandle, AnimalSpriteProps>(function
         </g>
       </g>
       <g ref={me.r("instFront")}>{parts.front}</g>
-      {/* arms over the instrument: tapered, crayon-outlined, lightly hatched */}
+      {/* arms over the instrument: an upper arm and a forearm, crayon-outlined, lightly hatched */}
       {(["L", "R"] as const).map((k) => (
-        <g key={k}>
-          <path ref={me.r("armFill" + k)} fill={mix(fill, "#f6f0e1", 0.18)} stroke="none" />
-          <path ref={me.r("armHatch" + k)} stroke={fill} strokeWidth={1.3} strokeOpacity={0.75} strokeLinecap="round" fill="none" />
-          <path
-            ref={me.r("arm" + k)}
-            stroke={ink}
-            strokeWidth={2.2}
-            fill="none"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeDasharray="22 1.2 9 0.9"
-          />
+        <g key={k} fill="none" strokeLinecap="round" strokeLinejoin="round">
+          <path ref={me.r("armInk" + k)} stroke={ink} strokeWidth={2 * ARM_W.fore + 4.4} />
+          <path ref={me.r("armInkU" + k)} stroke={ink} strokeWidth={2 * ARM_W.upper + 4.4} />
+          <path ref={me.r("armFill" + k)} stroke={mix(fill, "#f6f0e1", 0.18)} strokeWidth={2 * ARM_W.fore} />
+          <path ref={me.r("armFillU" + k)} stroke={mix(fill, "#f6f0e1", 0.18)} strokeWidth={2 * ARM_W.upper} />
+          <path ref={me.r("armHatch" + k)} stroke={fill} strokeWidth={1.3} strokeOpacity={0.75} />
         </g>
       ))}
       {parts.held}

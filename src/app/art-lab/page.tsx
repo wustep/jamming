@@ -258,7 +258,7 @@ function ArtLab() {
         const s = tk ? tk.frames.compute(tk.id, beat, true, SPB) : stateAt(notes, beat, true, featured === i, look);
         sp.update(stopped ? { ...s, playing: false, active: [], nextOnsetIn: Infinity, nextPitch: null, upcoming: [] } : s, { t: 10 + beat * SPB, reset: opts.reset });
         const h = sp.hands();
-        glitches[i] = glitchesOf(h, opts.step ? prevHands.current[i] : null, sp.shoulders());
+        glitches[i] = glitchesOf(h, opts.step ? prevHands.current[i] : null, sp.shoulders(), sp.reach());
         prevHands.current[i] = h;
         // a few frames of each paw, for a shake or a flicker (only while stepping frame by frame)
         const hist = (handHistory.current[i] = opts.step ? [...(handHistory.current[i] ?? []), h].slice(-(SHAKE_WINDOW + 1)) : [h]);

@@ -66,6 +66,7 @@ function manual(c: RigCtx, top: number, tag: string, s: number) {
 
 export const organ: Rig = {
   follow: "world",
+  arm: { reach: 54 },
   seated: true,
   hideFeet: true,
   render(c: RigCtx) {

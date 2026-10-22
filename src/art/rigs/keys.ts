@@ -1,4 +1,5 @@
 import { approach, clamp } from "../affine";
+import { ANCHOR } from "../animals";
 import { type Frame, type RigCtx, damp, glide, hit, nextWhere } from "./types";
 
 /** One hand at a keyboard: the notes it takes, where it rests, and the top of the keys it plays. */
@@ -22,6 +23,8 @@ export function playKeys(c: RigCtx, f: Frame, keyX: (pitch: number) => number, h
   const m = c.mem;
   let leanSum = 0;
   let leanW = 0;
+  /** Where each paw is headed: the bench slides so that it's within reach. */
+  const dest: Record<string, { x: number; y: number }> = {};
   // a note just over the split that was struck with a chord below it, within reach of it, is the
   // left hand's: a left-hand voicing that reaches middle C doesn't hold the right hand down there
   const split = hands.find((h) => h.key === "R")?.lo ?? Infinity;
@@ -106,7 +109,13 @@ export function playKeys(c: RigCtx, f: Frame, keyX: (pitch: number) => number, h
     const y = damp(m, "hy" + h.key, h.top + 4 + depth * (1 - up) - 6 * up - arc - (resting ? 3 : 0), f.dt, 0.012);
     // the wrist rolls a little into each stroke
     const roll = (h.key === "L" ? 12 : -12) + (h.key === "L" ? 1 : -1) * 6 * (1 - up) * (holding ? 0.5 : 1);
-    f.arms[h.key] = { hand: { x: m[kx], y }, spread: m[ks], bend: 10, pawRot: roll };
+    dest[h.key] = { x: target ?? h.home, y: h.top + 4 };
+    // the arm doesn't stretch: until the body has slid over, the paw stops at the end of it
+    const sh = f.shoulders[h.key];
+    const most = f.reach * 0.99;
+    const rx = Math.sqrt(Math.max(0, most * most - (y - sh.y) ** 2));
+    const x = clamp(m[kx], sh.x - rx, sh.x + rx);
+    f.arms[h.key] = { hand: { x, y }, spread: m[ks], bend: 10, pawRot: roll };
     const w = act.length + hit(lastAge, 0.2);
     leanSum += (m[kx] - 120) * w;
     leanW += w;
@@ -118,7 +127,21 @@ export function playKeys(c: RigCtx, f: Frame, keyX: (pitch: number) => number, h
   f.look.lean = leanW > 0 ? clamp((leanSum / leanW) * 0.06 * (1 + big * 0.6), -6.5, 6.5) : 0;
   // both hands far up or down the keyboard: slide along the bench toward them
   const mid = (m.hxL + m.hxR) / 2 - 120;
-  f.look.shift = clamp((mid - Math.sign(mid) * 20) * 0.5, -12, 12) * (Math.abs(mid) > 20 ? 1 : 0);
+  let shift = clamp((mid - Math.sign(mid) * 20) * 0.5, -12, 12) * (Math.abs(mid) > 20 ? 1 : 0);
+  // and as far as it takes for each paw to reach the keys it's going to (with a little to spare,
+  // as the lean and the bounce move the shoulders too); two keys too far apart for one body to
+  // span, it sits between them
+  let lo = -Infinity;
+  let hi = Infinity;
+  for (const h of hands) {
+    const sh = h.key === "L" ? ANCHOR.shoulderL : ANCHOR.shoulderR;
+    const to = dest[h.key];
+    const rx = Math.sqrt(Math.max(0, (f.reach * 0.92) ** 2 - (to.y - sh.y) ** 2));
+    lo = Math.max(lo, to.x - sh.x - rx);
+    hi = Math.min(hi, to.x - sh.x + rx);
+  }
+  shift = lo <= hi ? clamp(shift, lo, hi) : (lo + hi) / 2;
+  f.look.shift = clamp(shift, -30, 30);
   f.look.dip = clamp(big * 3.2, 0, 4.5);
   f.look.bliss = s.active.some((n) => n.durSec > 1.2 && n.progress > 0.15);
   return { big, fresh };

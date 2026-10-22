@@ -6,6 +6,7 @@ import { type Mat, type Pt, ap, chain } from "../affine";
 import { clarinet, tromboneSlide, trumpetValves, woodwind } from "../fingering";
 import { type Glitch, SHAKE_WINDOW, flicker, glitchesOf, shake } from "../glitch";
 import { Motion } from "../motion";
+import { type ArmState, poseArm } from "../arm";
 import { RIGS } from ".";
 import { KEY_TOP, keyX } from "./piano";
 import { LOWER_TOP, ORGAN_SPLIT, UPPER_TOP, organKeyX } from "./organ";
@@ -13,7 +14,7 @@ import { PAD_KEY_TOP, padKeyX } from "./pad";
 import { STOP_AT } from "./strings";
 import { rigTake } from "./take";
 import { barX } from "./vibes";
-import { Bag, type Frame, type RigCtx } from "./types";
+import { Bag, type Frame, type RigCtx, armOf } from "./types";
 
 // A musician played frame by frame (60 fps) through a real take, the way the stage plays it, and
 // everything that would look wrong on screen, with the beat it happens on:
@@ -25,11 +26,12 @@ import { Bag, type Frame, type RigCtx } from "./types";
 //   miss: the note sounds with no paw on its key or at its stop, or the valves, keys or slide
 //         showing another note's fingering;
 //   late: a keyboard paw that isn't down in the keys when its note sounds;
-//   detached: a stick, a mallet or the bow's frog drawn away from the paw that holds it.
+//   detached: a stick, a mallet or the bow's frog drawn away from the paw that holds it;
+//   elbow: an elbow snapping over to the other side of the arm in one frame.
 //
 // The art lab steps to these; the rig tests hold every instrument to none.
 
-export type AuditKind = Glitch | "pop" | "clip" | "miss" | "late" | "detached";
+export type AuditKind = Glitch | "pop" | "clip" | "miss" | "late" | "detached" | "elbow";
 
 export interface AuditIssue {
   kind: AuditKind;
@@ -47,6 +49,8 @@ export const POP_DEG = 9;
 export const HELD_POP_PX = 24;
 /** A stick, mallet or bow frog farther than this from its paw has come out of its grip. */
 export const GRIP_PX = 8;
+/** An elbow moving this much farther than its paw in one frame snapped over (arm.ts swings it). */
+export const ELBOW_FLIP_PX = 12;
 
 type Attrs = Record<string, Record<string, string>>;
 
@@ -80,6 +84,8 @@ interface Rec {
   hands: Record<"L" | "R", Pt>;
   spread: Record<"L" | "R", number>;
   shoulders: Record<"L" | "R", Pt>;
+  /** Where the elbows are drawn. */
+  elbows: Record<"L" | "R", Pt>;
   /** The instrument's world matrix (the body's follow matrix × its own placement). */
   W: Mat;
   attrs: Attrs;
@@ -112,26 +118,36 @@ export function auditTake(inst: InstrumentId, style: StyleId, opts: { seed?: num
   const { bag, store } = recordingBag();
   const ctx: RigCtx = { bag, animal: "cat", ink: "#000", fill: "#fff", light: "#fff", feet: "#000", seed: 1, mouth: { x: 120, y: 133 }, mem: {} };
   const rig = RIGS[inst];
+  const arms = armOf(rig);
+  const armReach = arms.reach;
   const motion = new Motion({ follow: rig.follow, seated: !!rig.seated, ears: null, tail: null, seed: 7 });
   let hands: Frame["arms"] = { L: { hand: { x: 100, y: 205 } }, R: { hand: { x: 140, y: 205 } } };
   const recs: Rec[] = [];
+  const elbowState: Record<"L" | "R", ArmState | undefined> = { L: undefined, R: undefined };
   const end = beats * spb;
   for (let i = 0; i / FPS < end; i++) {
     const t = i / FPS + 0.004;
     const prev = { L: { ...hands.L.hand }, R: { ...hands.R.hand } };
     const s = fc.compute(id, t / spb, true, spb);
     const pose = motion.pose(s, t, 1 / FPS);
-    const f: Frame = { s, t, dt: 1 / FPS, M: pose.M, arms: { L: { hand: { ...prev.L } }, R: { hand: { ...prev.R } } }, look: { mouthCovered: false, cheeks: 0, inhale: 0, bliss: false, lean: 0, dip: 0 } };
+    const f: Frame = { s, t, dt: 1 / FPS, M: pose.M, arms: { L: { hand: { ...prev.L } }, R: { hand: { ...prev.R } } }, shoulders: pose.shoulders, reach: armReach, look: { mouthCovered: false, cheeks: 0, inhale: 0, bliss: false, lean: 0, dip: 0 } };
     rig.update(ctx, f);
     motion.settle(f.look, 1 / FPS);
     hands = { L: { ...f.arms.L }, R: { ...f.arms.R } };
     const attrs: Attrs = JSON.parse(JSON.stringify(store));
+    const elbows = {} as Record<"L" | "R", Pt>;
+    for (const k of ["L", "R"] as const) {
+      const a = poseArm(pose.shoulders[k], f.arms[k].hand, arms, k === "L" ? -1 : 1, elbowState[k], 1 / FPS);
+      elbowState[k] = a.state;
+      elbows[k] = a.elbow;
+    }
     recs.push({
       t,
       beat: t / spb,
       hands: { L: { ...f.arms.L.hand }, R: { ...f.arms.R.hand } },
       spread: { L: f.arms.L.spread ?? 1, R: f.arms.R.spread ?? 1 },
       shoulders: pose.shoulders,
+      elbows,
       W: chain(pose.M, parseTransform(attrs.inst?.transform)),
       attrs,
       held: heldPoints(attrs),
@@ -147,7 +163,10 @@ export function auditTake(inst: InstrumentId, style: StyleId, opts: { seed?: num
   for (let i = 6; i < recs.length; i++) {
     const r = recs[i];
     const p = recs[i - 1];
-    for (const g of glitchesOf(r.hands, p.hands, r.shoulders)) at(r.beat, g, "");
+    for (const g of glitchesOf(r.hands, p.hands, r.shoulders, armReach)) {
+      const past = (k: "L" | "R") => Math.hypot(r.hands[k].x - r.shoulders[k].x, r.hands[k].y - r.shoulders[k].y) - armReach;
+      at(r.beat, g, g === "reach" ? `${past("L") > past("R") ? "L" : "R"} paw ${Math.max(past("L"), past("R")).toFixed(1)}px past its ${armReach}px arm` : "");
+    }
     // jitter and flicker (glitch.ts), unless the paw is following a run of notes: changing
     // direction with them is playing
     const notesInWindow = onsets.filter((o) => o.t > recs[i - SHAKE_WINDOW].t - 0.05 && o.t <= r.t + 0.05).length;
@@ -172,6 +191,11 @@ export function auditTake(inst: InstrumentId, style: StyleId, opts: { seed?: num
       const d = Math.hypot(r.held[j].x - p.held[j].x, r.held[j].y - p.held[j].y);
       if (d - pawMove > HELD_POP_PX) at(r.beat, "pop", `held point ${j} jumped ${d.toFixed(1)}px (the paw ${pawMove.toFixed(1)}px)`);
     }
+    for (const k of ["L", "R"] as const) {
+      const de = Math.hypot(r.elbows[k].x - p.elbows[k].x, r.elbows[k].y - p.elbows[k].y);
+      const dh = Math.hypot(r.hands[k].x - p.hands[k].x, r.hands[k].y - p.hands[k].y);
+      if (de - dh > ELBOW_FLIP_PX) at(r.beat, "elbow", `${k} elbow jumped ${de.toFixed(0)}px (the paw ${dh.toFixed(1)}px)`);
+    }
     // detached: what's held comes away from the paw holding it
     const grips: [string, "L" | "R"][] =
       inst === "drums" ? [["stickL", "L"], ["stickR", "R"]] : inst === "vibes" ? [["mL0", "L"], ["mL1", "L"], ["mR0", "R"], ["mR1", "R"]] : inst === "violin" || inst === "cello" ? [["hair", "L"]] : [];
@@ -182,7 +206,7 @@ export function auditTake(inst: InstrumentId, style: StyleId, opts: { seed?: num
       if (d > GRIP_PX) at(r.beat, "detached", `${key} ${d.toFixed(0)}px from the ${k} paw`);
     }
     // clip: out of the sprite's frame
-    for (const q of [r.hands.L, r.hands.R, ...r.held])
+    for (const q of [r.hands.L, r.hands.R, r.elbows.L, r.elbows.R, ...r.held])
       if (q.x < FRAME_BOX.x0 || q.x > FRAME_BOX.x1 || q.y < FRAME_BOX.y0 || q.y > FRAME_BOX.y1) {
         at(r.beat, "clip", `(${q.x.toFixed(0)}, ${q.y.toFixed(0)}) outside the sprite`);
         break;

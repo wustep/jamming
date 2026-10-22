@@ -1,14 +1,13 @@
 import type { AnimalId } from "@/music/types";
 import { ANIMALS } from "@/music/instruments";
-import { Blush, animalArt, mouthPath } from "./animals";
-import { L, PENCIL, hash } from "./sketch";
+import { Blush, Mouth, animalArt } from "./animals";
+import { PENCIL, hash } from "./sketch";
 
 /** Head-only doodle for pickers and chat avatars. */
 export function AnimalPortrait({ animal, size = 64, className }: { animal: AnimalId; size?: number; className?: string }) {
   const art = animalArt(animal);
   const def = ANIMALS[animal];
   const sd = hash(animal + "portrait");
-  const mp = mouthPath(art.face.mouthStyle, art.face.mouth);
   const r = art.face.eyeR;
   return (
     <svg viewBox="30 0 180 170" width={size} height={(size * 170) / 180} className={className} role="img" aria-label={`${def.name} the ${def.species}`}>
@@ -23,7 +22,7 @@ export function AnimalPortrait({ animal, size = 64, className }: { animal: Anima
         </g>
       ))}
       {art.front}
-      {mp && <L d={mp} ink={PENCIL} seed={sd + 2} w={1.8} />}
+      <Mouth face={art.face} seed={sd + 2} />
     </svg>
   );
 }

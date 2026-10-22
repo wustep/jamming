@@ -76,6 +76,7 @@ function shellPath(cx: number, top: number, rx: number, h: number, ry: number) {
 
 export const drums: Rig = {
   follow: "world",
+  arm: { reach: 50 },
   seated: true,
   hideFeet: true,
   render(c: RigCtx) {

@@ -234,6 +234,7 @@ const VIOLIN: BowGeo = {
 
 export const violin: Rig = {
   follow: "head",
+  arm: { reach: 78 },
   render(c) {
     const s = hash(c.animal + "vln");
     return {
@@ -313,6 +314,7 @@ function vcStops(pitches: number[]): { string: number; semis: number }[] {
 
 export const cello: Rig = {
   follow: "world",
+  arm: { reach: 60 },
   seated: true,
   render(c) {
     const s = hash(c.animal + "vc");
@@ -526,6 +528,8 @@ function cbPlace(f: Frame): Mat {
 
 export const bass: Rig = {
   follow: "world",
+  // the tallest instrument: the arms reach up the neck and down across the belly
+  arm: { reach: 80 },
   render(c) {
     const s = hash(c.animal + "cb");
     const fb = `M${(CB.sx(3, CB.nut) - 1.8).toFixed(1)} ${CB.nut} L${(CB.sx(0, CB.nut) + 1.8).toFixed(1)} ${CB.nut} L${(CB.sx(0, CB.fbEnd) + 2.4).toFixed(1)} ${CB.fbEnd} L${(CB.sx(3, CB.fbEnd) - 2.4).toFixed(1)} ${CB.fbEnd} Z`;
@@ -590,13 +594,14 @@ export const bass: Rig = {
     const pull = age < 0.12 ? Math.sin((age / 0.12) * (Math.PI / 2)) : Math.exp(-(age - 0.12) / 0.12);
     const ready = f.s.nextOnsetIn < 0.15 ? 1 - f.s.nextOnsetIn / 0.15 : 0;
     const flick = Math.max(0, pull * (1 - ready)) * 12;
-    // pizz at the end of the fingerboard, the arm coming down across the belly
+    // pizz at the end of the fingerboard, the arm coming down across the belly, the
+    // finger pulling the string down and out (out along it went past the end of the arm)
     const py = CB.fbEnd + 3;
-    const pluckLocal = { x: CB.sx(m.strS, py) - 4 + flick, y: py + flick * 0.3 };
+    const pluckLocal = { x: CB.sx(m.strS, py) - 4 + flick * 0.45, y: py + flick * 0.75 };
     f.arms.L = { hand: ap(W, pluckLocal.x, pluckLocal.y), bend: 14, pawRot: 60 };
     // a shift up or down the neck travels at a hand's speed, however far it goes. The paw sits
     // behind the neck just below the stopping finger, which reaches up to the note.
-    const wantY = CB.nut + (CB.bridge - CB.nut) * stopFrac(m.semisS) + 7;
+    const wantY = CB.nut + (CB.bridge - CB.nut) * stopFrac(m.semisS) + 9;
     glide(m, "stopY", wantY, f.dt, 14000, 900);
     const stopY = m.stopY;
     f.arms.R = { hand: ap(W, CB.sx(m.strS, stopY) + 8, stopY), bend: -30, pawRot: -40 };
@@ -617,6 +622,7 @@ const GTR_BRIDGE = -30;
 
 export const guitar: Rig = {
   follow: "char",
+  arm: { reach: 60 },
   render(c) {
     const s = hash(c.animal + "gtr");
     return {

@@ -115,6 +115,7 @@ function placeInst(c: RigCtx, f: Frame, local: Mat) {
 
 export const trumpet: Rig = {
   follow: "head",
+  arm: { reach: 76 },
   render(c) {
     const s = hash(c.animal + "tpt");
     return {
@@ -169,6 +170,7 @@ const SLIDE_STEP = 8.5;
 
 export const trombone: Rig = {
   follow: "head",
+  arm: { reach: 74 },
   render(c) {
     const s = hash(c.animal + "tbn");
     return {
@@ -231,6 +233,7 @@ const SAX_KEYS: [number, number][] = [
 
 export const sax: Rig = {
   follow: "head",
+  arm: { reach: 70 },
   render(c) {
     const s = hash(c.animal + "sax");
     return {
@@ -282,6 +285,7 @@ const CL_KEYS: [number, number][] = [
 
 export const clarinetRig: Rig = {
   follow: "head",
+  arm: { reach: 56 },
   render(c) {
     const s = hash(c.animal + "cl");
     const wood = "#3b3446";
@@ -335,6 +339,7 @@ const FL_KEYS: [number, number][] = [
 
 export const flute: Rig = {
   follow: "head",
+  arm: { reach: 68 },
   render(c) {
     const s = hash(c.animal + "fl");
     const silver = "#e3e2ea";

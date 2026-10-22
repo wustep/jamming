@@ -40,6 +40,7 @@ const SLIDERS = [28, 22, 30, 18, 26, 20];
 
 export const pad: Rig = {
   follow: "world",
+  arm: { reach: 56 },
   render(c: RigCtx) {
     const seps: string[] = [];
     const blacks: string[] = [];

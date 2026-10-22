@@ -29,7 +29,14 @@ export interface FaceSpec {
   /** Eye whites / rings drawn behind pupils. */
   sclera?: number;
   mouth: Pt;
-  mouthStyle: "smile" | "wide" | "w" | "none";
+  mouthStyle: "smile" | "wide" | "w" | "bunny" | "none";
+  /** Mouth line colour, when it isn't the pencil. */
+  mouthInk?: string;
+  /**
+   * Two little buck teeth under the mouth (part of the mouth: hidden by a mouthpiece, an "o", a
+   * grin). A face this small is drawn with clean lines, not crayon.
+   */
+  teeth?: boolean;
   blush: [Pt, Pt];
 }
 
@@ -318,13 +325,25 @@ function bunny(): AnimalArt {
         <S d={ellipsePath(120, 114, 52, 45)} ink={ink} base={tint(fill, 0.3)} hatch={fill} seed={sd(a, "head")} />
       </>
     ),
+    // a little heart of a nose, drawn clean like the eyes: at this size a crayon line scribbles
     front: (
-      <>
-        <S d={ellipsePath(120, 124, 5, 3.5)} ink="#b0546f" base="#e86f8c" seed={sd(a, "nose")} w={1} />
-        <S d="M116 136 h8 v6 h-8 Z" ink={ink} base="#fffdf4" seed={sd(a, "teeth")} w={1} />
-      </>
+      <path
+        d="M120 128 C117.4 126.6 114.8 125.2 115.3 123.2 C115.8 121.5 118.4 121.6 120 123 C121.6 121.6 124.2 121.5 124.7 123.2 C125.2 125.2 122.6 126.6 120 128 Z"
+        fill="#ef8aa2"
+        stroke="#b0546f"
+        strokeWidth={1.2}
+        strokeLinejoin="round"
+      />
     ),
-    face: { eyes: [{ x: 101, y: 108 }, { x: 139, y: 108 }], eyeR: 5.5, mouth: { x: 120, y: 132 }, mouthStyle: "w", blush: [{ x: 88, y: 124 }, { x: 152, y: 124 }] },
+    face: {
+      eyes: [{ x: 101, y: 108 }, { x: 139, y: 108 }],
+      eyeR: 5.5,
+      mouth: { x: 120, y: 131 },
+      mouthStyle: "bunny",
+      mouthInk: mix(PENCIL, ink, 0.4),
+      teeth: true,
+      blush: [{ x: 88, y: 124 }, { x: 152, y: 124 }],
+    },
   };
 }
 
@@ -605,9 +624,38 @@ export function mouthPath(style: FaceSpec["mouthStyle"], m: Pt): string | null {
       return `M${m.x - 22} ${m.y - 3} Q${m.x} ${m.y + 10} ${m.x + 22} ${m.y - 3}`;
     case "w":
       return `M${m.x - 8} ${m.y - 2} Q${m.x - 4} ${m.y + 4} ${m.x} ${m.y - 1} Q${m.x + 4} ${m.y + 4} ${m.x + 8} ${m.y - 2}`;
+    case "bunny":
+      // down from the nose, then a soft curl out to either side
+      return `M${m.x} ${m.y - 3} V${m.y} C${m.x - 0.6} ${m.y + 2.6} ${m.x - 4.4} ${m.y + 3.2} ${m.x - 6} ${m.y + 0.8} M${m.x} ${m.y} C${m.x + 0.6} ${m.y + 2.6} ${m.x + 4.4} ${m.y + 3.2} ${m.x + 6} ${m.y + 0.8}`;
     default:
       return null;
   }
+}
+
+/**
+ * The resting mouth: a crayon line, or for a small mouth with teeth (the rabbit's), clean lines
+ * like the eyes.
+ */
+export function Mouth({ face, seed }: { face: FaceSpec; seed: number }) {
+  const d = mouthPath(face.mouthStyle, face.mouth);
+  if (!d) return null;
+  if (!face.teeth) return <L d={d} ink={face.mouthInk ?? PENCIL} seed={seed} w={1.8} />;
+  const ink = face.mouthInk ?? PENCIL;
+  return (
+    <>
+      <path d={teethPath(face.mouth)} fill="#fffdf4" stroke={ink} strokeWidth={1.1} strokeLinejoin="round" />
+      <path d={d} stroke={ink} strokeWidth={1.7} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  );
+}
+
+/** Two rounded buck teeth hanging just under the middle of the mouth. */
+export function teethPath(m: Pt): string {
+  const top = m.y + 1.4;
+  const w = 3.3;
+  const h = 4.6;
+  const r = 1.4;
+  return `M${m.x - w} ${top} V${top + h - r} Q${m.x - w} ${top + h} ${m.x - w + r} ${top + h} H${m.x - r} Q${m.x} ${top + h} ${m.x} ${top + h - r} Q${m.x} ${top + h} ${m.x + r} ${top + h} H${m.x + w - r} Q${m.x + w} ${top + h} ${m.x + w} ${top + h - r} V${top} Z`;
 }
 
 export { tint, mix };

@@ -1,5 +1,6 @@
 import { L, S, ellipsePath, hash, mix, rectPath } from "../sketch";
 import { clamp } from "../affine";
+import { ANCHOR } from "../animals";
 import { isBlack, keyUnits } from "../fingering";
 import { type Frame, type Rig, type RigCtx, damp, glide, slewTo, hit, strokeLift } from "./types";
 
@@ -55,6 +56,7 @@ function grip(chord: number[], m: Record<string, number>): Partial<Record<Mallet
 
 export const vibes: Rig = {
   follow: "world",
+  arm: { reach: 56 },
   seated: true,
   render(c: RigCtx) {
     const s = hash(c.animal + "vibes");
@@ -178,20 +180,27 @@ export const vibes: Rig = {
       // the accidental row sits higher than the naturals: ease between them too
       glide(m, "y" + k, barY(pitch), f.dt, 20000, 600);
       heads[k] = { x: m[kx], y: m["y" + k] - lift * 22 };
-      c.bag.tf("mb" + k, `translate(${heads[k].x.toFixed(1)} ${heads[k].y.toFixed(1)})`);
     }
+    const most = f.reach * 0.99;
     for (const arm of ["L", "R"] as const) {
       const a = heads[(arm + "0") as Mallet];
       const b = heads[(arm + "1") as Mallet];
       // the paw sits behind and above both heads; the shafts fan out from it
       const hand = { x: (a.x + b.x) / 2 + (arm === "L" ? -6 : 6), y: Math.min(a.y, b.y) - MALLET + 12 };
+      m["x" + arm] = hand.x;
+      // the arm doesn't stretch: until the player has walked over, the mallets stop at arm's length
+      const sh = f.shoulders[arm];
+      const rx = Math.sqrt(Math.max(0, most * most - (hand.y - sh.y) ** 2));
+      const dx = clamp(hand.x, sh.x - rx, sh.x + rx) - hand.x;
+      hand.x += dx;
       for (const k of [arm + "0", arm + "1"]) {
+        const h = heads[k as Mallet];
+        c.bag.tf("mb" + k, `translate(${(h.x + dx).toFixed(1)} ${h.y.toFixed(1)})`);
         c.bag.set("m" + k, "x1", hand.x);
         c.bag.set("m" + k, "y1", hand.y);
-        c.bag.set("m" + k, "x2", heads[k as Mallet].x);
-        c.bag.set("m" + k, "y2", heads[k as Mallet].y);
+        c.bag.set("m" + k, "x2", h.x + dx);
+        c.bag.set("m" + k, "y2", h.y);
       }
-      m["x" + arm] = hand.x;
       f.arms[arm] = { hand, bend: 12, pawRot: arm === "L" ? 15 : -15, spread: clamp(Math.abs(a.x - b.x) / 14, 1, 1.6) };
     }
     // Bars ring while the note sounds (vibes sustain), flash on the strike.
@@ -217,7 +226,21 @@ export const vibes: Rig = {
     // the player walks along the bars toward where the mallets are, and leans the rest of the way
     const mid = (m.xL + m.xR) / 2 - 120;
     // (far enough for a chord at the end of the bars: short of it, the far arm lay across the chest)
-    f.look.shift = clamp(mid * 0.7, -34, 34);
+    // and far enough for each paw to be within reach of where its mallets are going
+    let lo = -Infinity;
+    let hi = Infinity;
+    for (const arm of ["L", "R"] as const) {
+      const sh = arm === "L" ? ANCHOR.shoulderL : ANCHOR.shoulderR;
+      const ks = [arm + "0", arm + "1"] as Mallet[];
+      const to = ks.map((k) => barX(next[k]?.pitch ?? m["p" + k]));
+      const x = (to[0] + to[1]) / 2 + (arm === "L" ? -6 : 6);
+      const y = Math.min(...ks.map((k) => heads[k].y)) - MALLET + 12;
+      const rx = Math.sqrt(Math.max(0, (f.reach * 0.9) ** 2 - (y - sh.y) ** 2));
+      lo = Math.max(lo, x - sh.x - rx);
+      hi = Math.min(hi, x - sh.x + rx);
+    }
+    const walk = clamp(mid * 0.7, -34, 34);
+    f.look.shift = clamp(lo <= hi ? clamp(walk, lo, hi) : (lo + hi) / 2, -34, 34);
     f.look.lean = clamp(mid * 0.05, -5, 5);
     f.look.bliss = s.active.some((n) => n.durSec > 1.2 && n.progress > 0.2);
   },

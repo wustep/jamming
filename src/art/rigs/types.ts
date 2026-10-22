@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { AnimalId, MemberFrameState, UpcomingOnset } from "@/music/types";
 import { approach, type Mat, type Pt } from "../affine";
+import { ARM, type ArmSpec } from "../arm";
 
 /** Ref registry: rigs grab DOM nodes by key, no React state involved. */
 export class Bag {
@@ -83,6 +84,10 @@ export interface Frame {
   /** Follow matrix for this rig's front/back groups (already applied by the sprite). */
   M: Mat;
   arms: { L: ArmTarget; R: ArmTarget };
+  /** Where the arms start this frame (the body leans, slides and dips). */
+  shoulders: Record<"L" | "R", Pt>;
+  /** How long this player's arms are: a paw farther than this from its shoulder is out of reach. */
+  reach: number;
   look: Look;
 }
 
@@ -100,8 +105,18 @@ export interface Rig {
   seated?: boolean;
   /** The rig draws the player's feet itself (e.g. on pedals), so the sprite skips its own. */
   hideFeet?: boolean;
+  /**
+   * The player's arms at this instrument (arm.ts): how far they reach, how far in front of the
+   * body the paws work, where the elbows point. Fixed for the take: an arm never stretches.
+   */
+  arm?: Partial<ArmSpec>;
   render(c: RigCtx): RigParts;
   update(c: RigCtx, f: Frame): void;
+}
+
+/** A rig's arms, filled in from the defaults. */
+export function armOf(rig: Rig): ArmSpec {
+  return { ...ARM, ...rig.arm, pole: { ...ARM.pole, ...rig.arm?.pole } };
 }
 
 // ─── Shared motion helpers ───────────────────────────────────────────────────
