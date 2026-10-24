@@ -134,6 +134,8 @@ export class Motion {
   lean = 0;
   dip = 0;
   shift = 0;
+  /** How much the rig's phrasing has taken over from the beat (Look.steady), eased. */
+  steady = 0;
   pedal = -1;
   cheeks = 0;
   inhale = 0;
@@ -243,11 +245,13 @@ export class Motion {
     const listening = s.role === "rest";
     const amp = (1.2 + 2.8 * energy) * (listening ? 0.6 : 1) * (1 + 0.2 * this.feat) * (sp.seated ? 0.8 : 1);
     const lagBeats = (0.05 * (s.bpm || 120)) / 60;
-    const bodyBob = g * amp * 0.35 * bounce(s.beat, unit);
-    const headBob = g * amp * bounce(s.beat - lagBeats, unit);
+    // a player phrasing with the whole body (a violinist) bounces less and doesn't rock to the bar
+    const own = this.steady * (s.active.length || s.nextOnsetIn < 1 ? 1 : 0.5);
+    const bodyBob = g * amp * 0.35 * bounce(s.beat, unit) * (1 - 0.6 * own);
+    const headBob = g * amp * bounce(s.beat - lagBeats, unit) * (1 - 0.6 * own);
     // weight from foot to foot over the bar (on 1 and 3 in four); seated players just rock
     const barLen = s.beatsPerBar || 4;
-    const swayAmp = (sp.seated ? 0.7 : 1.4) * (0.6 + 0.6 * energy);
+    const swayAmp = (sp.seated ? 0.7 : 1.4) * (0.6 + 0.6 * energy) * (1 - 0.8 * own);
     const groovSway = g * swayAmp * Math.cos((2 * Math.PI * s.beat) / (barLen % 2 === 0 ? barLen : barLen * 2) + ph * 0.5);
     // idle: slow breaths, an occasional shift of weight, a look about
     const idle = 1 - g;
@@ -287,7 +291,7 @@ export class Motion {
       scl(1 + this.feat * 0.025, 1 + this.feat * 0.025, 120, GROUND),
     );
     const neckDrop = NECK_H * (1 - sy);
-    const tilt = g * Math.sin((Math.PI * s.beat) / unit) * (0.6 + 1.6 * energy) + idle * Math.sin(t * 0.6 + ph * 7) * 2 - sway * 0.45;
+    const tilt = g * Math.sin((Math.PI * s.beat) / unit) * (0.6 + 1.6 * energy) * (1 - 0.7 * own) + idle * Math.sin(t * 0.6 + ph * 7) * 2 - sway * 0.45;
     const headDown = neckDrop + headBob + idleBob + bow * 5 + nod * 2.8;
     const headM = chain(tr(headTurn * 2.6, headDown), rot(tilt + headTurn * 4 + bow * 4, ANCHOR.neck.x, ANCHOR.neck.y));
     const charHead = chain(charM, headM);
@@ -373,6 +377,7 @@ export class Motion {
     this.shift += (clamp(look.shift ?? 0, -34, 34) - this.shift) * approach(dt, 0.13);
     if (look.pedal !== undefined) this.pedal = this.pedal < 0 ? look.pedal : this.pedal + (look.pedal - this.pedal) * approach(dt, 0.03);
     this.dip += (clamp(look.dip, 0, 6) - this.dip) * approach(dt, 0.05);
+    this.steady += (clamp(look.steady ?? 0, 0, 1) - this.steady) * approach(dt, 0.5);
     this.cheeks += (look.cheeks - this.cheeks) * approach(dt, 0.05);
     this.inhale += (look.inhale - this.inhale) * approach(dt, 0.1);
     this.bliss += ((look.bliss ? 1 : 0) - this.bliss) * approach(dt, 0.08);

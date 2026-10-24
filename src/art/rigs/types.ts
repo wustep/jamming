@@ -74,6 +74,11 @@ export interface Look {
   shift?: number;
   /** A damper pedal under the right foot, 0 (up) … 1 (down), for a standing player who works one. */
   pedal?: number;
+  /**
+   * 0 … 1: how much the rig's own phrasing moves the body instead of the beat (a violinist sways
+   * with the line and leans into its top note rather than bouncing on every beat).
+   */
+  steady?: number;
 }
 
 export interface Frame {

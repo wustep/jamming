@@ -34,7 +34,8 @@ export const INSTRUMENTS: Record<InstrumentId, InstrumentDef> = {
   trombone: { id: "trombone", name: "Trombone", fn: "melodic", range: [40, 72], sweet: [43, 67], solo: [48, 70], clef: "bass", notationShift: 0, poly: false, sustain: true, breath: 8 },
   clarinet: { id: "clarinet", name: "Clarinet", fn: "melodic", range: [50, 91], sweet: [55, 84], solo: [57, 86], clef: "treble", notationShift: 0, poly: false, sustain: true, breath: 8 },
   flute: { id: "flute", name: "Flute", fn: "melodic", range: [60, 96], sweet: [64, 91], solo: [65, 93], clef: "treble", notationShift: 0, poly: false, sustain: true, breath: 7 },
-  violin: { id: "violin", name: "Violin", fn: "melodic", range: [55, 100], sweet: [60, 91], solo: [62, 93], clef: "treble", notationShift: 0, poly: false, sustain: true, bowed: true },
+  // Violin: solos sing on the top three strings up to E6; above that it thins to a whistle.
+  violin: { id: "violin", name: "Violin", fn: "melodic", range: [55, 100], sweet: [60, 91], solo: [62, 88], clef: "treble", notationShift: 0, poly: false, sustain: true, bowed: true },
   // Cello: a tenor voice first (countermelodies, pads, pizz comping, solos up into tenor clef),
   // and the bass chair only when nobody else holds it.
   cello: { id: "cello", name: "Cello", fn: "melodic", range: [36, 81], sweet: [43, 72], clef: "bass", notationShift: 0, poly: true, sustain: true, bassCapable: true, bowed: true, solo: [50, 77] },

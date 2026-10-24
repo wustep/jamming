@@ -1,6 +1,7 @@
 import {
   DrumMachine,
   ElectricPiano,
+  Instrument,
   Mallet,
   Sampler,
   Soundfont,
@@ -11,7 +12,8 @@ import {
   type Storage,
 } from "smplr";
 import type { InstrumentId } from "@/music/types";
-import { DRUM } from "@/music/instruments";
+import { DRUM, INSTRUMENTS } from "@/music/instruments";
+import { BowedVoice, loadBowedSamples, setBowed } from "./bowed";
 import { CountingStorage } from "./storage";
 
 // One open sampled instrument per animal. Each instrument has a fallback chain; the first
@@ -236,6 +238,32 @@ function soundfont(name: string, kit: SoundfontKit): PackSpec {
         pan: p.pan,
         onLoadProgress: ({ loaded, total }) => p.onProgress(loaded, total),
       });
+    },
+  };
+}
+
+/** smplr's soundfont make-up gain (its `extraGain`): the bowed voice matches it, so levels don't move. */
+export const SOUNDFONT_GAIN = 5;
+
+/**
+ * A bowed line's own voice (bowed.ts): the same soundfont, decoded once, with an envelope per
+ * note (slurs, swells, vibrato, slides) instead of smplr's flat one. A smplr instrument with no
+ * samples of its own carries it, so its pan, level and reverb send work like any other's.
+ */
+function bowed(instrument: InstrumentId, kit: SoundfontKit): PackSpec {
+  const name = SOUNDFONT_NAME[instrument];
+  return {
+    pack: `bowed:${kit === "MusyngKite" ? "musyngkite" : "fluidr3"}:${name}`,
+    create(p) {
+      const Bowed = Instrument<object>((ctx, _opts, smplr) => {
+        const bus = ctx.createGain();
+        bus.gain.value = SOUNDFONT_GAIN;
+        smplr.output.addInsert(bus);
+        return loadBowedSamples(ctx, p.storage, name, kit, INSTRUMENTS[instrument].range, p.onProgress).then((samples) => {
+          setBowed(smplr, new BowedVoice(ctx, bus, samples));
+        });
+      });
+      return Bowed(p.ctx, { destination: p.destination, scheduler: p.scheduler, storage: p.storage, volume: p.volume, pan: p.pan });
     },
   };
 }
@@ -505,6 +533,9 @@ export function packChain(instrument: InstrumentId, sounds: Sounds = DEFAULT_SOU
       const voice = sounds.pad === "choir" ? "choir_aahs" : "string_ensemble_1";
       return [soundfont(voice, "MusyngKite"), soundfont(voice, "FluidR3_GM")];
     }
+    case "violin":
+      // its own bowed voice, or (if that can't load) the plain soundfont
+      return [bowed("violin", "MusyngKite"), soundfont("violin", "MusyngKite"), soundfont("violin", "FluidR3_GM")];
     default: {
       const name = SOUNDFONT_NAME[instrument];
       return [soundfont(name, "MusyngKite"), soundfont(name, "FluidR3_GM")];
