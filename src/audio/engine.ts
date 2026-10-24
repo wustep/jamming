@@ -18,6 +18,7 @@ import {
   type Sounds,
 } from "./packs";
 import { tuneRoom } from "./room";
+import { VOICE_CAP, VoiceBook, drumRing } from "./voices";
 import { articulate, feelOf, metricLift, type PlayingFeel } from "@/music/playing";
 import { CountingStorage } from "./storage";
 
@@ -86,6 +87,10 @@ interface Track {
   /** How the chart is played: touch, note lengths, how loose the time is (see playing.ts). */
   feel: PlayingFeel;
   beats: number;
+  /** What this player has ringing: a restruck pitch and voices past the cap let go (voices.ts). */
+  voices: VoiceBook;
+  /** Numbers each started voice, so it can be let go on its own. */
+  serial: number;
 }
 
 type SmplrNote = Exclude<Parameters<Smplr["start"]>[0], string | number>;
@@ -114,6 +119,8 @@ function playThroughSilentSwitch() {
 /** +4 dB after the bus compressor (the limiter adds ~2.3 dB of its own make-up): see ensureContext. */
 const MAKEUP_GAIN = 1.6;
 const END_TAIL_SEC = 0.8;
+/** How long a pitched note's voice goes on after its written end (the packs' releases run 0.3–0.7 s). */
+const RING_SEC = 0.4;
 const PAN_WIDTH = 0.65;
 
 const sortedCache = new WeakMap<NoteEvent[], NoteEvent[]>();
@@ -702,6 +709,8 @@ export class TroopAudio {
         pocket: pocketOf(score, m.id),
         feel: feelOf({ style: score.frame?.style ?? "swing", feel: score.frame?.feel }),
         beats: beatsPerBar(score),
+        voices: new VoiceBook(VOICE_CAP[m.instrument] ?? 8, m.instrument !== "drums"),
+        serial: 0,
       };
     });
   }
@@ -733,6 +742,8 @@ export class TroopAudio {
         pocket: pocketOf(score, m.id),
         feel: feelOf({ style: score.frame?.style ?? "swing", feel: score.frame?.feel }),
         beats: beatsPerBar(score),
+        voices: old?.voices ?? new VoiceBook(VOICE_CAP[m.instrument] ?? 8, m.instrument !== "drums"),
+        serial: old?.serial ?? 0,
       };
     });
   }
@@ -1192,7 +1203,10 @@ export class TroopAudio {
     try {
       if (isDrum && entry.pack !== "lm-2") {
         // the acoustic kit is keyed by General MIDI drum note; the hats choke in its own preset
-        inst.start({ note: note.pitch, velocity: Math.round(1 + vel * 126), time });
+        track.voices.admit(note.pitch, time);
+        const stopId = `${id}#${++track.serial}`;
+        const stop = inst.start({ note: note.pitch, velocity: Math.round(1 + vel * 126), time, stopId });
+        track.voices.add(note.pitch, time, time + drumRing(note.pitch), stop);
       } else if (isDrum) {
         const sample = lm2Sample(note.pitch, vel, note.art);
         if (!sample) {
@@ -1224,7 +1238,12 @@ export class TroopAudio {
           // Soft piano notes are darker, not just quieter.
           event.lpfCutoffHz = 1800 + Math.pow(vel, 1.4) * 14000;
         }
-        inst.start(event);
+        // a pitch struck again lets the old one go; past the player's cap the oldest voice does
+        const voices = note.art === "pizz" ? null : track.voices;
+        voices?.admit(pitch, time);
+        event.stopId = `${id}#${++track.serial}`;
+        const stop = inst.start(event);
+        voices?.add(pitch, time, time + dur + RING_SEC, stop);
       }
       this.stats.scheduled++;
       this.stats.perMember[id] = (this.stats.perMember[id] ?? 0) + 1;
