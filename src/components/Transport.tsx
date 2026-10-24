@@ -9,7 +9,7 @@ import { canShare, shareUrl, type JamConfig } from "@/state/share";
 import { canThink, useTroop } from "@/state/store";
 import { openBrains } from "./BrainsSheet";
 import { PlayAlongToggle } from "./PlayAlong";
-import { RoughButton } from "./ui/rough";
+import { RoughButton, TransportGlyph } from "./ui/rough";
 
 function useLoadStates() {
   const [states, setStates] = useState<LoadState[]>([]);
@@ -91,12 +91,12 @@ export function Transport() {
             seed="dock-play"
             shape="ellipse"
             tone="go"
-            className="h-11 w-11 shrink-0 text-l text-on-accent"
+            className="grid h-11 w-11 shrink-0 place-items-center text-on-accent"
             onClick={() => (playing ? stop() : void play())}
             disabled={!current}
             aria-label={playing ? "Stop" : "Play"}
           >
-            {playing ? "■" : "▶"}
+            <TransportGlyph playing={playing} size={44} />
           </RoughButton>
           <span className="min-w-0 flex-1 truncate text-s text-ink-soft">
             {gen.running ? gen.status : current ? current.title : ""}
@@ -116,13 +116,14 @@ export function Transport() {
         seed="play"
         shape="ellipse"
         tone="go"
-        className="h-14 w-14 text-xl text-on-accent"
+        // a circle reads smaller than a box of the same height, so it is a touch taller than the button beside it
+        className="grid h-12 w-12 shrink-0 place-items-center text-on-accent"
         onClick={() => (playing ? stop() : void play())}
         disabled={!current}
         aria-label={playing ? "Stop" : "Play"}
         title={playing ? "Stop (space)" : "Play (space)"}
       >
-        {playing ? "■" : "▶"}
+        <TransportGlyph playing={playing} size={48} />
       </RoughButton>
 
       {gen.running ? (

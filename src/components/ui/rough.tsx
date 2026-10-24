@@ -98,6 +98,16 @@ function RoughSvg({ w, h, seed, s }: { w: number; h: number; seed: string; s: Ro
       }
       return gen.rectangle(pad, pad, w - pad * 2, h - pad * 2, o);
     };
+    if (s.shape === "ellipse") {
+      // A small circle wobbles a lot at the page's roughness, and a second rough pass for the wash
+      // wobbles differently, so the colour spilled past the line. The wash is a true ellipse on the
+      // same centre, a hair inside the line, and the line is drawn a little steadier.
+      const line = gen.toPaths(shape({ ...opts, roughness: Math.min(opts.roughness, 0.7), bowing: Math.min(opts.bowing, 0.6) }));
+      const rx = w / 2 - pad - 0.5;
+      const ry = h / 2 - pad - 0.5;
+      const wash = s.wash ? [{ d: `M${w / 2 - rx},${h / 2} a${rx},${ry} 0 1,0 ${rx * 2},0 a${rx},${ry} 0 1,0 ${-rx * 2},0 Z`, stroke: "none", strokeWidth: 0, fill: s.wash }] : [];
+      return [...wash, ...line];
+    }
     const wash = s.wash ? gen.toPaths(shape({ ...opts, seed: opts.seed + 1, stroke: "none", fill: s.wash, fillStyle: "solid" })) : [];
     return [...wash, ...gen.toPaths(shape(opts))];
   }, [w, h, seed, s.stroke, s.weight, s.fill, s.wash, s.fillStyle, s.hachureGap, s.hachureAngle, s.fillWeight, s.roughness, s.bowing, s.shape]);
@@ -193,6 +203,23 @@ export function Squiggle({ width = 120, seed = "sq", color = "var(--ink)", class
       {paths.map((d, i) => (
         <path key={i} d={d} stroke={color} strokeWidth={i ? 1 : 1.6} strokeOpacity={i ? 0.6 : 1} fill="none" strokeLinecap="round" />
       ))}
+    </svg>
+  );
+}
+
+/**
+ * The play and stop marks for a round transport button, drawn to the button's size so they sit
+ * in its middle: a softened square about 35% of the width (40% of the drawn circle), and a triangle nudged right of the
+ * box centre so it looks centred (its weight sits toward its flat side).
+ */
+export function TransportGlyph({ playing, size }: { playing: boolean; size: number }) {
+  return (
+    <svg className="block" width={size} height={size} viewBox="0 0 100 100" aria-hidden>
+      {playing ? (
+        <rect x="33" y="33" width="34" height="34" rx="5" fill="currentColor" stroke="currentColor" strokeWidth="1" strokeLinejoin="round" />
+      ) : (
+        <path d="M39 30 L71 50 L39 70 Z" fill="currentColor" stroke="currentColor" strokeWidth="6" strokeLinejoin="round" />
+      )}
     </svg>
   );
 }
