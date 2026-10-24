@@ -526,7 +526,9 @@ export function planPhrase(
       pitches[i] = p;
       prevSk = p;
     }
-    // fills: steps (or chord tones) from one skeleton note toward the next, with approaches
+    // fills: steps (or chord tones) from one skeleton note toward the next, with approaches.
+    // A violin sings by step between the chord tones far more than it arpeggiates them.
+    const arpeggio = ps.arpeggio * (ctx.inst.bowed && !ctx.inst.poly ? 0.45 : 1);
     let a = 0;
     for (let b = 1; b < n; b++) {
       if (Number.isNaN(pitches[b])) continue;
@@ -536,7 +538,7 @@ export function planPhrase(
       for (let j = 1; j <= k; j++) {
         const i = a + j;
         const h = harmOf(i);
-        const pcs = rng.chance(ps.arpeggio) ? [...new Set([...h.tones, ...h.colors])] : fillPcs(ctx, ps, h);
+        const pcs = rng.chance(arpeggio) ? [...new Set([...h.tones, ...h.colors])] : fillPcs(ctx, ps, h);
         const remaining = k - j + 1; // fill notes left, this one included
         const toGoal = stepsBetween(cur, goal, pcs);
         const steps = Math.abs(toGoal);

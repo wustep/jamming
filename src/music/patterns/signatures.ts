@@ -447,7 +447,8 @@ export function leftHandFigure(ctx: BarCtx, sig: Signature | undefined): NoteEve
       const vel = velFor(ctx, 0.4);
       for (const c of ctx.chords) {
         const end = ctx.chords.find((x) => x.beat > c.beat)?.beat ?? ctx.beats;
-        const r = bassNote(c.chord, 36, 50, ctx.mem.lastPitch);
+        // over someone holding the bass (a cello's pedal), the fifths sit an octave up, clear of it
+        const r = ctx.hasBass ? bassNote(c.chord, 48, 60, ctx.mem.lastPitch) : bassNote(c.chord, 36, 50, ctx.mem.lastPitch);
         ctx.mem.lastPitch = r;
         out.push({ pitch: r, start: c.beat, dur: end - c.beat, vel, art: "legato" }, { pitch: r + 7, start: c.beat, dur: end - c.beat, vel: vel * 0.8, art: "legato" });
       }

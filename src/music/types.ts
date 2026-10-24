@@ -87,6 +87,8 @@ export interface NoteEvent {
   art?: "accent" | "staccato" | "ghost" | "legato" | "pizz";
   /** A note of a tune's written melody: the band's own fixes never move it. */
   written?: true;
+  /** Bowed in the same stroke as the note before it (a slur): no new attack, no change of bow. */
+  slur?: true;
 }
 
 export interface ChordChange {
@@ -322,4 +324,12 @@ export interface MemberFrameState {
    * 0 when they are the featured player or nobody is. Listeners glance that way.
    */
   lookX?: number;
+  /**
+   * A bowed line's bow stroke (bowing.ts), from its first note to the end of its last: which way
+   * it goes and how far through it the bow is. Between strokes it's the next one (`inSec` until
+   * it starts, progress 0), so the bow can be set for it. Absent for parts bowed note by note.
+   */
+  stroke?: { id: number; dir: 1 | -1; progress: number; durSec: number; inSec: number };
+  /** The phrase a bowed line is in: how far through it (0..1), and where its high point falls. */
+  phrase?: { progress: number; peak: number; durSec: number };
 }
