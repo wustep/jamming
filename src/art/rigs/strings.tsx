@@ -3,6 +3,7 @@
 
 import { L, S, ellipsePath, hash, mix } from "../sketch";
 import { type Mat, type Pt, ap, approach, attr, chain, clamp, rot, scl, tr } from "../affine";
+import { VIBRATO_HZ, phraseArc, vibratoAt } from "@/music/bowing";
 import { OPEN, stopFrac, stringFor } from "../fingering";
 import { type Frame, type Rig, type RigCtx, damp, glide, hit, newOnsets } from "./types";
 
@@ -127,12 +128,16 @@ function bowedUpdate(geo: BowGeo, c: RigCtx, f: Frame) {
     m.travel = 0.4;
   }
   if (m.pluckT === undefined) m.pluckT = -Infinity;
+  // A line bowed in strokes (bowing.ts) changes bow once a stroke: a slur is one long stroke
+  // through all its notes. A part without them changes bow on every note.
+  const st = f.s.stroke;
   newOnsets(c, f, (o) => {
     // a plucked note doesn't move the bow
     if (o.art === "pizz") {
       m.pluckT = f.t - o.age;
       return;
     }
+    if (st) return;
     const sounding = longestOf(f.s.active.filter((a) => Math.abs(a.age - o.age) < 0.03));
     const dur = sounding ? sounding.durSec : 0.4;
     m.s0 = m.bs;
@@ -142,7 +147,26 @@ function bowedUpdate(geo: BowGeo, c: RigCtx, f: Frame) {
   const lastArt = n?.art ?? f.s.recent[0]?.art;
   const pizzNow = lastArt === "pizz" && (!!n || (f.s.recent[0]?.age ?? Infinity) < 1.5);
   const pz = damp(m, "pz", pizzNow ? 1 : 0, f.dt, pizzNow ? 0.07 : 0.16);
-  if (n && n.art !== "pizz") {
+  if (st && st.inSec <= 0) {
+    if (m.strokeId !== st.id) {
+      // a new stroke sets off from wherever the bow is, the way the bowing says
+      m.strokeId = st.id;
+      m.s0 = m.bs;
+      [m.dir, m.travel] = nextStroke(m.bs, st.dir, clamp(0.14 + st.durSec * 0.3, 0.12, 0.85));
+    }
+    m.bs = clamp(m.s0 + m.dir * m.travel * bowCurve(Math.min(1, st.progress * 1.03)), 0.04, 0.96);
+  } else if (st && (m.lift ?? 0) > 0.5) {
+    // off the string before a phrase: the bow is set where its first stroke wants to start (a
+    // down-bow near the frog, an up-bow near the tip), unhurried
+    const len = clamp(0.14 + st.durSec * 0.3, 0.12, 0.85);
+    const want = st.dir > 0 ? clamp(0.5 - len / 2, 0.08, 0.45) : clamp(0.5 + len / 2, 0.55, 0.92);
+    if (m.retake !== st.id) {
+      m.retake = st.id;
+      m.bsR = m.bs;
+      m.bsRV = 0;
+    }
+    m.bs = clamp(damp(m, "bsR", want, f.dt, 0.25, 1.5), 0.04, 0.96);
+  } else if (!st && n && n.art !== "pizz") {
     const target = m.s0 + m.dir * m.travel * bowCurve(Math.min(1, n.progress * 1.05));
     m.bs = clamp(target, 0.04, 0.96);
   }
@@ -187,8 +211,15 @@ function bowedUpdate(geo: BowGeo, c: RigCtx, f: Frame) {
   const along = glide(m, "stopF", stopFrac(semis), f.dt, 160, 9);
   const stop = geo.stop(Math.round(m.strS), semisOf(along));
   const hand = ap(W, stop.x, stop.y);
-  const vib = vibrato(n, f.t);
-  f.arms.R = { hand: { x: hand.x + vib, y: hand.y }, bend: -16, pawRot: -30 };
+  let vib = { x: vibrato(n, f.t), y: 0 };
+  if (st && n && n.art !== "pizz") {
+    // the stopping finger rocks along the string, with the vibrato the voice has (bowing.ts):
+    // none on a short note, and on a held one it comes in once the note has spoken
+    const w = vibratoAt(n.durSec, n.age) * 1.3 * Math.sin(2 * Math.PI * VIBRATO_HZ * f.t);
+    const along = norm(W[0], W[1]);
+    vib = { x: along.x * w, y: along.y * w };
+  }
+  f.arms.R = { hand: { x: hand.x + vib.x, y: hand.y + vib.y }, bend: -16, pawRot: -30 };
   // the wrist bends at the frog and straightens out toward the tip; the elbow opens with it
   f.arms.L = { hand: bowHand, bend: 22 - m.bs * 10, pawRot: (1 - pz) * (24 - m.bs * 28) + pz * 50 };
 
@@ -200,6 +231,13 @@ function bowedUpdate(geo: BowGeo, c: RigCtx, f: Frame) {
   }
   f.look.bliss = !!n && n.durSec > 0.9 && n.progress > 0.2;
   f.look.lean = (m.bs - 0.5) * -4 * (1 - pz);
+  if (m.byStroke) {
+    // the body moves with the line, not the beat: it leans into the top of a phrase and settles
+    // as it ends (and the bounce on the pulse gives way to it)
+    const ph = f.s.phrase;
+    f.look.lean += damp(m, "leanP", ph ? 2.6 * phraseArc(ph.progress, ph.peak) : 0, f.dt, 0.45);
+    f.look.steady = 1;
+  }
 }
 
 function bowParts(c: RigCtx) {
@@ -225,9 +263,19 @@ const VIOLIN: BowGeo = {
   parkTurn: -25,
   place: (c, f) => {
     const m = c.mem;
-    // it rocks more while it sings, easing between the two (switched at once, every gap between
-    // notes jolted the violin and the stopping paw with it)
-    const sway = Math.sin(f.t * 1.4) * damp(m, "swayA", f.s.active.length ? 2 : 0.6, f.dt, 0.4);
+    if (f.s.stroke || f.s.phrase) m.byStroke = 1;
+    let sway: number;
+    if (m.byStroke) {
+      // a line bowed in strokes: the scroll lifts toward the top of each phrase and settles as it
+      // ends, turns a little with the bow, and breathes slowly in the rests
+      const ph = f.s.phrase;
+      const want = (ph ? -3.6 * phraseArc(ph.progress, ph.peak) : 0) + ((m.bs ?? 0.3) - 0.5) * 1.6 + Math.sin(f.t * 0.8) * 0.4;
+      sway = damp(m, "swayP", want, f.dt, 0.22);
+    } else {
+      // it rocks more while it sings, easing between the two (switched at once, every gap between
+      // notes jolted the violin and the stopping paw with it)
+      sway = Math.sin(f.t * 1.4) * damp(m, "swayA", f.s.active.length ? 2 : 0.6, f.dt, 0.4);
+    }
     return chain(tr(c.mouth.x + 27, c.mouth.y + 19), rot(-28 + sway + (m.strS ?? 1) * 0.8), scl(1.15));
   },
 };

@@ -324,14 +324,17 @@ export function pulse(ctx: BarCtx): NoteEvent[] {
   const sparse = !ctx.feel.ostinato && (ctx.args.includes("sparse") || ctx.texture === "sparse");
   const busy = ctx.args.includes("busy") || ctx.texture === "peak";
   const hits: Hit[] = [];
+  const push = !sparse && !busy && ctx.beats === 4 && !ctx.lastBar;
   if (sparse) for (let b = 0; b < ctx.beats; b += 2) hits.push({ pos: b, dur: 1.9 });
   else if (busy) for (let t = 0; t < ctx.beats; t += 0.5) hits.push({ pos: t, dur: 0.45 });
   else {
-    for (let b = 0; b < ctx.beats; b++) hits.push({ pos: b, dur: 0.9 });
-    if (ctx.beats === 4 && !ctx.lastBar) hits.push({ pos: 3.5, dur: 0.5, next: true });
+    // (the chord on 4 lets go as the push lands: held, it rang on under the next chord)
+    for (let b = 0; b < ctx.beats; b++) hits.push({ pos: b, dur: push && b === 3 ? 0.48 : 0.9 });
+    if (push) hits.push({ pos: 3.5, dur: 0.5, next: true });
   }
-  // the second comper (a guitar with keys) answers on the offbeats
-  const offbeats: Hit[] = Array.from({ length: ctx.beats }, (_, b) => ({ pos: b + 0.5, dur: 0.4 }));
+  // the second comper (a guitar with keys) answers on the offbeats, and leaves the push into the
+  // next chord to the first (its "and" of 4 on the old chord rubbed a half step against it)
+  const offbeats: Hit[] = Array.from({ length: ctx.beats }, (_, b) => ({ pos: b + 0.5, dur: 0.4 })).filter((h) => !(push && h.pos === 3.5));
   const mine = ctx.peerIndex >= 1 ? offbeats : hits;
   const out: NoteEvent[] = [];
   const vel = velFor(ctx, 0.55);

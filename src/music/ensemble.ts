@@ -57,6 +57,23 @@ function sustainedAgainst(parts: Record<string, NoteEvent[]>, ids: string[], n: 
   return out;
 }
 
+/** Pitches other voices strike or hold against a note for a quarter beat or more. */
+function soundingWith(parts: Record<string, NoteEvent[]>, ids: string[], n: NoteEvent): number[] {
+  const out: number[] = [];
+  for (const id of ids) {
+    for (const x of parts[id] ?? []) {
+      if (x !== n && Math.min(x.start + x.dur, n.start + n.dur) - Math.max(x.start, n.start) >= 0.25) out.push(x.pitch);
+    }
+  }
+  return out;
+}
+
+/** The pitch of class `pc` nearest to `p`. */
+function nearestPcIn(pc: number, p: number): number {
+  const d = mod(pc - p, 12);
+  return d > 6 ? p + d - 12 : p + d;
+}
+
 /** The nearest chord tone (or color) to `p` that neither doubles nor rubs against any of `others`. */
 function freePitch(p: number, others: number[], home: Harm, style: Frame["style"], lo: number, hi: number, below = false): number | null {
   const steps = below ? [-1, -2, -3, -4, -5, -6, -7, 1, 2, 3] : [-1, 1, -2, 2, -3, 3, -4, 4, -5, 5];
@@ -130,6 +147,56 @@ export function ensemble(o: EnsembleInput): EnsembleFix[] {
           note(bar, m.id, `${pitchName(n.pitch, flats)} released at the change to ${s.chord.symbol}`);
         }
         break;
+      }
+    }
+  }
+
+  // ── 1b. The band pushes together ──
+  // A comper anticipates the next bar's chord on the last eighth (pop keys' push on the "and" of
+  // 4, a swing kick). Whoever is still on the old chord there goes with it: the bass takes the
+  // new chord's root a half beat early, a held note lets go, and another comper's chord struck on
+  // the same eighth takes the new chord's notes. Left alone, pop's push sounded the old chord a
+  // half step against the new one on nearly every chord change.
+  const halfStep = (a: number, b: number) => Math.abs(a - b) % 12 === 1 || Math.abs(a - b) % 12 === 11;
+  for (let bar = 0; bar < frame.bars - 1; bar++) {
+    if (!bars.has(bar)) continue;
+    const at = (bar + 1) * beats - 0.5;
+    const now = harmony.at(at);
+    const next = harmony.at((bar + 1) * beats);
+    if (now === next || now.chord.symbol === next.chord.symbol) continue;
+    const fits = (h: Harm, p: number) => holdable(h, mod(p, 12), style);
+    const pushers = new Set<string>();
+    let pushed: NoteEvent[] = [];
+    for (const m of members) {
+      const inst = INSTRUMENTS[m.instrument];
+      if (!inst.poly || inst.fn === "rhythm" || inst.fn === "bass") continue;
+      const hit = (parts[m.id] ?? []).filter((x) => Math.abs(x.start - at) < EPS);
+      if (hit.length >= 2 && hit.every((x) => fits(next, x.pitch)) && hit.some((x) => !fits(now, x.pitch))) {
+        pushed = pushed.concat(hit);
+        pushers.add(m.id);
+      }
+    }
+    if (!pushed.length) continue;
+    const clashes = (p: number) => !fits(next, p) && pushed.some((x) => halfStep(x.pitch, p));
+    for (const m of members) {
+      const inst = INSTRUMENTS[m.instrument];
+      const role = plan[bar]?.roles[m.id];
+      if (inst.fn === "rhythm" || !role || (role !== "bass" && !SUPPORT.includes(role))) continue;
+      for (const n of parts[m.id] ?? []) {
+        if (n.written || n.start > at + EPS || n.start + n.dur <= at + 0.1 || !clashes(n.pitch)) continue;
+        // a pusher's own push stays; the chord it struck before it lets go
+        if (pushers.has(m.id) && n.start > at - EPS) continue;
+        if (Math.abs(n.start - at) < EPS) {
+          // struck on the push: the new chord's note (the bass, its root)
+          let p = role === "bass" ? nearestPcIn(next.chord.bass, n.pitch) : nearestIn(n.pitch, next.tones, 0, 2);
+          while (p < inst.range[0]) p += 12;
+          while (p > inst.range[1]) p -= 12;
+          note(bar, m.id, `pushed with the band: ${pitchName(n.pitch, flats)} to ${pitchName(p, flats)} for ${next.chord.symbol}`);
+          n.pitch = p;
+        } else if (at - n.start >= 0.25) {
+          note(bar, m.id, `let go of ${pitchName(n.pitch, flats)} as the band pushed to ${next.chord.symbol}`);
+          n.dur = at - n.start - 0.02;
+        }
       }
     }
   }
@@ -239,8 +306,11 @@ export function ensemble(o: EnsembleInput): EnsembleFix[] {
         const twin = (parts[A.id] ?? []).find((x) => x.pitch === n.pitch && x.dur >= HELD && Math.min(x.start + x.dur, n.start + n.dur) - Math.max(x.start, n.start) >= HELD);
         if (!twin || n.written) continue;
         const home = homeOf(harmony, n);
-        const others = [...sustainedAgainst(parts, support.map((x) => x.id).filter((id) => id !== B.id), n), ...melodyAgainst(n, B.id).map((L) => L.pitch)];
-        const alt = freePitch(n.pitch, others, home, style, INSTRUMENTS[B.instrument].range[0], ceilingFor(B, n), true);
+        // (and not onto a half step from anyone's note struck while it sounds, however short)
+        const others = [...sustainedAgainst(parts, support.map((x) => x.id).filter((id) => id !== B.id), n), ...soundingWith(parts, support.map((x) => x.id).filter((id) => id !== B.id), n), ...melodyAgainst(n, B.id).map((L) => L.pitch)];
+        // split downward, but not into the bass's register (a pad's C3 went to Bb2 under a cello's Ab2)
+        const floor = Math.max(INSTRUMENTS[B.instrument].range[0], Math.min(n.pitch, 48));
+        const alt = freePitch(n.pitch, others, home, style, floor, ceilingFor(B, n), true);
         if (alt !== null) {
           note(bar, B.id, `split from ${A.name}'s ${pitchName(n.pitch, flats)} to ${pitchName(alt, flats)}`);
           n.pitch = alt;
@@ -257,6 +327,7 @@ export function ensemble(o: EnsembleInput): EnsembleFix[] {
       const B = voices[b];
       if (A.id === B.id || INSTRUMENTS[B.instrument].fn === "bass") continue;
       const instB = INSTRUMENTS[B.instrument];
+      const gone = new Set<NoteEvent>();
       for (const n of parts[B.id] ?? []) {
         if (n.dur < HELD) continue;
         const bar = barOf(n.start);
@@ -272,8 +343,17 @@ export function ensemble(o: EnsembleInput): EnsembleFix[] {
         if (fixed !== null) {
           note(bar, B.id, `${pitchName(n.pitch, flats)} rubbed against ${A.name}; moved to ${pitchName(fixed, flats)}`);
           n.pitch = fixed;
+          continue;
+        }
+        // nowhere free to go (a big band has every chord tone taken): a full chord leaves the note
+        // out rather than ring a half step against it
+        const chord = (parts[B.id] ?? []).filter((x) => Math.abs(x.start - n.start) < EPS && !gone.has(x));
+        if (instB.poly && chord.length >= 3) {
+          gone.add(n);
+          note(bar, B.id, `left ${pitchName(n.pitch, flats)} out (a half step from ${A.name}, nowhere free to move)`);
         }
       }
+      if (gone.size) parts[B.id] = (parts[B.id] ?? []).filter((x) => !gone.has(x));
     }
   }
 
@@ -319,7 +399,10 @@ export function ensemble(o: EnsembleInput): EnsembleFix[] {
       // the next chord's root struck early (a tumbao's 4, a push) is that chord's: it keeps its name
       const after = harmony.at(n.start + n.dur + EPS);
       const anticipates = home !== harmony.at(n.start) || (after !== home && mod(n.pitch, 12) === after.chord.bass);
-      if (moved === undefined && !anticipates) {
+      // the root under its chord stays the root (an octave away at most): stepped onto the colour
+      // someone holds, a D7's D became the Eb of the piano's b9 under it
+      const root = mod(n.pitch, 12) === home.chord.bass;
+      if (moved === undefined && !anticipates && !root) {
         // a step to a chord tone, or a half step either side of where the line is going
         const near = [-1, 1, -2, 2].map((d) => n.pitch + d).filter((p) => p !== prev && p !== next && (holdable(home, mod(p, 12), style) || (next !== null && Math.abs(next - p) === 1)));
         moved = near.find(fits);
@@ -364,7 +447,14 @@ export function ensemble(o: EnsembleInput): EnsembleFix[] {
         continue;
       }
       const alt = freePitch(n.pitch, sounding, homeOf(harmony, n), style, inst.range[0], ceilingFor(m, n));
-      if (alt === null) continue;
+      if (alt === null) {
+        // nowhere free to go: a short note of a figure (an arpeggio's eighth) leaves a gap instead
+        if (n.dur <= 0.5 + EPS) {
+          dropped.add(n);
+          note(bar, m.id, `left out ${pitchName(n.pitch, flats)} (a half step from a held note, nowhere free to move)`);
+        }
+        continue;
+      }
       note(bar, m.id, `${pitchName(n.pitch, flats)} rubbed against a held note; moved to ${pitchName(alt, flats)}`);
       n.pitch = alt;
     }

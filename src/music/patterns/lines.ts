@@ -156,7 +156,10 @@ export function harmony(ctx: BarCtx): NoteEvent[] {
         best = p;
       }
     }
-    raw.push({ ...n, pitch: best, vel, art: n.dur >= 1 ? ("legato" as const) : undefined });
+    // (a harmony part is this player's own line, not the tune: the band's fixes may move it)
+    const note: NoteEvent = { ...n, pitch: best, vel, art: n.dur >= 1 ? "legato" : undefined };
+    delete note.written;
+    raw.push(note);
     prev = best;
     prevLead = n.pitch;
   }
@@ -218,7 +221,8 @@ export function celloPad(ctx: BarCtx): NoteEvent[] {
   const out = melodicPad(ctx);
   if (ctx.style.id === "ambient" || ctx.style.id === "minimal") {
     for (const s of chordSpans(ctx)) {
-      const r = fold(nearestPc(s.chord.root, 43), 36, 50);
+      // under a bassist's pedal the drone sits an octave up: down there it was two bass lines
+      const r = ctx.hasBass ? fold(nearestPc(s.chord.root, 50), 48, 59) : fold(nearestPc(s.chord.root, 43), 36, 50);
       out.push({ pitch: r, start: s.start, dur: s.end - s.start, vel: velFor(ctx, 0.42), art: "legato" });
       out.push({ pitch: r + (s.chord.tones[2] ?? 7), start: s.start, dur: s.end - s.start, vel: velFor(ctx, 0.38), art: "legato" });
     }
@@ -243,7 +247,10 @@ export function canon(ctx: BarCtx): NoteEvent[] {
     const strongBeat = Math.abs(n.start - Math.round(n.start)) < 1e-6;
     if ((strongBeat || n.dur >= 0.75) && !holdable(h, mod(p, 12), ctx.style.id)) p = nearestIn(p, h.stable, -1);
     else if (!h.scale.includes(mod(p, 12))) p = nearestIn(p, h.scale);
-    return { ...n, pitch: p, vel, dur: Math.min(n.dur, ctx.beats - n.start) };
+    // the imitation is this player's own line, not the tune: the band's fixes may move it
+    const note: NoteEvent = { ...n, pitch: p, vel, dur: Math.min(n.dur, ctx.beats - n.start) };
+    delete note.written;
+    return note;
   });
   return fitOctave(raw, ctx.inst.range[0], ctx.inst.range[1], ctx.mem.lastPitch);
 }

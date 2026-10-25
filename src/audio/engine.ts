@@ -18,6 +18,8 @@ import {
   type Sounds,
 } from "./packs";
 import { tuneRoom } from "./room";
+import { bowedOf, planBow, type BowJoin, type BowPlan } from "./bowed";
+import { VOICE_CAP, VoiceBook, drumRing } from "./voices";
 import { articulate, feelOf, metricLift, type PlayingFeel } from "@/music/playing";
 import { CountingStorage } from "./storage";
 
@@ -86,6 +88,10 @@ interface Track {
   /** How the chart is played: touch, note lengths, how loose the time is (see playing.ts). */
   feel: PlayingFeel;
   beats: number;
+  /** What this player has ringing: a restruck pitch and voices past the cap let go (voices.ts). */
+  voices: VoiceBook;
+  /** Numbers each started voice, so it can be let go on its own. */
+  serial: number;
 }
 
 type SmplrNote = Exclude<Parameters<Smplr["start"]>[0], string | number>;
@@ -114,6 +120,8 @@ function playThroughSilentSwitch() {
 /** +4 dB after the bus compressor (the limiter adds ~2.3 dB of its own make-up): see ensureContext. */
 const MAKEUP_GAIN = 1.6;
 const END_TAIL_SEC = 0.8;
+/** How long a pitched note's voice goes on after its written end (the packs' releases run 0.3–0.7 s). */
+const RING_SEC = 0.4;
 const PAN_WIDTH = 0.65;
 
 const sortedCache = new WeakMap<NoteEvent[], NoteEvent[]>();
@@ -402,6 +410,7 @@ export class TroopAudio {
       .sort((a, b) => b.used - a.used);
     for (const e of idle.slice(SPARE_ENTRIES)) {
       try {
+        bowedOf(e.inst)?.dispose();
         e.inst?.dispose();
       } catch {
         /* already gone */
@@ -702,6 +711,8 @@ export class TroopAudio {
         pocket: pocketOf(score, m.id),
         feel: feelOf({ style: score.frame?.style ?? "swing", feel: score.frame?.feel }),
         beats: beatsPerBar(score),
+        voices: new VoiceBook(VOICE_CAP[m.instrument] ?? 8, m.instrument !== "drums"),
+        serial: 0,
       };
     });
   }
@@ -733,6 +744,8 @@ export class TroopAudio {
         pocket: pocketOf(score, m.id),
         feel: feelOf({ style: score.frame?.style ?? "swing", feel: score.frame?.feel }),
         beats: beatsPerBar(score),
+        voices: old?.voices ?? new VoiceBook(VOICE_CAP[m.instrument] ?? 8, m.instrument !== "drums"),
+        serial: old?.serial ?? 0,
       };
     });
   }
@@ -786,6 +799,7 @@ export class TroopAudio {
     for (const e of this.entries.values()) {
       try {
         e.inst?.stop();
+        bowedOf(e.inst)?.stopAll();
       } catch {
         /* ignore */
       }
@@ -870,6 +884,7 @@ export class TroopAudio {
       const e = key ? this.entries.get(key) : undefined;
       try {
         e?.inst?.stop();
+        bowedOf(e?.inst)?.stopAll();
       } catch {
         /* ignore */
       }
@@ -1006,7 +1021,9 @@ export class TroopAudio {
         }
         const event: SmplrNote = { note: p, velocity, time };
         if (live.instrument === "piano" && entry.pack === "salamander") event.lpfCutoffHz = 1800 + Math.pow(vel, 1.4) * 14000;
-        stop = entry.inst.start(event);
+        // a bowed voice holds the note itself (its smplr instrument only carries the channel)
+        const bowed = bowedOf(entry.inst);
+        stop = bowed ? bowed.hold(p, clamp(vel, 0, 1), time ?? ctx.currentTime) : entry.inst.start(event);
       }
       live.held.set(pitch, stop);
     } catch (err) {
@@ -1123,7 +1140,7 @@ export class TroopAudio {
         if (when >= horizon) break;
         track.cursor++;
         track.lastStart = note.start;
-        this.scheduleNote(track, note, when, swing, now);
+        this.scheduleNote(track, track.cursor - 1, swing, now);
       }
     }
 
@@ -1153,7 +1170,33 @@ export class TroopAudio {
     return bars > 0 ? bars * beatsPerBar(score) : this.endBeat;
   }
 
-  private scheduleNote(track: Track, note: NoteEvent, when: number, swing: number, now: number) {
+  /** When a note of a track sounds (context seconds), before any late-note clamp: its felt time, pocket and looseness. */
+  private noteTime(track: Track, note: NoteEvent, swing: number): number {
+    const isDrum = track.instrument === "drums";
+    const tight = isDrum && (note.pitch === 36 || note.pitch === 38 || note.pitch === 37);
+    const timingAmt = isDrum ? (tight ? 0.002 : 0.005) : track.feel.looseness;
+    return this.t0 + this.sec(applyFeel(note.start, swing)) + track.pocket(note) + jitter(timingAmt, track.memberId, note.start, note.pitch, "t");
+  }
+
+  /** A bowed line's note: joined to its neighbours the way it's bowed (bowed.ts). */
+  private bowedPlan(track: Track, i: number, time: number, vel: number, pitch: number, dur: number, swing: number): BowPlan {
+    const notes = track.notes;
+    const note = notes[i];
+    const prev = i > 0 ? notes[i - 1] : null;
+    const next = notes[i + 1];
+    const joins = (a: NoteEvent, b: NoteEvent) => a.art !== "pizz" && b.art !== "pizz" && Math.abs(b.start - (a.start + a.dur)) < 1e-4;
+    const join: BowJoin = prev && joins(prev, note) ? (note.slur ? "slur" : "change") : "fresh";
+    // the next note it runs into (not past the loop's end, where it would start over)
+    const nx = next && joins(note, next) && !(this.loop && next.start >= this.loopEndBeat() - 1e-9) ? next : null;
+    const nextIn = nx ? Math.max(0.02, this.noteTime(track, nx, swing) - time) : null;
+    return planBow(
+      { time, dur, pitch, vel, art: note.art, slur: note.slur },
+      { join, prevPitch: prev?.pitch ?? null, nextIn, nextSlur: !!nx?.slur, style: this.score?.frame?.style ?? "swing", seed: this.score?.settings?.seed },
+    );
+  }
+
+  private scheduleNote(track: Track, index: number, swing: number, now: number) {
+    const note = track.notes[index];
     if (this.muted.has(track.memberId)) return;
     // plucked notes on a bowed string use the pizzicato voice when it's loaded
     const pizz = note.art === "pizz" ? this.entries.get(`${track.entryKey}|pizz`) : undefined;
@@ -1167,9 +1210,7 @@ export class TroopAudio {
     const id = track.memberId;
 
     // Humanise (deterministic per note).
-    const tight = isDrum && (note.pitch === 36 || note.pitch === 38 || note.pitch === 37);
-    const timingAmt = isDrum ? (tight ? 0.002 : 0.005) : track.feel.looseness;
-    let time = when + track.pocket(note) + jitter(timingAmt, id, note.start, note.pitch, "t");
+    let time = this.noteTime(track, note, swing);
     if (time < now) {
       if (now - time > 0.08) {
         this.stats.late++;
@@ -1192,7 +1233,10 @@ export class TroopAudio {
     try {
       if (isDrum && entry.pack !== "lm-2") {
         // the acoustic kit is keyed by General MIDI drum note; the hats choke in its own preset
-        inst.start({ note: note.pitch, velocity: Math.round(1 + vel * 126), time });
+        track.voices.admit(note.pitch, time);
+        const stopId = `${id}#${++track.serial}`;
+        const stop = inst.start({ note: note.pitch, velocity: Math.round(1 + vel * 126), time, stopId });
+        track.voices.add(note.pitch, time, time + drumRing(note.pitch), stop);
       } else if (isDrum) {
         const sample = lm2Sample(note.pitch, vel, note.art);
         if (!sample) {
@@ -1207,24 +1251,37 @@ export class TroopAudio {
         inst.start({ note: sample, velocity: Math.round(1 + vel * 126), time });
       } else {
         const span = this.sec(applyFeel(note.start + Math.max(0.01, note.dur), swing)) - this.sec(applyFeel(note.start, swing));
-        let dur = articulate(track.feel, note.dur, Math.max(0.03, span), note.art);
-        if (note.art === "staccato") dur *= 0.5;
-        if (note.art === "pizz") dur = Math.min(dur, 0.9);
-        if (note.art === "legato") dur *= 1.06;
-        if (DECAYING[track.instrument]) dur += 0.05;
         const range = INSTRUMENTS[track.instrument]?.range;
         let pitch = Math.round(note.pitch);
         if (range) {
           while (pitch < range[0] - 12) pitch += 12;
           while (pitch > range[1] + 12) pitch -= 12;
         }
+        // a bowed line plays through its own voice: slurs, swells, vibrato (bowed.ts)
+        const bowed = note.art === "pizz" ? undefined : bowedOf(inst);
+        if (bowed) {
+          bowed.play(this.bowedPlan(track, index, time, vel, pitch, Math.max(0.03, span), swing));
+          this.stats.scheduled++;
+          this.stats.perMember[id] = (this.stats.perMember[id] ?? 0) + 1;
+          return;
+        }
+        let dur = articulate(track.feel, note.dur, Math.max(0.03, span), note.art);
+        if (note.art === "staccato") dur *= 0.5;
+        if (note.art === "pizz") dur = Math.min(dur, 0.9);
+        if (note.art === "legato") dur *= 1.06;
+        if (DECAYING[track.instrument]) dur += 0.05;
         const midiVel = Math.round(1 + vel * 126);
         const event: SmplrNote = { note: pitch, velocity: midiVel, time, duration: dur };
         if (track.instrument === "piano" && entry.pack === "salamander") {
           // Soft piano notes are darker, not just quieter.
           event.lpfCutoffHz = 1800 + Math.pow(vel, 1.4) * 14000;
         }
-        inst.start(event);
+        // a pitch struck again lets the old one go; past the player's cap the oldest voice does
+        const voices = note.art === "pizz" ? null : track.voices;
+        voices?.admit(pitch, time);
+        event.stopId = `${id}#${++track.serial}`;
+        const stop = inst.start(event);
+        voices?.add(pitch, time, time + dur + RING_SEC, stop);
       }
       this.stats.scheduled++;
       this.stats.perMember[id] = (this.stats.perMember[id] ?? 0) + 1;

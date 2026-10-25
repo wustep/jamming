@@ -1,3 +1,4 @@
+import { bowLine, bowsLines } from "./bowing";
 import { feelOf, playLine } from "./playing";
 import { colorLine } from "./patterns/signatures";
 import { DYNAMIC_ENERGY, newMemory, type BarCtx, type PlayerMemory } from "./context";
@@ -381,6 +382,12 @@ export function realize(o: RealizeOptions): RealizeResult {
         if (n.start >= lastStart - 1e-6 && n.dur >= beats * 0.9) n.dur = beats * 1.6;
       }
     }
+  }
+  // a violinist plays the line through: joined up, slurred under the bow, swelling with the phrase
+  for (const m of members) {
+    if (!bowsLines(m.instrument)) continue;
+    const roleAt = (beat: number) => plan[Math.floor(beat / beats + 1e-9)]?.roles[m.id];
+    parts[m.id] = bowLine(parts[m.id], { beats, tempo: frame.tempo, style: frame.style, roleAt, seed: o.seed });
   }
   return { parts, issues, ms: performance.now() - t0, featuredByBar };
 }

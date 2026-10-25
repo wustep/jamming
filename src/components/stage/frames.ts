@@ -1,4 +1,5 @@
 import { applyFeel, pocketOf } from "@/audio/feel";
+import { bowsLines, strokesOf, swellsOf } from "@/music/bowing";
 import { DYNAMIC_ENERGY } from "@/music/context";
 import { INSTRUMENTS } from "@/music/instruments";
 import { isFeaturedRole } from "@/music/realize";
@@ -19,6 +20,13 @@ interface Track {
   vel: Float32Array;
   art: (NoteEvent["art"] | undefined)[];
   maxDur: number;
+  /** A bowed line's strokes and phrases (felt beats), and which each note is in. */
+  bow?: {
+    strokeOf: number[];
+    strokes: { start: number; end: number; dir: 1 | -1 }[];
+    phraseOf: number[];
+    phrases: { start: number; end: number; peak: number }[];
+  };
 }
 
 export class FrameComputer {
@@ -62,6 +70,26 @@ export class FrameComputer {
         t.art[i] = x.art;
         t.maxDur = Math.max(t.maxDur, e - s);
       });
+      if (bowsLines(m.instrument)) {
+        // the bow strokes and phrases the line is played in, on the felt timeline
+        const notes = felt.map((f) => f.x);
+        const { strokes, strokeOf } = strokesOf(notes, score.frame.meter.beats);
+        const phraseOf: number[] = new Array(n).fill(-1);
+        const phrases = swellsOf(notes, score.frame.meter.beats).map(([a, b], k) => {
+          let top = a;
+          for (let i = a; i <= b; i++) {
+            phraseOf[i] = k;
+            if (t.pitch[i] > t.pitch[top]) top = i;
+          }
+          return { start: t.start[a], end: t.end[b], peak: t.start[top] };
+        });
+        t.bow = {
+          strokeOf,
+          strokes: strokes.map((s) => ({ start: t.start[s.first], end: Math.max(t.end[s.last], t.start[s.first] + 0.05), dir: s.dir })),
+          phraseOf,
+          phrases,
+        };
+      }
       this.tracks.set(m.id, t);
     }
   }
@@ -145,6 +173,38 @@ export class FrameComputer {
       upcoming.push({ pitch: t.pitch[j], vel: t.vel[j], inSec, art: t.art[j] });
     }
     base.upcoming = upcoming;
+    if (t.bow) this.bowing(base, t.bow, i, beat, spb);
     return base;
+  }
+
+  /** The stroke the bow is in (or the next one, while it's off the string), and the phrase. */
+  private bowing(base: MemberFrameState, bow: NonNullable<Track["bow"]>, i: number, beat: number, spb: number) {
+    const k = i >= 0 ? bow.strokeOf[i] : -1;
+    const cur = k >= 0 && bow.strokes[k].end > beat ? k : -1;
+    let id = cur;
+    if (id < 0) {
+      // between strokes: the next one, once it's near
+      for (let j = Math.max(0, i + 1); j < bow.strokeOf.length; j++) {
+        if (bow.strokeOf[j] < 0) continue;
+        if ((bow.strokes[bow.strokeOf[j]].start - beat) * spb < 2) id = bow.strokeOf[j];
+        break;
+      }
+    }
+    if (id >= 0) {
+      const s = bow.strokes[id];
+      base.stroke = {
+        id,
+        dir: s.dir,
+        progress: Math.max(0, Math.min(1, (beat - s.start) / Math.max(1e-6, s.end - s.start))),
+        durSec: (s.end - s.start) * spb,
+        inSec: Math.max(0, (s.start - beat) * spb),
+      };
+    }
+    const p = i >= 0 ? bow.phraseOf[i] : -1;
+    if (p >= 0 && bow.phrases[p].end > beat) {
+      const ph = bow.phrases[p];
+      const len = Math.max(1e-6, ph.end - ph.start);
+      base.phrase = { progress: Math.min(1, (beat - ph.start) / len), peak: (ph.peak - ph.start) / len, durSec: len * spb };
+    }
   }
 }

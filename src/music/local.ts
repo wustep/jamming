@@ -51,8 +51,11 @@ export function motifForFrame(frame: Frame, members: Member[], rng = makeRng(1))
     if (oct) m = transposeMotif(m, oct, frame.key);
     return m;
   }
-  // the tune sits in the upper middle of the leader's voice, over the band
-  const range: [number, number] = [inst.sweet[0] + 5, Math.min(inst.sweet[1], inst.sweet[0] + 22)];
+  // the tune sits in the upper middle of the leader's voice, over the band. A melody instrument
+  // whose comfortable range starts low sings it where its melodies live: from the bottom of that
+  // range, a cello's tune sat under the piano's comping. (A keyboard voices its own hands.)
+  const voice = inst.fn === "melodic" && inst.sweet[0] + 5 < 55 && inst.solo ? inst.solo : inst.sweet;
+  const range: [number, number] = [voice[0] + 5, Math.min(voice[1], voice[0] + 22)];
   return generateMotif(STYLES[frame.style], frame.key, firstChord, frame.meter.beats, range, rng);
 }
 
