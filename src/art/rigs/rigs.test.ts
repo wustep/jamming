@@ -4,7 +4,7 @@ import { DRUM, INSTRUMENT_LIST } from "@/music/instruments";
 import { PRESETS } from "@/music/presets";
 import { STYLES } from "@/music/styles";
 import type { InstrumentId, StyleId } from "@/music/types";
-import { glitchesOf } from "../glitch";
+import { acrossBy, glitchesOf } from "../glitch";
 import { Motion } from "../motion";
 import { RIGS } from ".";
 import { rigTake } from "./take";
@@ -176,4 +176,69 @@ describe("rigs follow the notes frame by frame", () => {
         }
     expect(found).toEqual([]);
   }, 120_000);
+});
+
+describe("arms play the way players hold their instruments", () => {
+  /** A take played frame by frame through the audit, with the frame drawn when a time sounds. */
+  const take = (inst: InstrumentId, style: StyleId) => {
+    const { frames, onsets } = auditTake(inst, style, { seed: 3, frames: true });
+    const recs = frames!;
+    return { recs, onsets, at: (t: number) => recs[Math.max(0, Math.min(recs.length - 1, Math.ceil((t - 0.004) * FPS)))] };
+  };
+  const turn = (a: number) => Math.abs(((((a * 180) / Math.PI + 540) % 360) - 180));
+
+  it("a drumstick carries on the line of the forearm that swings it", () => {
+    // the paw sat beside the drum with its forearm pointing away and the stick bent back across
+    // it (a wrist turned 110–140°); the elbow now sits behind the paw, along the stick
+    for (const style of ["swing", "funk", "bossa", "neworleans"] as StyleId[]) {
+      const { onsets, at } = take("drums", style);
+      const hits = onsets.filter((o) => o.pitch !== DRUM.kick && o.pitch !== DRUM.hatPedal);
+      const bent: string[] = [];
+      for (const o of hits) {
+        const r = at(o.t);
+        for (const side of ["L", "R"] as const) {
+          const h = r.hands[side];
+          const e = r.elbows[side];
+          const s = r.attrs["stick" + side];
+          const wrist = turn(Math.atan2(+s.y2 - h.y, +s.x2 - h.x) - Math.atan2(h.y - e.y, h.x - e.x));
+          if (wrist > 65) bent.push(`${side} ${wrist.toFixed(0)}° @${r.beat.toFixed(2)}`);
+        }
+      }
+      expect(bent.length / (hits.length * 2), `${style}: ${bent.slice(0, 4).join(", ")}`).toBeLessThan(0.03);
+    }
+  });
+
+  it("a tenor hangs at the player's right: left hand on the upper stack, right on the lower, no arm across the chest", () => {
+    for (const style of ["swing", "funk", "bossa"] as StyleId[]) {
+      const { recs } = take("sax", style);
+      const wrong: string[] = [];
+      for (const r of recs.slice(30)) {
+        if (!r.sounding.length) continue;
+        // the viewer-right arm is the player's left: it's on the upper stack, above the other paw
+        if (r.hands.R.y > r.hands.L.y - 20) wrong.push(`paws level @${r.beat.toFixed(2)}`);
+        // the horn hangs at the viewer-left, both paws on that side of the far shoulder
+        if (r.hands.L.x > r.hands.R.x) wrong.push(`lower paw right of the upper @${r.beat.toFixed(2)}`);
+        if (Math.max(acrossBy("L", r.hands.L, r.shoulders), acrossBy("R", r.hands.R, r.shoulders)) > 0) wrong.push(`across the chest @${r.beat.toFixed(2)}`);
+      }
+      expect(wrong.slice(0, 4), style).toEqual([]);
+    }
+  });
+
+  it("a bassist's finger pulls each note across the string and swings back", () => {
+    // it nudged down and out a few px and back, which read as a twitch rather than a pluck
+    for (const style of ["swing", "funk", "bossa"] as StyleId[]) {
+      const { onsets, at } = take("bass", style);
+      const spaced = onsets.filter((o, i) => i > 0 && o.t - onsets[i - 1].t > 0.15 && o.t > 1);
+      const pulled = spaced.filter((o) => {
+        // where the finger set on the string, and how far it pulled through (a player's pocket
+        // moves the drawn pluck a little off the heard onset)
+        const paws = Array.from({ length: 14 }, (_, i) => at(o.t - 0.1 + i / FPS).hands.L);
+        const set = paws.slice(0, 7).reduce((a, b) => (b.x < a.x ? b : a));
+        const through = paws.slice(4).reduce((a, b) => (b.x > a.x ? b : a));
+        // across the strings toward E (viewer-right), not along them
+        return through.x - set.x > 6 && Math.abs(through.y - set.y) < through.x - set.x;
+      });
+      expect(pulled.length / spaced.length, style).toBeGreaterThan(0.9);
+    }
+  });
 });

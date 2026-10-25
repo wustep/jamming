@@ -8,7 +8,7 @@ import { PENCIL, S, ellipsePath, hash, mix, tint } from "./sketch";
 import { type Pt, approach, attr, clamp } from "./affine";
 import { Motion, randAt } from "./motion";
 import { RIGS } from "./rigs";
-import { ARM_W, type ArmState, armPaths, poseArm } from "./arm";
+import { ARM_W, type ArmState, armFor, armPaths, poseArm } from "./arm";
 import { Bag, type Frame, type RigCtx, armOf } from "./rigs/types";
 
 export interface SpriteHandle {
@@ -155,7 +155,7 @@ export const AnimalSprite = forwardRef<SpriteHandle, AnimalSpriteProps>(function
         t,
         dt,
         M: pose.M,
-        arms: { L: { hand: r.hands.L, bend: 12 }, R: { hand: r.hands.R, bend: 12 } },
+        arms: { L: { hand: r.hands.L}, R: { hand: r.hands.R} },
         shoulders: pose.shoulders,
         reach: arms.reach,
         look: { mouthCovered: false, cheeks: 0, inhale: 0, bliss: false, lean: 0, dip: 0 },
@@ -168,7 +168,7 @@ export const AnimalSprite = forwardRef<SpriteHandle, AnimalSpriteProps>(function
         const a = f.arms[side];
         const sh = pose.shoulders[side];
         r.shoulders[side] = sh;
-        const arm = poseArm(sh, a.hand, arms, side === "L" ? -1 : 1, r.elbows[side], dt);
+        const arm = poseArm(sh, a.hand, armFor(arms, side === "L" ? -1 : 1, a.elbow), side === "L" ? -1 : 1, r.elbows[side], dt);
         r.elbows[side] = arm.state;
         r.hands[side] = arm.hand;
         const p = armPaths(sh, arm.elbow, arm.hand);

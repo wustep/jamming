@@ -12,8 +12,17 @@ type Hand = Exclude<Piece, "kick">;
 
 interface PieceGeo {
   hitAt: Pt;
-  /** Where the hand sits relative to the hit point (for the piece's own arm; mirrored for the other). */
-  hand: Pt;
+  /**
+   * Which way the stick points at the piece, for the piece's own arm (degrees on the page: 0 to
+   * the right, 90 down; mirrored for the other arm). The paw sits a stick's length back from the
+   * hit along it, and the elbow behind the paw, so the stick carries on the forearm's line.
+   */
+  aim: number;
+  /**
+   * How long the stick looks (of its length): one pointing into the kit, at a drum in front of
+   * the player, is seen end-on and looks shorter, and the paw comes in in front of the body.
+   */
+  depth: number;
   arm: "L" | "R";
 }
 
@@ -25,13 +34,15 @@ const SNARE = { x: 152, y: 186 };
 const FLOOR = { x: 206, y: 206 };
 const KICK = { x: 120, y: 214, r: 33 };
 
+// The cymbals stand higher than the shoulders, so their sticks point up and the arm comes up
+// under them; the snare and floor tom are struck from above and outside, the elbow out.
 const GEO: Record<Hand, PieceGeo> = {
-  hat: { hitAt: { x: HAT.x + 8, y: HAT.y - 3 }, hand: { x: 26, y: 22 }, arm: "L" },
-  crash: { hitAt: { x: CRASH.x + 8, y: CRASH.y + 2 }, hand: { x: 22, y: 36 }, arm: "L" },
-  tom: { hitAt: { x: TOM.x, y: TOM.y }, hand: { x: -22, y: 16 }, arm: "L" },
-  ride: { hitAt: { x: RIDE.x - 10, y: RIDE.y + 1 }, hand: { x: -14, y: 32 }, arm: "R" },
-  snare: { hitAt: { x: SNARE.x - 2, y: SNARE.y }, hand: { x: 26, y: -10 }, arm: "R" },
-  floor: { hitAt: { x: FLOOR.x - 2, y: FLOOR.y }, hand: { x: -24, y: -18 }, arm: "R" },
+  hat: { hitAt: { x: HAT.x + 8, y: HAT.y - 3 }, aim: -112, depth: 1, arm: "L" },
+  crash: { hitAt: { x: CRASH.x + 8, y: CRASH.y + 2 }, aim: -108, depth: 1, arm: "L" },
+  tom: { hitAt: { x: TOM.x, y: TOM.y }, aim: -40, depth: 0.8, arm: "L" },
+  ride: { hitAt: { x: RIDE.x - 10, y: RIDE.y + 1 }, aim: -75, depth: 1, arm: "R" },
+  snare: { hitAt: { x: SNARE.x - 2, y: SNARE.y }, aim: 160, depth: 0.65, arm: "R" },
+  floor: { hitAt: { x: FLOOR.x - 2, y: FLOOR.y }, aim: 50, depth: 0.85, arm: "R" },
 };
 
 function pieceOf(pitch: number): Piece {
@@ -52,21 +63,26 @@ function pieceOf(pitch: number): Piece {
   }
 }
 
-const STICK = 40;
+/** A stick is one length wherever it plays (it changed length from drum to drum). */
+const STICK = 36;
 const HOME: Record<"L" | "R", Hand> = { L: "hat", R: "snare" };
 
-/** Hand + stick tip for an arm on a piece with a given lift. */
+/**
+ * Hand, stick tip and elbow direction for an arm on a piece with a given lift. A stroke comes
+ * from the wrist and the forearm together: the stick tips up toward the vertical (a stick that
+ * already points up turns less) while the hand rises a little.
+ */
 function pose(piece: Hand, arm: "L" | "R", lift: number) {
   const g = GEO[piece];
-  const off = arm === g.arm ? g.hand : { x: -g.hand.x, y: g.hand.y };
-  const hand = { x: g.hitAt.x + off.x, y: g.hitAt.y + off.y - lift * 10 };
-  const dx = -off.x;
-  const dy = -off.y;
-  const len = Math.max(Math.hypot(dx, dy), STICK * 0.7);
-  const ang = Math.atan2(dy, dx);
-  const up = lift * 0.75 * (dx >= 0 ? -1 : 1);
-  const tip = { x: hand.x + Math.cos(ang + up) * len, y: hand.y + Math.sin(ang + up) * len };
-  return { hand, tip };
+  const deg = arm === g.arm ? g.aim : 180 - g.aim;
+  const a = (deg * Math.PI) / 180;
+  const dir = { x: Math.cos(a), y: Math.sin(a) };
+  const len = STICK * g.depth;
+  const hand = { x: g.hitAt.x - dir.x * len, y: g.hitAt.y - dir.y * len - lift * 10 };
+  const up = lift * (0.25 + 0.5 * Math.abs(dir.x)) * (dir.x >= 0 ? -1 : 1);
+  const tip = { x: hand.x + Math.cos(a + up) * len, y: hand.y + Math.sin(a + up) * len };
+  // the elbow behind the paw along the stick's line, and a little down: arms hang from the shoulders
+  return { hand, tip, elbow: { x: -dir.x, y: -dir.y + 0.3 } };
 }
 
 /** A drum shell (front view): body + top head + optional hoop lugs. */
@@ -76,7 +92,8 @@ function shellPath(cx: number, top: number, rx: number, h: number, ry: number) {
 
 export const drums: Rig = {
   follow: "world",
-  arm: { reach: 50 },
+  // a seated drummer's arms hang and reach forward: long enough to show an elbow
+  arm: { reach: 62, depth: 28 },
   seated: true,
   hideFeet: true,
   render(c: RigCtx) {
@@ -276,7 +293,10 @@ export const drums: Rig = {
       c.bag.set("stick" + arm, "y2", tip.y);
       c.bag.set("tip" + arm, "cx", tip.x);
       c.bag.set("tip" + arm, "cy", tip.y);
-      f.arms[arm] = { hand, bend: 14, pawRot: arm === "L" ? 20 : -20 };
+      // the elbow follows the stick round to a new drum at the arm's own pace; the fist turns with
+      // the stick (it's gripped, not stuck on at a fixed angle)
+      const elbow = { x: damp(m, "ex" + arm, target.elbow.x, f.dt, 0.12), y: damp(m, "ey" + arm, target.elbow.y, f.dt, 0.12) };
+      f.arms[arm] = { hand, elbow, pawRot: (Math.atan2(oy, ox) * 180) / Math.PI + 90 };
     }
 
     // ── instrument reactions ──

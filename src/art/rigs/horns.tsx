@@ -157,8 +157,8 @@ export const trumpet: Rig = {
     // Right paw rests behind the valve block so the caps (and their presses) stay visible. The
     // left cradles the leadpipe by the first slide: reaching on to the valve casing laid that arm
     // across the chest.
-    f.arms.R = { hand: toWorld(62, -8 + pressDepth * 0.6 + tw * 0.8), bend: -14, pawRot: -10 - tw * 6 };
-    f.arms.L = { hand: toWorld(22, 11), bend: 16, pawRot: 30 };
+    f.arms.R = { hand: toWorld(62, -8 + pressDepth * 0.6 + tw * 0.8), pawRot: -10 - tw * 6 };
+    f.arms.L = { hand: toWorld(22, 11), pawRot: 30 };
     f.look.lean = (w.blowing ? 2 : 0) - (m.tilt + 6) * 0.15;
   },
 };
@@ -214,8 +214,8 @@ export const trombone: Rig = {
     const local = chain(tr(c.mouth.x + lw * 2, c.mouth.y + lw * 30), rot(6 + lw * 40 + w.kick));
     const toWorld = placeInst(c, f, local);
     updatePuffs(c, f, { x: 72, y: -11 }, { x: 1, y: -0.3 }, lw);
-    f.arms.R = { hand: toWorld(50 + m.slide, 5), bend: -10, pawRot: -20 };
-    f.arms.L = { hand: toWorld(22, -6), bend: 18, pawRot: 20 };
+    f.arms.R = { hand: toWorld(50 + m.slide, 5), pawRot: -20 };
+    f.arms.L = { hand: toWorld(22, -6), pawRot: 20 };
     f.look.lean = w.blowing ? 1.5 + m.slide * 0.03 : 0;
   },
 };
@@ -231,23 +231,33 @@ const SAX_KEYS: [number, number][] = [
   [36, 92],
 ];
 
+/**
+ * How far the tenor slants from the mouthpiece (degrees): it hangs off the player's right hip,
+ * the bottom of the horn in toward the body.
+ */
+const SAX_SLANT = -12;
+
 export const sax: Rig = {
   follow: "head",
-  arm: { reach: 70 },
+  // the horn hangs in front of the body; the elbows come out to the sides
+  arm: { reach: 70, depth: 22 },
   render(c) {
     const s = hash(c.animal + "sax");
     return {
       front: (
         <g ref={c.bag.r("inst")}>
-          <S d="M-2 -3 Q14 -4 26 8 Q32 14 32 22 L26 24 Q24 16 18 10 Q10 3 -2 3 Z" ink={BRASS_INK} base={BRASS} seed={s} w={1.5} />
-          <S d="M-4 -2.5 H6 V2.5 H-4 Z" ink="#2c2a35" base="#3b3446" seed={s + 1} w={1.2} />
-          <S d="M26 22 L29 98 Q32 118 48 118 Q64 118 66 98 L74 66 L82 57 L54 60 L58 74 L55 96 Q53 103 49 103 Q45 103 44 96 L36 22 Z" ink={BRASS_INK} base={BRASS} hatch={BRASS_HATCH} seed={s + 2} gap={3} />
-          <g transform="rotate(-6 68 58.5)">
-            <S d={ellipsePath(68, 58.5, 14.5, 4.5)} ink={BRASS_INK} base={mix(BRASS, "#3b3446", 0.35)} seed={s + 3} w={1.4} />
+          {/* drawn bell-right, hung bell-left: a tenor sits at the player's right side (viewer-left) */}
+          <g transform="scale(-1 1)">
+            <S d="M-2 -3 Q14 -4 26 8 Q32 14 32 22 L26 24 Q24 16 18 10 Q10 3 -2 3 Z" ink={BRASS_INK} base={BRASS} seed={s} w={1.5} />
+            <S d="M-4 -2.5 H6 V2.5 H-4 Z" ink="#2c2a35" base="#3b3446" seed={s + 1} w={1.2} />
+            <S d="M26 22 L29 98 Q32 118 48 118 Q64 118 66 98 L74 66 L82 57 L54 60 L58 74 L55 96 Q53 103 49 103 Q45 103 44 96 L36 22 Z" ink={BRASS_INK} base={BRASS} hatch={BRASS_HATCH} seed={s + 2} gap={3} />
+            <g transform="rotate(-6 68 58.5)">
+              <S d={ellipsePath(68, 58.5, 14.5, 4.5)} ink={BRASS_INK} base={mix(BRASS, "#3b3446", 0.35)} seed={s + 3} w={1.4} />
+            </g>
+            {SAX_KEYS.map(([x, y], i) => keyDot(c, "k" + i, x, y))}
+            {keyDot(c, "ko", 27.5, 30, 2.2)}
+            {keyDot(c, "kp", 41, 88, 2.4)}
           </g>
-          {SAX_KEYS.map(([x, y], i) => keyDot(c, "k" + i, x, y))}
-          {keyDot(c, "ko", 27.5, 30, 2.2)}
-          {keyDot(c, "kp", 41, 88, 2.4)}
           {puffs(c)}
         </g>
       ),
@@ -257,17 +267,24 @@ export const sax: Rig = {
     const w = windCommon(c, f);
     const lw = w.lowered;
     const sway = Math.sin(f.t * 1.5) * swayAmp(c, f, w.blowing ? 3 : 1);
-    const local = chain(tr(c.mouth.x + lw * 6, c.mouth.y + lw * 10), rot(sway * 0.6 + lw * 10 - w.kick * 0.8));
-    const toWorld = placeInst(c, f, local);
+    // lowered, the horn swings out from the body and hangs on its strap
+    const local = chain(tr(c.mouth.x - lw * 6, c.mouth.y + lw * 10), rot(SAX_SLANT + sway * 0.6 + lw * 10 + w.kick * 0.8));
+    const place = placeInst(c, f, local);
+    // the horn's own (bell-right) drawing coordinates, mirrored as it's drawn
+    const toWorld = (x: number, y: number) => place(-x, y);
     const fg = w.pitch !== null ? woodwind(w.pitch + 14, 74) : null;
     setKeys(c, fg, c.ink);
     const tw = fg ? fingerTwitch(c, f, fg.holes.join() + fg.octave) : 0;
-    updatePuffs(c, f, { x: 68, y: 56 }, { x: 0.25, y: -1 }, lw);
-    const upperDown = fg ? fg.holes.slice(0, 3).filter(Boolean).length : 0;
-    const lowerDown = fg ? fg.holes.slice(3).filter(Boolean).length : 0;
-    // Upper stack from across the chest, lower stack straight down.
-    f.arms.L = { hand: toWorld(31 - upperDown * 0.6, 48), bend: 8, pawRot: 70 + tw * 7 };
-    f.arms.R = { hand: toWorld(40 + lowerDown * 0.6, 84), bend: 10, pawRot: -60 - tw * 7 };
+    updatePuffs(c, f, { x: -68, y: 56 }, { x: -0.25, y: -1 }, lw);
+    const m = c.mem;
+    // fingers down press the paw into the keys; it eases there and back, as fingers do
+    const upperDown = damp(m, "saxU", fg ? fg.holes.slice(0, 3).filter(Boolean).length : 0, f.dt, 0.03);
+    const lowerDown = damp(m, "saxL", fg ? fg.holes.slice(3).filter(Boolean).length : 0, f.dt, 0.03);
+    // A player's left hand takes the upper stack, reaching in from the body side; the right arm
+    // hangs to the lower stack, its paw round the outside of the horn. Both paws sit beside
+    // their keys, fingers over them, so the keys still show what's fingered.
+    f.arms.R = { hand: toWorld(24 + upperDown * 0.9 + tw, 46), pawRot: -80 - tw * 8 };
+    f.arms.L = { hand: toWorld(44 - lowerDown * 0.9 - tw, 80), pawRot: 80 + tw * 8 };
     f.look.lean = sway;
   },
 };
@@ -320,8 +337,8 @@ export const clarinetRig: Rig = {
     setKeys(c, fg, "#2c2a35");
     const tw = fg ? fingerTwitch(c, f, fg.holes.join() + fg.octave) : 0;
     updatePuffs(c, f, { x: 0, y: 118 }, { x: -0.3, y: 1 }, lw);
-    f.arms.R = { hand: toWorld(-4, 38), bend: -14, pawRot: 80 + tw * 7 };
-    f.arms.L = { hand: toWorld(-4, 76), bend: 16, pawRot: 80 - tw * 7 };
+    f.arms.R = { hand: toWorld(-4, 38), pawRot: 80 + tw * 7 };
+    f.arms.L = { hand: toWorld(-4, 76), pawRot: 80 - tw * 7 };
     f.look.lean = sway * 0.8;
   },
 };
@@ -371,8 +388,8 @@ export const flute: Rig = {
     const tw = fg ? fingerTwitch(c, f, fg.holes.join() + fg.octave) : 0;
     updatePuffs(c, f, { x: -100, y: 0 }, { x: -1, y: -0.3 }, lw);
     // the upper hand sits by the embouchure keys: farther along, its arm lay across the chest
-    f.arms.R = { hand: toWorld(-32, 5 + tw * 0.8), bend: -12, pawRot: tw * 6 };
-    f.arms.L = { hand: toWorld(-70, 5 + tw * 0.8), bend: 16, pawRot: -tw * 6 };
+    f.arms.R = { hand: toWorld(-32, 5 + tw * 0.8), pawRot: tw * 6 };
+    f.arms.L = { hand: toWorld(-70, 5 + tw * 0.8), pawRot: -tw * 6 };
     f.look.lean = -2 + sway;
   },
 };

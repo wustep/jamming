@@ -219,9 +219,9 @@ function bowedUpdate(geo: BowGeo, c: RigCtx, f: Frame) {
     const along = norm(W[0], W[1]);
     vib = { x: along.x * w, y: along.y * w };
   }
-  f.arms.R = { hand: { x: hand.x + vib.x, y: hand.y + vib.y }, bend: -16, pawRot: -30 };
+  f.arms.R = { hand: { x: hand.x + vib.x, y: hand.y + vib.y }, pawRot: -30 };
   // the wrist bends at the frog and straightens out toward the tip; the elbow opens with it
-  f.arms.L = { hand: bowHand, bend: 22 - m.bs * 10, pawRot: (1 - pz) * (24 - m.bs * 28) + pz * 50 };
+  f.arms.L = { hand: bowHand, pawRot: (1 - pz) * (24 - m.bs * 28) + pz * 50 };
 
   // String shimmer.
   for (let i = 0; i < 4; i++) {
@@ -521,7 +521,7 @@ export const cello: Rig = {
     c.bag.set("stick", "y2", tip.y + bp.y * 2);
     c.bag.set("frog", "cx", frog.x + bp.x * 2);
     c.bag.set("frog", "cy", frog.y + bp.y * 2);
-    f.arms.L = { hand, bend: 22 - m.bs * 10, pawRot: (1 - pz) * (24 - m.bs * 28) + pz * 60 };
+    f.arms.L = { hand, pawRot: (1 - pz) * (24 - m.bs * 28) + pz * 60 };
 
     // ── left hand on the neck: follows the stopped note(s), spans a double-stop
     const stopY = VC.nut + (VC.bridge - VC.nut) * stopFrac(m.semisS);
@@ -529,7 +529,7 @@ export const cello: Rig = {
     const lh = ap(W, sx + 7, stopY);
     const vib = vibrato(arcoNote, f.t);
     m.dblS = (m.dblS ?? 0) + ((m.dbl ?? 0) - (m.dblS ?? 0)) * approach(f.dt, 0.06);
-    f.arms.R = { hand: { x: lh.x + vib, y: lh.y }, bend: -16, pawRot: -30, spread: 1 + m.dblS * 0.35 };
+    f.arms.R = { hand: { x: lh.x + vib, y: lh.y }, pawRot: -30, spread: 1 + m.dblS * 0.35 };
 
     // ── strings: bowed strings shimmer, plucked strings ring and decay
     const ring = pAge < 1.4 ? hit(pAge, 0.35) : 0;
@@ -638,21 +638,28 @@ export const bass: Rig = {
     m.semisS = m.semis ?? 3;
     const last = f.s.recent[0];
     const age = last ? last.age : Infinity;
-    // Pluck: finger rests on the string, pulls through on the onset, then drifts back.
-    const pull = age < 0.12 ? Math.sin((age / 0.12) * (Math.PI / 2)) : Math.exp(-(age - 0.12) / 0.12);
-    const ready = f.s.nextOnsetIn < 0.15 ? 1 - f.s.nextOnsetIn / 0.15 : 0;
-    const flick = Math.max(0, pull * (1 - ready)) * 12;
-    // pizz at the end of the fingerboard, the arm coming down across the belly, the
-    // finger pulling the string down and out (out along it went past the end of the arm)
-    const py = CB.fbEnd + 3;
-    const pluckLocal = { x: CB.sx(m.strS, py) - 4 + flick * 0.45, y: py + flick * 0.75 };
-    f.arms.L = { hand: ap(W, pluckLocal.x, pluckLocal.y), bend: 14, pawRot: 60 };
+    // index and middle fingers take turns: the hand sits a little higher for one than the other
+    newOnsets(c, f, () => (m.finger = 1 - (m.finger ?? 0)));
+    // Pizz: the finger sets on the string, pulls it across the fingerboard toward the next string
+    // (toward E, viewer-right) and follows through onto it, then the hand swings back from the
+    // elbow to set on the string again before the next note.
+    const pull = age < 0.05 ? Math.sin((age / 0.05) * (Math.PI / 2)) : Math.exp(-(age - 0.05) / 0.11);
+    // (it sets on the string a tenth of a second ahead: sixteenths come only 0.15 s apart)
+    const ready = f.s.nextOnsetIn < 0.1 ? 1 - f.s.nextOnsetIn / 0.1 : 0;
+    const through = Math.max(0, pull * (1 - ready));
+    // the swing back arcs out from the body a touch, rather than dragging back along the string
+    const back = age > 0.05 && age < 0.35 ? Math.sin(((age - 0.05) / 0.3) * Math.PI) * (1 - ready) : 0;
+    const py = CB.fbEnd + 3 + damp(m, "fingerY", (m.finger ?? 0) * 4, f.dt, 0.06);
+    const pluckLocal = { x: CB.sx(m.strS, py) - 7 + through * 9, y: py + through * 4 - back * 2.5 };
+    f.arms.L = { hand: ap(W, pluckLocal.x, pluckLocal.y), pawRot: 60 - through * 18 };
     // a shift up or down the neck travels at a hand's speed, however far it goes. The paw sits
-    // behind the neck just below the stopping finger, which reaches up to the note.
+    // behind the neck just below the stopping finger, which reaches up to the note, and presses
+    // in as each new note is stopped.
     const wantY = CB.nut + (CB.bridge - CB.nut) * stopFrac(m.semisS) + 9;
     glide(m, "stopY", wantY, f.dt, 14000, 900);
     const stopY = m.stopY;
-    f.arms.R = { hand: ap(W, CB.sx(m.strS, stopY) + 8, stopY), bend: -30, pawRot: -40 };
+    const press = (m.semis ?? 0) > 0 ? hit(age, 0.09) : 0;
+    f.arms.R = { hand: ap(W, CB.sx(m.strS, stopY) + 8 - press * 2, stopY), pawRot: -40 - press * 10 };
     for (let i = 0; i < 4; i++) {
       const ring = age < 1.2 && i === str ? hit(age, 0.35) : 0;
       c.bag.tf("str" + i, ring > 0.02 ? `translate(${(Math.sin(f.t * 70) * ring * 1.6).toFixed(2)} 0)` : "");
@@ -733,7 +740,7 @@ export const guitar: Rig = {
       m.fret = sum / pitches.length;
     }
     const fx = GTR_NUT - (GTR_NUT - GTR_BRIDGE) * glide(m, "fretF", stopFrac(Math.max(0.5, m.fret ?? 3)), f.dt, 100, 7);
-    f.arms.R = { hand: ap(W, fx, 7), bend: -14, pawRot: -30 };
+    f.arms.R = { hand: ap(W, fx, 7), pawRot: -30 };
 
     const sAge = f.t - m.sT;
     const pAge = f.t - m.pT;
@@ -754,7 +761,7 @@ export const guitar: Rig = {
       hx = -4 + flick * 3;
     }
     m.hyLast = hy;
-    f.arms.L = { hand: ap(W, hx, hy), bend: 16, pawRot: 40 };
+    f.arms.L = { hand: ap(W, hx, hy), pawRot: 40 };
     for (let i = 0; i < 6; i++) {
       const ring = f.s.active.length && Math.min(sAge, pAge) < 1.5 ? hit(Math.min(sAge, pAge), 0.3) : 0;
       c.bag.tf("str" + i, ring > 0.03 ? `translate(0 ${(Math.sin(f.t * 90 + i) * ring * 0.6).toFixed(2)})` : "");
