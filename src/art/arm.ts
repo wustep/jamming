@@ -26,6 +26,16 @@ export interface ArmSpec {
 
 export const ARM: ArmSpec = { reach: ARM_REACH, depth: 18, pole: { x: 0.8, y: 0.6, z: 0.4 } };
 
+/**
+ * The arm for one side this frame: the rig's, with the elbow pointed `elbow`-ward on the page
+ * when the rig says where it goes (keeping the rig's lean back behind the body).
+ */
+export function armFor(spec: ArmSpec, side: -1 | 1, elbow?: Pt): ArmSpec {
+  if (!elbow) return spec;
+  const l = Math.hypot(elbow.x, elbow.y) || 1;
+  return { ...spec, pole: { x: (elbow.x / l) * side, y: elbow.y / l, z: spec.pole.z } };
+}
+
 export interface ArmPose {
   /** Where the paw ends up (within reach of the shoulder). */
   hand: Pt;

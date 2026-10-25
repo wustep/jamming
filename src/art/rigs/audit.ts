@@ -6,7 +6,7 @@ import { type Mat, type Pt, ap, chain } from "../affine";
 import { clarinet, tromboneSlide, trumpetValves, woodwind } from "../fingering";
 import { type Glitch, SHAKE_WINDOW, flicker, glitchesOf, shake } from "../glitch";
 import { Motion } from "../motion";
-import { type ArmState, poseArm } from "../arm";
+import { type ArmState, armFor, poseArm } from "../arm";
 import { RIGS } from ".";
 import { KEY_TOP, keyX } from "./piano";
 import { LOWER_TOP, ORGAN_SPLIT, UPPER_TOP, organKeyX } from "./organ";
@@ -137,7 +137,7 @@ export function auditTake(inst: InstrumentId, style: StyleId, opts: { seed?: num
     const attrs: Attrs = JSON.parse(JSON.stringify(store));
     const elbows = {} as Record<"L" | "R", Pt>;
     for (const k of ["L", "R"] as const) {
-      const a = poseArm(pose.shoulders[k], f.arms[k].hand, arms, k === "L" ? -1 : 1, elbowState[k], 1 / FPS);
+      const a = poseArm(pose.shoulders[k], f.arms[k].hand, armFor(arms, k === "L" ? -1 : 1, f.arms[k].elbow), k === "L" ? -1 : 1, elbowState[k], 1 / FPS);
       elbowState[k] = a.state;
       elbows[k] = a.elbow;
     }

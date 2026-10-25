@@ -48,8 +48,11 @@ export interface RigCtx {
 
 export interface ArmTarget {
   hand: Pt;
-  /** Elbow bend direction/amount (px). Positive bends outward. */
-  bend?: number;
+  /**
+   * Which way the elbow points on the page for this paw (a direction, not mirrored), instead of the
+   * rig's pole: a drummer's elbow sits behind the stick, so the stick carries on the forearm's line.
+   */
+  elbow?: Pt;
   /** Paw squash for chords / grip (x scale). */
   spread?: number;
   /** Hide the paw (e.g. it's inside a drawn glove). */

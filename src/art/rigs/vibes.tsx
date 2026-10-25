@@ -165,6 +165,8 @@ export const vibes: Rig = {
     }
 
     const heads = {} as Record<Mallet, { x: number; y: number }>;
+    /** How far each head is lifted off its bar (px). */
+    const lifted = {} as Record<Mallet, number>;
     for (const k of MALLETS) {
       const lastAge = f.t - m["t" + k];
       // a mallet rebounds off its bar before it travels to the next one
@@ -179,20 +181,30 @@ export const vibes: Rig = {
       glide(m, kx, barX(pitch), f.dt, 26000, 1100);
       // the accidental row sits higher than the naturals: ease between them too
       glide(m, "y" + k, barY(pitch), f.dt, 20000, 600);
-      heads[k] = { x: m[kx], y: m["y" + k] - lift * 22 };
+      lifted[k] = lift * 22;
+      heads[k] = { x: m[kx], y: m["y" + k] - lifted[k] };
     }
     const most = f.reach * 0.99;
     for (const arm of ["L", "R"] as const) {
       const a = heads[(arm + "0") as Mallet];
       const b = heads[(arm + "1") as Mallet];
-      // the paw sits behind and above both heads; the shafts fan out from it
-      const hand = { x: (a.x + b.x) / 2 + (arm === "L" ? -6 : 6), y: Math.min(a.y, b.y) - MALLET + 12 };
+      // The paw sits above both heads and outside them, so the shafts slant in from it the way the
+      // forearm does (straight down from right above, they hung bent back under the forearm). A
+      // stroke is mostly wrist: the heads lift off the bars and the paw rises only a third as far
+      // (carried up whole, the paws rode up to the chin on every note).
+      const side = arm === "L" ? -1 : 1;
+      const k0 = (arm + "0") as Mallet;
+      const k1 = (arm + "1") as Mallet;
+      const rest = Math.min(a.y + lifted[k0], b.y + lifted[k1]);
+      const hand = { x: (a.x + b.x) / 2 + side * 14, y: rest - MALLET + 16 - Math.max(lifted[k0], lifted[k1]) * 0.35 };
       m["x" + arm] = hand.x;
-      // the arm doesn't stretch: until the player has walked over, the mallets stop at arm's length
+      // the arm doesn't stretch: at the end of its reach the paw gives up its place outside the
+      // heads first, and only then (until the player has walked over) do the mallets stop short
       const sh = f.shoulders[arm];
       const rx = Math.sqrt(Math.max(0, most * most - (hand.y - sh.y) ** 2));
-      const dx = clamp(hand.x, sh.x - rx, sh.x + rx) - hand.x;
-      hand.x += dx;
+      const mid = (a.x + b.x) / 2;
+      const dx = clamp(mid, sh.x - rx, sh.x + rx) - mid;
+      hand.x = clamp(hand.x, sh.x - rx, sh.x + rx);
       for (const k of [arm + "0", arm + "1"]) {
         const h = heads[k as Mallet];
         c.bag.tf("mb" + k, `translate(${(h.x + dx).toFixed(1)} ${h.y.toFixed(1)})`);
@@ -201,7 +213,10 @@ export const vibes: Rig = {
         c.bag.set("m" + k, "x2", h.x + dx);
         c.bag.set("m" + k, "y2", h.y);
       }
-      f.arms[arm] = { hand, bend: 12, pawRot: arm === "L" ? 15 : -15, spread: clamp(Math.abs(a.x - b.x) / 14, 1, 1.6) };
+      // the elbow behind the paw, along the shafts' line and a little down
+      const shaft = { x: (a.x + b.x) / 2 + dx - hand.x, y: (a.y + b.y) / 2 - hand.y };
+      const sl = Math.hypot(shaft.x, shaft.y) || 1;
+      f.arms[arm] = { hand, elbow: { x: -shaft.x / sl, y: -shaft.y / sl + 0.3 }, pawRot: arm === "L" ? 15 : -15, spread: clamp(Math.abs(a.x - b.x) / 14, 1, 1.6) };
     }
     // Bars ring while the note sounds (vibes sustain), flash on the strike.
     let i = 0;
