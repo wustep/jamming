@@ -10,6 +10,7 @@ import {
   packChain,
   pizzChain,
   PIZZ_VOLUME,
+  RELEASE_SEC,
   ROOM_SEND,
   DEFAULT_SOUNDS,
   type DrumKit,
@@ -1091,6 +1092,7 @@ export class TroopAudio {
         }
         const event: SmplrNote = { note: p, velocity, time };
         if (live.instrument === "piano" && entry.pack === "salamander") event.lpfCutoffHz = 1800 + Math.pow(vel, 1.4) * 14000;
+        if (RELEASE_SEC[live.instrument] !== undefined) event.ampRelease = RELEASE_SEC[live.instrument];
         // a bowed voice holds the note itself (its smplr instrument only carries the channel)
         const bowed = bowedOf(entry.inst);
         stop = bowed ? bowed.hold(p, clamp(vel, 0, 1), time ?? ctx.currentTime) : entry.inst.start(event);
@@ -1342,6 +1344,7 @@ export class TroopAudio {
         if (DECAYING[track.instrument]) dur += 0.05;
         const midiVel = Math.round(1 + vel * 126);
         const event: SmplrNote = { note: pitch, velocity: midiVel, time, duration: dur };
+        if (RELEASE_SEC[track.instrument] !== undefined) event.ampRelease = RELEASE_SEC[track.instrument];
         if (track.instrument === "piano" && entry.pack === "salamander") {
           // Soft piano notes are darker, not just quieter.
           event.lpfCutoffHz = 1800 + Math.pow(vel, 1.4) * 14000;

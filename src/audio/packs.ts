@@ -466,9 +466,11 @@ export const ACOUSTIC_KIT: KitPiece[] = [
   { keys: [38, 40], pitch: 38, layers: layers([-29.6, -21.8, -7, -2.8], (i, k) => `${MEMB}/Snare Drum, Modern 1/Snare2_HitSN_v${[3, 5, 7, 9][i]}_rr${k}_Mid`) },
   { keys: [37], layers: layers([-21.2], (_, k) => `${MEMB}/Snare Drum, Modern 2/Snare3M_Xstick_v2_rr${k}_Mid`) },
   { keys: [39], layers: layers([-0.5], (_, k) => `${IDIO}/Claps/Clap_rr${k}`) },
-  { keys: [42], group: 1, layers: layers([-36.3, -24.1, -13.7, -8.3], (i, k) => `${HAT}/HiHat_HitC_v${i + 1}_rr${k}_Mid`) },
-  { keys: [44], group: 1, layers: layers([-21.7], (_, k) => `${HAT}/HiHat_Close_rr${k}_Mid`) },
-  { keys: [46], offBy: 1, release: 0.08, layers: layers([-10.4], (_, k) => `${HAT}/HiHat_HitO_rr${k}_Mid`) },
+  // closing the hat (a closed or pedal hit) cuts the open hat off. smplr reads it the other way
+  // round from an sfz file: a region with offBy N silences group N when *it* plays
+  { keys: [42], offBy: 1, layers: layers([-36.3, -24.1, -13.7, -8.3], (i, k) => `${HAT}/HiHat_HitC_v${i + 1}_rr${k}_Mid`) },
+  { keys: [44], offBy: 1, layers: layers([-21.7], (_, k) => `${HAT}/HiHat_Close_rr${k}_Mid`) },
+  { keys: [46], group: 1, release: 0.08, layers: layers([-10.4], (_, k) => `${HAT}/HiHat_HitO_rr${k}_Mid`) },
   { keys: [51, 59], pitch: 51, release: 1.2, layers: layers([-32.5, -18.8, -18.1], (i) => `${RIDE}_stick_${["pp1", "mp1", "mf1"][i]}`, 1) },
   { keys: [53], release: 1.2, layers: layers([-16.9, -12.5], (i) => `${RIDE}_bell_${["p1", "f1"][i]}`, 1) },
   { keys: [49, 57], pitch: 49, release: 1.5, layers: layers([-34.1, -25.3, -15.5], (i) => `${CRASH}_stick_${["pp1", "mp1", "f1"][i]}`, 1) },
@@ -649,6 +651,16 @@ export const DECAYING: Partial<Record<InstrumentId, true>> = {
   vibes: true,
   guitar: true,
   bass: true,
+};
+
+/**
+ * How long a note takes to die away once it's let go, where a pack's own files say otherwise.
+ * The VCSL vibraphone's sfz releases every note over 15 s: each one rang out its whole sample,
+ * as if the pedal were held down all take, smearing chords into each other, and a note struck
+ * again couldn't stop the one still ringing (nor could Stop).
+ */
+export const RELEASE_SEC: Partial<Record<InstrumentId, number>> = {
+  vibes: 0.5,
 };
 
 // ─── Drums: General MIDI → LM-2 sample names ────────────────────────────────

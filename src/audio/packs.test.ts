@@ -40,8 +40,12 @@ describe("the acoustic kit", () => {
   });
 
   it("chokes the open hat with the closed and pedal hat", () => {
+    // smplr: a region with offBy N, when it plays, stops the voices in group N
     const open = covering(DRUM.hatOpen, 100)[0].group;
-    for (const n of [DRUM.hatClosed, DRUM.hatPedal]) expect(covering(n, 100)[0].group.group).toBe(open.offBy);
+    expect(open.group).toBeDefined();
+    for (const n of [DRUM.hatClosed, DRUM.hatPedal]) expect(covering(n, 100)[0].group.offBy).toBe(open.group);
+    // and opening the hat doesn't cut off a closed hit
+    expect(open.offBy).toBeUndefined();
   });
 });
 
