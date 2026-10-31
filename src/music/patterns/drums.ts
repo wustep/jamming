@@ -31,7 +31,8 @@ export const GROOVES: Record<string, Record<number, Grid>> = {
   },
   funk: {
     4: {
-      base: "hh:x.x.x.x.x.x.x.x. sd:....X..g.g..X..g",
+      // 16ths on the hat, the 8ths leaning in, the 16ths between ghosted (one hand, the funk way)
+      base: "hh:xgxgxgxgxgxgxgxg sd:....X..g.g..X..g",
       light: "hh:x.x.x.x.x.x.x.x. sd:....X.......X...",
       peak: "hh:xxXxxxXxxxXxxxXx sd:....X..g.g..X..g cr:x...............",
     },
@@ -102,6 +103,13 @@ function gridFor(ctx: BarCtx, which: "base" | "light" | "peak"): string {
   if (ctx.beats !== 4 && !style[ctx.beats]) text = cutToMeter(text, ctx.beats);
   if (ctx.style.id === "funk" && ctx.beats === 4) {
     text += " " + FUNK_KICKS[hashString(`${ctx.seed}:${ctx.section.start}`) % FUNK_KICKS.length];
+    // every other bar the hat opens on the "and" of 4 and rings into the one
+    if (ctx.bar % 2 === 1 && which === "base") text = text.replace(/hh:(\S{14})\S\S/, "hh:$1o.");
+  }
+  // New Orleans: the bass drum's "Big Four", the accent on beat 4 of every second bar that
+  // Buddy Bolden's drummers swung the parade with (the first bar keeps 1 and the "and" of 2)
+  if (ctx.style.id === "neworleans" && ctx.beats === 4 && which !== "light" && ctx.bar % 2 === 1) {
+    text = text.replace(/bd:\S+/, "bd:x.....x.....X...");
   }
   if (ctx.style.id === "bossa" && ctx.beats === 4) {
     text += ctx.bar % 2 === 0 ? " rim:x.....x.....x..." : " rim:....x.....x.....";
@@ -249,6 +257,19 @@ const FILL_SHAPES: Record<string, FillShape> = {
   roll: (_ctx, start, len) => snareRoll(start, len, 0.25),
 };
 
+/**
+ * A drummer's build into the last chorus: the snare in 8ths through the first half of the bar,
+ * then 16ths, louder all the way, the kick on every beat underneath.
+ */
+function snareBuild(beats: number): NoteEvent[] {
+  const half = Math.floor(beats / 2);
+  const times: number[] = [];
+  for (let t = 0; t < beats - 1e-6; t += t < half - 1e-6 ? 0.5 : 0.25) times.push(t);
+  const out = times.map((t, i) => hit(DRUM.snare, t, 0.35 + 0.6 * (i / Math.max(1, times.length - 1)), i === times.length - 1 ? "accent" : undefined));
+  for (let b = 0; b < beats; b++) out.push(hit(DRUM.kick, b, 0.75));
+  return out;
+}
+
 /** 16ths on the snare from `start` for `len` beats, growing from `from` to an accent at the top. */
 function snareRoll(start: number, len: number, from: number): NoteEvent[] {
   const out: NoteEvent[] = [];
@@ -365,6 +386,7 @@ function postrockKit(ctx: BarCtx): NoteEvent[] {
 export function groove(ctx: BarCtx): NoteEvent[] {
   if (ctx.style.id === "ambient") return scale(ambientKit(ctx), ctx);
   if (ctx.style.id === "postrock") return postrockKit(ctx);
+  if (ctx.args.includes("build")) return scale(snareBuild(ctx.beats), ctx);
   const which = ctx.args.includes("light") || ctx.texture === "sparse" || ctx.texture === "breakdown"
     ? "light"
     : ctx.args.includes("peak") || ctx.texture === "peak"

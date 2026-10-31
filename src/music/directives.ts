@@ -20,7 +20,7 @@ export const DIRECTIVE_HELP = `Each bar of each player's part is ONE of:
 - explicit notes: "E4/8 G4/8 Bb4/4 r/4 [C4 E4 G4]/4" (pitch/duration; 1 2 4 8 16; "." dotted; "t" triplet; "r" rest; [..] chord; "~" tie; ">" accent; "'" staccato). Durations must add up to the bar: 4 = 1 beat, 8 = ½, 16 = ¼, 2 = 2. One bar per string, never two bars' worth. Busy 16ths: commas between beats, each group one beat.
 - drum grid (drums only): "rd:x...x.x.x...x.x. ph:....x.......x... sd:..g.......X..... bd:x.......x......." lanes bd sd hh oh ph rd cr t1 t2 ft rim sh tamb cb; x hit, X accent, g ghost, . rest; 16 steps = 16ths in 4/4 (12 in 3/4).
 - a directive the band's engine realizes in style:
-  @motif [up N|down N|seq N|invert|retro|aug|dim|frag N|displace 0.5|ornament|rhythm] [bar2]  — the shared motif or a transform of it (up/down/seq count scale steps: 7 = an octave; "bar2" = 2nd bar of a 2-bar statement)
+  @motif [up N|down N|seq N|invert|retro|aug|dim|frag N|add N|displace 0.5|ornament|rhythm] [bar2]  — the shared motif or a transform of it (up/down/seq count scale steps: 7 = an octave; "add N" = its first N notes on repeat, the additive process; "bar2" = 2nd bar of a 2-bar statement)
   @head N  — play again exactly what the leader played in bar N of the chart (how a tune comes back: repeated A sections, the out head)
   @tune N  — play bar N of the standard's written melody, as written (the tune itself; only on standards that have one)
   @line [dense|sparse|run|long]  — improvise a line over the changes
@@ -29,7 +29,7 @@ export const DIRECTIVE_HELP = `Each bar of each player's part is ONE of:
   @comp [sparse|busy] @pulse [sparse|busy] @stride @arp @prelude @continuo @pad @shimmer @wash [sparse|busy] @hits  — chordal patterns (@pulse: pop block triads; @wash: post-rock open chords picked through a delay, tremolo at the crest)
   @pizz [sparse|busy] @arco  — bowed strings: plucked double-stop comping / sustained bowed tones
   @guide @harmony @canon @riff @counter @fill  — supporting lines (guide tones, 3rds under the lead, imitation, backing riff)
-  @groove [light|peak] @solo @fill  — drums
+  @groove [light|peak|build] @solo @fill  — drums (build: a whole bar of snare into the next section)
   @end  — final chord / last note
   @rest  — tacet`;
 

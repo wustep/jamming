@@ -169,8 +169,9 @@ export function headLine(style: StyleDef, len: number, motifBars: number, rng: R
     const inPhrase = i % 4;
     const phraseIdx = Math.floor(i / 4);
     if (style.id === "minimal") {
+      // the motif built up a note at a time (Glass's additive process), then whole, then phased
       const cycle = ["@motif", "@motif", "@motif ornament", "@motif displace 0.5"];
-      res.push(cycle[i % cycle.length]);
+      res.push(i < 3 ? `@motif add ${i + 2}` : cycle[(i - 3) % cycle.length]);
       continue;
     }
     if (motifBars >= 2) {
@@ -209,6 +210,9 @@ export function bassChairOf(members: Member[]): string | null {
   if (bassist) return bassist.id;
   return members.find((m) => INSTRUMENTS[m.instrument].bassCapable)?.id ?? null;
 }
+
+/** Styles whose drummer builds the bar before the last chorus on the snare, lifting the band into it. */
+const BUILDS_INTO_OUT = new Set<StyleId>(["pop"]);
 
 /** Styles whose intros can build up a player at a time, and how often they do. */
 const LAYERED_INTRO: Partial<Record<StyleId, number>> = { funk: 0.6, pop: 0.5, bossa: 0.4 };
@@ -355,6 +359,7 @@ export function planLocal(frame: Frame, members: Member[], motif: Motif, rng: Rn
         if (fn === "bass" && style.id === "swing" && s.kind === "head" && s.length >= 8 && d === "@walk" && inSec < s.length - 1) d = "@two";
       }
       if (fn === "rhythm" && bar === 0 && !d.includes("light") && d.startsWith("@groove") && style.id !== "funk") d = "@groove light";
+      if (fn === "rhythm" && BUILDS_INTO_OUT.has(style.id) && d.startsWith("@groove") && bar > 0 && s.kind !== "out" && bar + 1 < frame.bars - 1 && sectionAt(frame, bar + 1).kind === "out" && sectionAt(frame, bar + 1).start === bar + 1) d = "@groove build";
       directives[m.id] = d;
       roles[m.id] =
         d === "@rest"

@@ -227,8 +227,15 @@ function compCore(ctx: BarCtx, second: boolean): NoteEvent[] {
   const play = (hits: Hit[], fam?: VoicingFamily, art?: NoteEvent["art"]) => playHits(ctx, second ? secondComper(ctx, hits) : hits, second ? "shell" : fam, art);
 
   switch (ctx.style.id) {
-    case "bossa":
-      return play(ctx.beats === 3 ? [{ pos: 0, dur: 1 }, { pos: 1.5, dur: 1 }] : BOSSA_BARS[(ctx.bar + (second ? 1 : 0)) % 2]);
+    case "bossa": {
+      if (ctx.beats === 3) return play([{ pos: 0, dur: 1 }, { pos: 1.5, dur: 1 }]);
+      let cell = BOSSA_BARS[(ctx.bar + (second ? 1 : 0)) % 2];
+      // the guitar leans into a chord change: the next chord an 8th early, on the "and" of 4
+      // (with the bass's pickup), instead of waiting for the barline
+      const moves = !ctx.lastBar && ctx.next.symbol !== ctx.chords[ctx.chords.length - 1].chord.symbol;
+      if (moves && !second) cell = [...cell.filter((h) => h.pos < 3), { pos: 3.5, dur: 0.5, next: true }];
+      return play(cell);
+    }
     case "funk": {
       // a funk part is a riff: the same cell through the section (like the bass), a variation
       // at phrase ends, and the hits that would land on the bassist's notes step aside

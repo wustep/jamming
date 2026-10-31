@@ -36,7 +36,7 @@ export const STYLES: Record<StyleId, StyleDef> = {
     name: "Swing",
     blurb: "Walking bass, ride cymbal, bebop lines",
     texture:
-      "Swung 8ths. Bass walks quarter notes, chord tones on 1 and chromatic approach notes into each new chord. Drums: ride cymbal spang-a-lang (1, 2, &2, 3, 4, &4), hi-hat foot on 2 and 4, feathered kick, sparse snare comping. Piano/guitar/vibes comp short syncopated rootless voicings (Charleston: 1 and &2, anticipations into the next chord). Melody/solo lines are 8th-note bebop phrases that start off the beat, land on 3rds and 7ths on strong beats, use enclosures, and breathe between phrases.",
+      "Swung 8ths. Bass walks quarter notes: the root on 1, a chord tone on 3 with a passing note between, and a chromatic approach note into each new chord. Drums: ride cymbal spang-a-lang (1, 2, &2, 3, 4, &4), hi-hat foot on 2 and 4, feathered kick, sparse snare comping. Piano/guitar/vibes comp short syncopated rootless voicings (Charleston: 1 and &2, anticipations into the next chord). Melody/solo lines are 8th-note bebop phrases that start off the beat, land on 3rds and 7ths on strong beats, use enclosures, and breathe between phrases.",
     swing: 0.66,
     tempo: { min: 90, max: 240, default: 160 },
     key: { tonic: "Bb", mode: "major" },
@@ -67,7 +67,7 @@ export const STYLES: Record<StyleId, StyleDef> = {
     name: "Bossa Nova",
     blurb: "Straight 8ths, clave rim, syncopated chords",
     texture:
-      "Straight 8ths, relaxed. Bass plays root on 1 and fifth on the 'and' of 2 (dotted-quarter + 8th), anticipating chord changes. Drums: cross-stick rim on the 2-bar bossa clave, closed hi-hat 8ths, soft kick on 1 and &2. Guitar/piano comp a 2-bar syncopated pattern of soft 4-note voicings with 9ths, chords pushed ahead of the beat. Melody is lyrical and conversational: quarter notes and tied syncopations, long notes at phrase ends, stepwise with occasional 6th leaps.",
+      "Straight 8ths, relaxed. Bass plays root on 1 and fifth on the 'and' of 2 (dotted-quarter + 8th), anticipating chord changes. Drums: cross-stick rim on the 2-bar bossa clave, closed hi-hat 8ths, soft kick on 1 and &2. Guitar/piano comp a 2-bar syncopated pattern of soft 4-note voicings with 9ths, chords pushed ahead of the beat: a chord change arrives an 8th early, on the 'and' of 4. Melody is lyrical and conversational: quarter notes and tied syncopations, long notes at phrase ends, stepwise with occasional 6th leaps.",
     swing: 0.5,
     tempo: { min: 100, max: 150, default: 128 },
     key: { tonic: "C", mode: "minor" },
@@ -97,7 +97,7 @@ export const STYLES: Record<StyleId, StyleDef> = {
     name: "Funk",
     blurb: "16th grooves, stabs, the one",
     texture:
-      "Straight 16ths, tight. Bass: syncopated 16th riff that hits hard on beat 1, octave pops and ghosted dead notes, rests on the beat. Drums: 16th hi-hats, snare backbeat on 2 and 4 with ghost notes, syncopated kick. Keys/guitar: short choppy 16th stabs of dominant 9th chords on offbeats, lots of space. Horns: short punchy riffs and stabs, pentatonic/blues, repeated notes, call-and-response; solos are rhythmic and riff-based rather than long scales.",
+      "Straight 16ths, tight. Bass: syncopated 16th riff that hits hard on beat 1, octave pops and ghosted dead notes, rests on the beat. Drums: 16th hi-hats (the 8ths leaning in, opening on the and of 4 every other bar), snare backbeat on 2 and 4 with ghost notes, syncopated kick. Keys/guitar: short choppy 16th stabs of dominant 9th chords on offbeats, lots of space. Horns: short punchy riffs and stabs, pentatonic/blues, repeated notes, call-and-response; solos are rhythmic and riff-based rather than long scales.",
     swing: 0.5,
     tempo: { min: 85, max: 120, default: 102 },
     key: { tonic: "E", mode: "minor" },
@@ -126,7 +126,7 @@ export const STYLES: Record<StyleId, StyleDef> = {
     name: "Pop",
     blurb: "Backbeat, pumping 8ths, a hook you can sing",
     texture:
-      "Straight 8ths with a backbeat. Drums: closed hi-hat 8ths, kick on 1 and the and of 2 (and 3), snare cracks on 2 and 4, a crash at the top of sections. Bass: pumping root 8ths, an octave or the fifth to move, locked with the kick. Keys/guitar: block triads in the middle of the keyboard, pulsing 8ths or on the beats, simple and diatonic. Melody: a singable hook: short repeated rhythmic cells, mostly stepwise, pentatonic and diatonic, landing on chord tones, phrases that answer each other (call and response), no bebop chromaticism. Supporting horns or strings play a 3rd under the lead or a sustained pad, like backing vocals.",
+      "Straight 8ths with a backbeat. Drums: closed hi-hat 8ths, kick on 1 and the and of 2 (and 3), snare cracks on 2 and 4, a crash at the top of sections, and a bar of snare 8ths then 16ths building into the last chorus. Bass: pumping root 8ths, an octave or the fifth to move, locked with the kick. Keys/guitar: block triads in the middle of the keyboard, pulsing 8ths or on the beats, simple and diatonic. Melody: a singable hook: short repeated rhythmic cells, mostly stepwise, pentatonic and diatonic, landing on chord tones, phrases that answer each other (call and response), no bebop chromaticism. Supporting horns or strings play a 3rd under the lead or a sustained pad, like backing vocals.",
     swing: 0.5,
     tempo: { min: 70, max: 140, default: 100 },
     key: { tonic: "C", mode: "major" },
@@ -168,7 +168,7 @@ export const STYLES: Record<StyleId, StyleDef> = {
     name: "New Orleans",
     blurb: "Second-line strut, everybody at once",
     texture:
-      "Loose two-beat strut with a light swing. Bass/tuba-style: root on 1 and fifth on 3, pickup on the 'and' of 4. Drums: second-line snare with rolls and accents on the 'and's, bass drum on 1 and &2. Piano plays stride/oom-pah: low root on 1 and 3, chord on 2 and 4. Collective improvisation: while the lead plays, the other horns weave counter-lines and riffs (clarinet noodles above, trombone smears below). Blue notes, syncopated repeated-note riffs, call-and-response.",
+      "Loose two-beat strut with a light swing. Bass/tuba-style: root on 1 and fifth on 3, pickup on the 'and' of 4. Drums: second-line snare with rolls and accents on the 'and's, bass drum on 1 and &2, and the 'Big Four': an accented bass drum on beat 4 of every second bar. Piano plays stride/oom-pah: low root on 1 and 3, chord on 2 and 4. Collective improvisation: while the lead plays, the other horns weave counter-lines and riffs (clarinet noodles above, trombone smears below). Blue notes, syncopated repeated-note riffs, call-and-response.",
     swing: 0.6,
     tempo: { min: 90, max: 200, default: 132 },
     key: { tonic: "F", mode: "major" },
@@ -197,7 +197,7 @@ export const STYLES: Record<StyleId, StyleDef> = {
     name: "Minimalist",
     blurb: "Interlocking ostinati, slow change",
     texture:
-      "Straight, steady 8th-note pulse. Keys/vibes play repeating broken-chord ostinati (the same 1-bar cell repeated, changing one note at a time). Bass holds long pedal tones or a slow repeated octave pulse. Drums (if any) only a quiet even pulse — shaker/closed hat 8ths, no backbeat. Melodic players repeat the motif and change it additively (add or drop one note per repetition) or phase it against the pulse by an 8th. Harmony changes slowly; dynamics swell gradually over many bars rather than in sections.",
+      "Straight, steady 8th-note pulse. Keys/vibes play repeating broken-chord ostinati (the same 1-bar cell repeated, changing one note at a time). Bass holds long pedal tones or a slow repeated octave pulse. Drums (if any) only a quiet even pulse — shaker/closed hat 8ths, no backbeat. Melodic players build the motif additively (its first two notes on repeat, then three, then four) or phase it against the pulse by an 8th. Harmony changes slowly; dynamics swell gradually over many bars rather than in sections.",
     swing: 0.5,
     tempo: { min: 100, max: 160, default: 132 },
     key: { tonic: "A", mode: "minor" },
@@ -226,7 +226,7 @@ export const STYLES: Record<StyleId, StyleDef> = {
     name: "Baroque",
     blurb: "Running counterpoint, sequences",
     texture:
-      "Straight, motoric. Continuous running 16th or 8th notes in the lead, built by spinning the motif out in sequences (repeat it a step lower each half-bar). Bass walks in steady 8ths, mostly stepwise with octave leaps, outlining the harmony. Keys play broken-chord figuration (a bass note then arpeggio 16ths, like a prelude) or block continuo chords. Other melodic voices imitate the motif a few beats later (canon) or move in parallel 3rds/6ths. Drums, if present, play only timpani-like toms on strong beats. Cadences are clear: V–I with a held final note.",
+      "Straight, motoric. Continuous running 16th or 8th notes in the lead, built by spinning the motif out in sequences (repeat it a step lower each half-bar). Bass walks in steady 8ths, mostly stepwise with octave leaps, outlining the harmony. Keys play broken-chord figuration (a bass note then arpeggio 16ths, like a prelude) or block continuo chords. Other melodic voices imitate the motif a few beats later (canon) or move in parallel 3rds/6ths. Drums, if present, play only timpani-like toms on strong beats. Cadences are clear: V–I, the note over the dominant trilled from the note above, a held final note.",
     swing: 0.5,
     tempo: { min: 70, max: 130, default: 96 },
     key: { tonic: "D", mode: "minor" },
@@ -255,7 +255,7 @@ export const STYLES: Record<StyleId, StyleDef> = {
     name: "Ambient",
     blurb: "Long tones, open space, swells",
     texture:
-      "Slow, floating, mostly rubato-feeling over a soft pulse. Long sustained tones (half and whole notes) that overlap; harmony in open voicings with added 9ths and suspended 4ths. Bass holds low roots for whole bars or rests. Drums only cymbal swells, soft mallet toms, no groove. Keys/vibes play sparse high bell-like single notes and slow arpeggios with lots of space. Melody is a few long notes, leaps of 4ths and 5ths, echoing the motif slowly; players answer each other with one or two notes rather than runs.",
+      "Slow, floating, mostly rubato-feeling over a soft pulse. Long sustained tones (half and whole notes) that overlap; harmony in open voicings with added 9ths and suspended 4ths. Bass holds low roots for whole bars, through the next bar when the chord holds, or rests. Drums only cymbal swells, soft mallet toms, no groove. Keys/vibes play sparse high bell-like single notes and slow arpeggios with lots of space. Melody is a few long notes, leaps of 4ths and 5ths, echoing the motif slowly; players answer each other with one or two notes rather than runs.",
     swing: 0.5,
     tempo: { min: 56, max: 90, default: 72 },
     key: { tonic: "D", mode: "major" },

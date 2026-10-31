@@ -156,6 +156,7 @@ export type MotifTransform =
   | "augment"
   | "diminish"
   | "fragment"
+  | "additive"
   | "displace"
   | "ornament"
   | "rhythm";

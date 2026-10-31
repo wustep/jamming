@@ -57,6 +57,7 @@ const POSTROCK_DRUMS: Record<PostrockStage, Technique> = {
   crest: t("crest", "the crest", "Crashes on every 8th and the kick on every beat: the top of the climb."),
   roll: t("snare-roll", "snare roll", "A snare roll swelling from a whisper into the crest."),
 };
+const SNARE_BUILD = t("snare-build", "snare build", "The snare in 8ths, then 16ths, louder and louder: the drummer lifting the band into the last chorus.");
 /** A swing drummer keeps the head on the closed hi-hat and moves to the ride for the solos. */
 const HAT_TIME = t("hat-time", "hi-hat time", "Swung time on the closed hi-hat, tighter and quieter than the ride the drummer saves for the solos.");
 
@@ -149,6 +150,7 @@ const MOTIF: Record<string, Technique> = {
   down: t("sequence", "sequence", "The motif's shape again, starting lower."),
   seq: t("sequence", "sequence", "The motif repeated a step lower each time."),
   frag: t("fragment", "fragment", "Just the first few notes of the motif, worked over."),
+  add: t("additive", "additive process", "The motif built up a note at a time: its first notes on repeat, one more each time round."),
   aug: t("augment", "augmentation", "The motif stretched out to twice as slow."),
   dim: t("diminish", "diminution", "The motif at double speed."),
   displace: t("displace", "displacement", "The same notes, shifted off the beat."),
@@ -296,6 +298,7 @@ export function techniqueAt(score: Score, id: string, bar: number): Technique {
     if (name === "fill") return t("drum-fill", "fill", "A short burst that kicks the band into the next phrase.");
     if (name === "solo") return DRUM_SOLO;
     if (name === "hits") return CHORDAL.hits;
+    if (args.includes("build")) return SNARE_BUILD;
     if (sig?.drums && ARTIST_DRUMS[sig.drums]) return ARTIST_DRUMS[sig.drums];
     if (style === "swing" && (sec.kind === "intro" || sec.kind === "head") && !args.includes("peak")) return HAT_TIME;
     if (style === "postrock" && (name === "groove" || !name)) return POSTROCK_DRUMS[postrockStage(DYNAMIC_ENERGY[bp.dynamic], bp.texture, args)];
