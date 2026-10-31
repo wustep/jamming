@@ -42,7 +42,7 @@ const GROOVES: Record<StyleId, Technique> = {
   neworleans: t("street-beat", "street beat", "A marching snare full of rolls, from New Orleans street parades."),
   minimal: t("pulse", "steady pulse", "Shaker 16ths that never change: the grid the patterns turn over."),
   baroque: t("timpani", "low drum on 1 and 3", "A low drum marking the strong beats, the way timpani do in an orchestra."),
-  ambient: t("wash", "cymbal wash", "Soft mallets on the cymbal: colour and air, not time."),
+  ambient: t("swells", "cymbal swells", "Soft mallets roll on a cymbal so it swells up into the next chord: colour and air, not time."),
 };
 /** A swing drummer keeps the head on the closed hi-hat and moves to the ride for the solos. */
 const HAT_TIME = t("hat-time", "hi-hat time", "Swung time on the closed hi-hat, tighter and quieter than the ride the drummer saves for the solos.");

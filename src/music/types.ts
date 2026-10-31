@@ -83,8 +83,11 @@ export interface NoteEvent {
   dur: number;
   /** Velocity 0..1 */
   vel: number;
-  /** "pizz" = plucked (bowed strings); everything else is a dynamic/length articulation. */
-  art?: "accent" | "staccato" | "ghost" | "legato" | "pizz";
+  /**
+   * "pizz" = plucked (bowed strings); "roll" = a roll (on a cymbal, soft mallets swelling up to
+   * the note's end, where it peaks); everything else is a dynamic/length articulation.
+   */
+  art?: "accent" | "staccato" | "ghost" | "legato" | "pizz" | "roll";
   /** A note of a tune's written melody: the band's own fixes never move it. */
   written?: true;
   /** Bowed in the same stroke as the note before it (a slur): no new attack, no change of bow. */
@@ -332,4 +335,6 @@ export interface MemberFrameState {
   stroke?: { id: number; dir: 1 | -1; progress: number; durSec: number; inSec: number };
   /** The phrase a bowed line is in: how far through it (0..1), and where its high point falls. */
   phrase?: { progress: number; peak: number; durSec: number };
+  /** A drummer holding soft mallets instead of sticks (the style plays them). */
+  mallets?: boolean;
 }

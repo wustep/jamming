@@ -1,10 +1,14 @@
 import { DrumMachine, Reverb, Scheduler, type Smplr, type StopFn } from "smplr";
 import type { InstrumentId, Member, NoteEvent, Score } from "@/music/types";
-import { INSTRUMENTS } from "@/music/instruments";
+import { INSTRUMENTS, isCymbal } from "@/music/instruments";
+import { STYLES } from "@/music/styles";
 import { applyFeel, beatAt, beatToSeconds, ghostVel, jitter, pocketOf, secAt, spbAt, type TempoMap } from "./feel";
 import {
   DECAYING,
   instrumentVolume,
+  kitHas,
+  kitKeys,
+  MALLET_KEY,
   REVERB_SEND,
   lm2Sample,
   packChain,
@@ -13,6 +17,8 @@ import {
   RELEASE_SEC,
   ROOM_SEND,
   DEFAULT_SOUNDS,
+  SWELL_RING,
+  swellFor,
   type DrumKit,
   type PackSpec,
   type PianoPack,
@@ -93,6 +99,8 @@ interface Track {
   voices: VoiceBook;
   /** Numbers each started voice, so it can be let go on its own. */
   serial: number;
+  /** A drummer playing soft mallets (the style's): cymbals and toms use the kit's mallet keys. */
+  mallets: boolean;
 }
 
 type SmplrNote = Exclude<Parameters<Smplr["start"]>[0], string | number>;
@@ -188,12 +196,18 @@ function endBeatOf(score: Score): number {
   return end;
 }
 
-/** Pitches each member plays — handy as `prepare(..., { notesHint })`. */
-/** Pitches each member will need. Plucked notes on bowed strings go under "<id>|pizz". */
+/** Whether this score's drummer plays soft mallets (its style says so). */
+const malletsIn = (score: Score) => !!STYLES[score.frame?.style]?.mallets;
+
+/**
+ * Pitches each member will need (handy as `prepare(..., { notesHint })`). Plucked notes on bowed
+ * strings go under "<id>|pizz"; a drummer's include the kit's mallet and swell keys it plays.
+ */
 export function notesHintFromScore(score: Score): Record<string, number[]> {
   const out: Record<string, number[]> = {};
   for (const [id, notes] of Object.entries(score.parts ?? {})) {
     out[id] = [...new Set(notes.filter((n) => n.art !== "pizz").map((n) => n.pitch))];
+    if (score.members?.find((m) => m.id === id)?.instrument === "drums") out[id].push(...kitKeys(notes, malletsIn(score), 60 / (tempoOf(score) || 120)));
     const pizz = notes.filter((n) => n.art === "pizz");
     if (pizz.length) out[`${id}|pizz`] = [...new Set(pizz.map((n) => n.pitch))];
   }
@@ -736,6 +750,7 @@ export class TroopAudio {
         beats: beatsPerBar(score),
         voices: new VoiceBook(VOICE_CAP[m.instrument] ?? 8, m.instrument !== "drums"),
         serial: 0,
+        mallets: m.instrument === "drums" && malletsIn(score),
       };
     });
   }
@@ -769,6 +784,7 @@ export class TroopAudio {
         beats: beatsPerBar(score),
         voices: old?.voices ?? new VoiceBook(VOICE_CAP[m.instrument] ?? 8, m.instrument !== "drums"),
         serial: old?.serial ?? 0,
+        mallets: m.instrument === "drums" && malletsIn(score),
       };
     });
   }
@@ -1302,19 +1318,38 @@ export class TroopAudio {
     vel *= 1 + jitter(isDrum ? 0.06 : track.feel.humanize, id, note.start, note.pitch, "v");
     vel = clamp(vel, 0.02, 1);
 
+    // a roll on a cymbal leads to its end: the swell peaks there (and a kit with no swell, or
+    // the LinnDrum, strikes the cymbal there instead)
+    const roll = isDrum && note.art === "roll" && isCymbal(note.pitch);
+    const arrival = roll ? Math.max(time, this.noteTime(track, { ...note, start: note.start + note.dur }, swing)) : time;
+
     try {
       if (isDrum && entry.pack !== "lm-2") {
-        // the acoustic kit is keyed by General MIDI drum note; the hats choke in its own preset
-        track.voices.admit(note.pitch, time);
+        // the acoustic kit is keyed by General MIDI drum note, plus its mallet and swell keys; the
+        // hats choke in its own preset
+        const mallet = MALLET_KEY[note.pitch];
+        let key = track.mallets && mallet !== undefined && kitHas(inst, mallet) ? mallet : note.pitch;
+        let at = time;
+        let ring = drumRing(note.pitch);
+        if (roll) {
+          const swell = swellFor(arrival - time, (k) => kitHas(inst, k));
+          if (swell) {
+            key = swell.key;
+            at = time + swell.lead;
+            ring = swell.peak + SWELL_RING;
+          } else at = arrival;
+        }
+        track.voices.admit(key, at);
         const stopId = `${id}#${++track.serial}`;
-        const stop = inst.start({ note: note.pitch, velocity: Math.round(1 + vel * 126), time, stopId });
-        track.voices.add(note.pitch, time, time + drumRing(note.pitch), stop);
+        const stop = inst.start({ note: key, velocity: Math.round(1 + vel * 126), time: at, stopId });
+        track.voices.add(key, at, at + ring, stop);
       } else if (isDrum) {
         const sample = lm2Sample(note.pitch, vel, note.art);
         if (!sample) {
           this.stats.dropped++;
           return;
         }
+        if (roll) time = arrival;
         // Closed/pedal hat chokes a ringing open hat.
         if ((note.pitch === 42 || note.pitch === 44) && track.lastOpenHat < time) {
           inst.stop({ stopId: "hhopen", time });
