@@ -55,13 +55,13 @@ export class FrameComputer {
         return { s, e, p, x };
       });
       // a cymbal roll is mallet strokes getting louder up to the beat it lands on, where the
-      // swell peaks (the audio engine plays it as one swell)
+      // swell peaks and the part strikes its next note (the audio engine plays it as one swell)
       for (const r of felt.filter((f) => m.instrument === "drums" && f.x.art === "roll" && isCymbal(f.p))) {
         felt.splice(felt.indexOf(r), 1);
         const n = Math.max(1, Math.round((r.e - r.s) / ROLL_STEP));
-        for (let k = 0; k <= n; k++) {
+        for (let k = 0; k < n; k++) {
           const s = r.s + ((r.e - r.s) * k) / n;
-          felt.push({ s, e: s + ROLL_STEP, p: r.p, x: { ...r.x, start: s, dur: ROLL_STEP, vel: r.x.vel * (0.25 + (0.75 * k) / n) } });
+          felt.push({ s, e: s + ROLL_STEP, p: r.p, x: { ...r.x, start: s, dur: ROLL_STEP, vel: r.x.vel * (0.25 + (0.75 * (k + 1)) / n) } });
         }
       }
       // sorted by when they're heard (a late backbeat can land after a hat struck on the same beat)

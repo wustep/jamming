@@ -9,7 +9,9 @@ import {
   acousticKitPreset,
   bridgeGaps,
   kitHas,
+  kitKeyFailed,
   kitKeys,
+  VCSL_BASE,
   MALLET_KEY,
   SWELLS,
   swellFor,
@@ -64,17 +66,34 @@ describe("soft mallets", () => {
     expect([...keysOf(acousticKitPreset([100]))].filter((k) => k >= 100)).toEqual([100]);
   });
 
-  it("play every cymbal and tom softly at every touch, and each swell, without retuning", () => {
+  it("play every cymbal and tom softly at every touch, each tom tuned as the sticks tune it, and each swell", () => {
     const preset = acousticKitPreset(extra);
     const regions = preset.groups.flatMap((g) => g.regions);
+    const sticks = acousticKitPreset().groups.flatMap((g) => g.regions);
+    const gmOf = new Map(Object.entries(MALLET_KEY).map(([gm, key]) => [key, +gm]));
     for (const key of extra) {
       for (const vel of [1, 40, 64, 100, 127]) {
         const hit = regions.filter((r) => r.keyRange![0] === key && (!r.velRange || (r.velRange[0] <= vel && vel <= r.velRange[1])));
         expect(hit.length, `key ${key} vel ${vel}`).toBeGreaterThan(0);
-        for (const r of hit) expect(r.pitch).toBe(key);
+        // a cymbal or swell plays as recorded; a tom is retuned exactly as the stick kit's
+        const gm = [41, 43, 45, 47, 48, 50].find((t) => MALLET_KEY[t] === key);
+        const stick = gm === undefined ? undefined : sticks.find((r) => r.keyRange![0] === gm)!;
+        for (const r of hit) expect(key - r.pitch!, `key ${key}`).toBe(stick ? gm! - stick.pitch! : 0);
       }
     }
+    // six toms, six keys: a solo on the toms keeps its tune
+    expect(new Set([41, 43, 45, 47, 48, 50].map((t) => MALLET_KEY[t])).size).toBe(6);
+    expect(gmOf.size).toBeGreaterThan(6);
     for (const r of regions) expect(Math.abs(r.volume ?? 0)).toBeLessThanOrEqual(24);
+  });
+
+  it("don't count a key as loaded when one of its samples failed (it would play silence, not sticks)", () => {
+    const swell = SWELLS[0];
+    const url = `${VCSL_BASE}/${encodeURI(swell.file)}.ogg`;
+    expect(kitKeyFailed(swell.key, new Set())).toBe(false);
+    expect(kitKeyFailed(swell.key, new Set([url]))).toBe(true);
+    expect(kitKeyFailed(SWELLS[1].key, new Set([url]))).toBe(false);
+    expect(kitKeyFailed(MALLET_KEY[DRUM.crash], new Set([`${VCSL_BASE}/${encodeURI("Idiophones/Struck Idiophones/Suspended Cymbal 1/susCymb1_hit_mp1")}.m4a`]))).toBe(true);
   });
 
   it("are asked for by a part played with mallets, or rolled on a cymbal (just the swells its rolls fit)", () => {

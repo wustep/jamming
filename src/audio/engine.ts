@@ -74,6 +74,8 @@ interface InstEntry {
   failedAt?: number;
   /** Last time a member was assigned this entry (a counter), for keeping a few spares. */
   used: number;
+  /** Samples being added for a later chart's notes (spec.extend), until they're in. */
+  extending?: Promise<void>;
 }
 
 /** Unused instruments kept loaded so switching back is instant; older ones are disposed. */
@@ -129,6 +131,8 @@ function playThroughSilentSwitch() {
 /** +4 dB after the bus compressor (the limiter adds ~2.3 dB of its own make-up): see ensureContext. */
 const MAKEUP_GAIN = 1.6;
 const END_TAIL_SEC = 0.8;
+/** A swell starts at most this long after its roll does: the Scheduler dispatches 4 s ahead, and only what it has dispatched can be stopped. */
+const MAX_SWELL_LEAD_SEC = 3.5;
 /** How long a pitched note's voice goes on after its written end (the packs' releases run 0.3–0.7 s). */
 const RING_SEC = 0.4;
 const PAN_WIDTH = 0.65;
@@ -411,25 +415,36 @@ export class TroopAudio {
           /* disposed */
         }
       }
-      if (hint && hint.length && entry.spec?.extend && entry.inst && entry.ready) {
-        const fresh = hint.filter((n) => !entry.notes.has(n));
-        if (fresh.length) {
-          for (const n of fresh) entry.notes.add(n);
-          const inst = entry.inst;
-          const storage = entry.storage;
-          waits.push(
-            entry.spec
-              .extend(inst, [...entry.notes], storage?.failedUrls ?? new Set())
-              .catch((err) => console.warn("[audio] extend failed", err)),
-          );
-        }
-      }
+      // notes this chart needs that the instrument hasn't loaded (once it has loaded at all)
+      if (hint?.length) waits.push(entry.ready ? this.extendEntry(entry, hint) : entry.done.then(() => this.extendEntry(entry, hint)));
       waits.push(entry.done);
     }
     this.sweepEntries();
     this.emitLoad();
     await Promise.all(waits);
     this.emitLoad();
+  }
+
+  /**
+   * Load the samples for notes an instrument hasn't loaded yet (packs that can: spec.extend), and
+   * resolve once they're in, along with any extending already under way.
+   */
+  private extendEntry(entry: InstEntry, hint: number[]): Promise<void> {
+    const fresh = hint.filter((n) => !entry.notes.has(n));
+    if (fresh.length && entry.spec?.extend && entry.inst && entry.ready) {
+      for (const n of fresh) entry.notes.add(n);
+      const spec = entry.spec;
+      const inst = entry.inst;
+      const failed = entry.storage?.failedUrls ?? new Set<string>();
+      const next = (entry.extending ?? Promise.resolve())
+        .then(() => spec.extend!(inst, [...entry.notes], failed))
+        .catch((err) => console.warn("[audio] extend failed", err));
+      entry.extending = next;
+      void next.then(() => {
+        if (entry.extending === next) entry.extending = undefined;
+      });
+    }
+    return entry.extending ?? Promise.resolve();
   }
 
   /**
@@ -759,6 +774,13 @@ export class TroopAudio {
     const prev = this.score;
     this.score = score;
     if (this.state !== "playing" || !prev) return;
+    // a model's take arrives a phrase at a time: a drummer's mallets and swells load as they come
+    // (other instruments play a note they haven't loaded on its nearest sample meanwhile)
+    const hint = notesHintFromScore(score);
+    for (const m of score.members ?? []) {
+      const entry = m.instrument === "drums" ? this.entries.get(this.memberEntry.get(m.id) ?? "") : undefined;
+      if (entry && hint[m.id]?.length) void this.extendEntry(entry, hint[m.id]);
+    }
     this.endBeat = endBeatOf(score);
     this.rit = score.rit;
     const byId = new Map(this.tracks.map((t) => [t.memberId, t]));
@@ -1320,8 +1342,13 @@ export class TroopAudio {
 
     // a roll on a cymbal leads to its end: the swell peaks there (and a kit with no swell, or
     // the LinnDrum, strikes the cymbal there instead)
+    // a roll on a cymbal swells up to its end (where the part strikes the next note itself). A kit
+    // with no swell for it, the LinnDrum included, leaves it out
     const roll = isDrum && note.art === "roll" && isCymbal(note.pitch);
-    const arrival = roll ? Math.max(time, this.noteTime(track, { ...note, start: note.start + note.dur }, swing)) : time;
+    const swell =
+      roll && entry.pack !== "lm-2" ? swellFor(Math.max(0, this.noteTime(track, { ...note, start: note.start + note.dur }, swing) - time), (k) => kitHas(inst, k)) : null;
+    // (nor one that would start beyond the scheduler's lookahead, which Stop can't take back)
+    if (roll && (!swell || swell.lead > MAX_SWELL_LEAD_SEC)) return;
 
     try {
       if (isDrum && entry.pack !== "lm-2") {
@@ -1331,13 +1358,10 @@ export class TroopAudio {
         let key = track.mallets && mallet !== undefined && kitHas(inst, mallet) ? mallet : note.pitch;
         let at = time;
         let ring = drumRing(note.pitch);
-        if (roll) {
-          const swell = swellFor(arrival - time, (k) => kitHas(inst, k));
-          if (swell) {
-            key = swell.key;
-            at = time + swell.lead;
-            ring = swell.peak + SWELL_RING;
-          } else at = arrival;
+        if (swell) {
+          key = swell.key;
+          at = time + swell.lead;
+          ring = swell.peak + SWELL_RING;
         }
         track.voices.admit(key, at);
         const stopId = `${id}#${++track.serial}`;
@@ -1349,7 +1373,6 @@ export class TroopAudio {
           this.stats.dropped++;
           return;
         }
-        if (roll) time = arrival;
         // Closed/pedal hat chokes a ringing open hat.
         if ((note.pitch === 42 || note.pitch === 44) && track.lastOpenHat < time) {
           inst.stop({ stopId: "hhopen", time });

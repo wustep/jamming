@@ -239,6 +239,8 @@ export function expandPart(notes: NoteEvent[], opts: ExpandOptions): BarTokens[]
     }
     if (!isRest && pieces.length) {
       pieces[0].art = seg.art;
+      // a roll goes on through every note it's tied across
+      if (seg.art === "roll") for (const p of pieces) p.art = "roll";
       for (let i = 0; i < pieces.length - 1; i++) {
         pieces[i].tieNext = true;
         pieces[i + 1].tiedFrom = true;

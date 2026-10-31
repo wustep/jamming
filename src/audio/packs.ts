@@ -497,7 +497,7 @@ export const ACOUSTIC_KIT: KitPiece[] = [
 // plays them (kitKeys).
 
 /** The kit key a soft mallet plays for a General MIDI cymbal or tom. */
-export const MALLET_KEY: Readonly<Record<number, number>> = { 49: 100, 57: 100, 51: 101, 59: 101, 53: 101, 41: 102, 43: 102, 45: 102, 47: 103, 48: 103, 50: 103 };
+export const MALLET_KEY: Readonly<Record<number, number>> = { 49: 100, 57: 100, 51: 101, 59: 101, 53: 101, 41: 102, 43: 103, 45: 104, 47: 105, 48: 106, 50: 107 };
 
 /**
  * Cymbal swells: a mallet roll from nothing up to a peak `peak` seconds in (measured, smoothed
@@ -514,11 +514,16 @@ export const SWELLS: readonly { key: number; peak: number; rms: number; file: st
 export const SWELL_RING = 6;
 const SWELL_LEVEL = -14;
 
+const LOW_TOM_MALLET = layers([-25.8, -13.3, -5], (i, k) => `${MEMB}/Tom 2/Mallet/TomL_HitM_v${i + 2}_rr${k}_Mid`);
+const HIGH_TOM_MALLET = layers([-21.7, -13.5, -5.2], (i, k) => `${MEMB}/Tom 1/Mallet/TomH_HitM_v${i + 2}_rr${k}_Mid`);
+
 const MALLET_KIT: KitPiece[] = [
   { keys: [100], release: 1.5, layers: layers([-35.2, -22.4, -13.4], (i) => `${CRASH}_${["pp1", "mp1", "f1"][i]}`, 1) },
   { keys: [101], release: 1.5, layers: layers([-42.4, -29.6, -22.4], (i) => `${RIDE}_${["pp1", "mp1", "mf1"][i]}`, 1) },
-  { keys: [102], layers: layers([-25.8, -13.3, -5], (i, k) => `${MEMB}/Tom 2/Mallet/TomL_HitM_v${i + 2}_rr${k}_Mid`) },
-  { keys: [103], layers: layers([-21.7, -13.5, -5.2], (i, k) => `${MEMB}/Tom 1/Mallet/TomH_HitM_v${i + 2}_rr${k}_Mid`) },
+  // each tom tuned as the stick kit tunes it (its pitch sits as far from its key as there)
+  ...ACOUSTIC_KIT.filter((p) => p.layers[0].file.includes("/Tom ")).flatMap((p) =>
+    p.keys.map((gm) => ({ keys: [MALLET_KEY[gm]], pitch: MALLET_KEY[gm] - gm + (p.pitch ?? gm), layers: p.layers[0].file.includes("TomL") ? LOW_TOM_MALLET : HIGH_TOM_MALLET })),
+  ),
   ...SWELLS.map((s) => ({ keys: [s.key], release: 1.5, layers: [{ file: s.file, trim: Math.round((SWELL_LEVEL - s.rms) * 10) / 10 }] })),
 ];
 
@@ -584,10 +589,22 @@ export function acousticKitPreset(extra: number[] = []): SmplrPreset {
 
 const EXTRA_FROM = 100;
 const kitExtras = new WeakMap<Smplr, Set<number>>();
+/** The kit's own record of the sample files that wouldn't load. */
+const kitFailed = new WeakMap<Smplr, Set<string>>();
+const EXTRA_FILES = new Map(MALLET_KIT.flatMap((p) => p.keys.map((k) => [k, p.layers.map((l) => encodeURI(l.file))] as const)));
 
-/** Whether this kit has loaded a key above General MIDI's (a mallet or a swell). */
+/**
+ * Whether this kit has a key above General MIDI's (a mallet or a swell) loaded: asked for, and
+ * none of its samples failed (a key with a missing sample would play silence, not sticks).
+ */
 export function kitHas(inst: Smplr, key: number): boolean {
-  return kitExtras.get(inst)?.has(key) ?? false;
+  return !!kitExtras.get(inst)?.has(key) && !kitKeyFailed(key, kitFailed.get(inst));
+}
+
+/** Whether any of a mallet or swell key's samples is among the URLs that failed to load. */
+export function kitKeyFailed(key: number, failedUrls: ReadonlySet<string> | undefined): boolean {
+  if (!failedUrls?.size) return false;
+  return EXTRA_FILES.get(key)?.some((f) => [...failedUrls].some((u) => u.includes(`/${f}.`))) ?? false;
 }
 
 const acousticKit: PackSpec = {
@@ -604,9 +621,11 @@ const acousticKit: PackSpec = {
       onLoadProgress: ({ loaded, total }) => p.onProgress(loaded, total),
     });
     kitExtras.set(inst, new Set(extra));
+    kitFailed.set(inst, p.storage.failedUrls);
     return inst;
   },
-  // a chart that brings out the mallets loads them into the kit already playing
+  // a chart that brings out the mallets loads them into the kit already playing (the engine runs
+  // one extend at a time per instrument)
   async extend(inst, notes) {
     const have = kitExtras.get(inst) ?? new Set<number>();
     const want = notes.filter((n) => n >= EXTRA_FROM && !have.has(n));

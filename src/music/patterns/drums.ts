@@ -269,16 +269,18 @@ function ambientKit(ctx: BarCtx): NoteEvent[] {
   const out: NoteEvent[] = [];
   const changes = ctx.chords[0].chord.symbol !== ctx.prev.symbol;
   const bloomHere = !ctx.firstBar && (changes || ctx.barInSection % 2 === 0);
-  // (a roll that swelled up to this downbeat peaked here: that was the bloom)
-  if (bloomHere && !rolledIn(ctx)) out.push({ pitch: DRUM.crash, start: 0, dur: ctx.beats, vel: 0.6 + ctx.energy * 0.2 });
+  // the bloom; a roll that swelled up to it ends in a softer stroke on it, the way a percussionist
+  // ends a roll (and the bar keeps its cymbal when the roll isn't heard: played from here, say)
+  if (bloomHere) out.push({ pitch: DRUM.crash, start: 0, dur: ctx.beats, vel: (0.6 + ctx.energy * 0.2) * (rolledIn(ctx) ? 0.5 : 1) });
   // the next bar blooms if its chord is new, it starts a section, or it's an even bar
   const bloomNext = !ctx.lastBar && (ctx.next.symbol !== ctx.chords[ctx.chords.length - 1].chord.symbol || ctx.sectionEnd || ctx.barInSection % 2 === 1);
-  const breathe = rolledIn(ctx);
+  // a cymbal struck on this downbeat (or swelled to) rings a while before the next roll
+  const breathe = bloomHere || rolledIn(ctx);
   ctx.mem.rollInto = -1;
   let rollFrom = ctx.beats;
   if (bloomNext && ctx.rng.chance(ctx.sectionEnd ? 0.85 : ctx.texture === "sparse" ? 0.45 : 0.6)) {
     // the roll: two beats, or the whole bar into a new section (the swell peaks on the next one),
-    // but never straight on from a peak: that rings a while first
+    // but never straight on from a bloom
     rollFrom = (ctx.sectionEnd || ctx.energy > 0.5) && !breathe ? 0 : Math.max(0, ctx.beats - 2);
     out.push({ pitch: DRUM.crash, start: rollFrom, dur: ctx.beats - rollFrom, vel: 0.65 + ctx.energy * 0.2, art: "roll" });
     ctx.mem.rollInto = ctx.start + ctx.beats;
@@ -364,9 +366,9 @@ export function endDrums(ctx: BarCtx): NoteEvent[] {
         { pitch: DRUM.snare, start: 0, dur: 0.5, vel: v, art: "accent" },
       ];
     case "fade": {
-      // with mallets, the last chord gets the cymbal's bloom, left to ring away (unless a roll has
-      // just swelled up to it)
-      if (ctx.style.mallets) return rolledIn(ctx) ? [] : [{ pitch: DRUM.crash, start: 0, dur: ctx.beats, vel: v }];
+      // with mallets, the last chord gets the cymbal's bloom, left to ring away (softer when a roll
+      // has just swelled up to it)
+      if (ctx.style.mallets) return [{ pitch: DRUM.crash, start: 0, dur: ctx.beats, vel: v * (rolledIn(ctx) ? 0.5 : 1) }];
       // no crash: a soft cymbal touch on the chord, then a whisper of a roll as it dies away
       const out: NoteEvent[] = [
         { pitch: DRUM.ride, start: 0, dur: 1, vel: v * 0.45 },

@@ -19,29 +19,47 @@ describe("an ambient drummer", () => {
     }
   });
 
-  it("rolls on a cymbal up to a bar line, and the swell's peak is that bar's bloom (nothing else there)", () => {
+  it("rolls on a cymbal up to a bar line, and ends the roll with a softer stroke there", () => {
     let rolls = 0;
     for (const score of takes) {
       const beats = score.frame.meter.beats;
       const drums = drumsOf(score);
+      const struck = drums.filter((n) => isCymbal(n.pitch) && n.art !== "roll");
       for (const r of drums.filter((n) => n.art === "roll")) {
         rolls++;
         expect(isCymbal(r.pitch)).toBe(true);
         const lands = r.start + r.dur;
-        // a roll lands on a bar line (or, in the last bar, on the cut-off)
-        if (lands <= score.frame.bars * beats) expect(lands % beats).toBeCloseTo(0, 6);
-        expect(drums.filter((n) => isCymbal(n.pitch) && Math.abs(n.start - lands) < 1e-6)).toEqual([]);
+        if (lands > score.frame.bars * beats) continue;
+        // it lands on a bar line, where the bloom is struck (so the bar keeps its cymbal even
+        // played from there), softer than one struck out of nothing
+        expect(lands % beats).toBeCloseTo(0, 6);
+        const stroke = struck.find((n) => Math.abs(n.start - lands) < 1e-6);
+        expect(stroke, `${score.id} roll into ${lands}`).toBeDefined();
+        // and it never starts on a bloom (the cymbal rings a while first)
+        expect(struck.some((n) => Math.abs(n.start - r.start) < 1e-6), `${score.id} roll from ${r.start}`).toBe(false);
       }
     }
     expect(rolls).toBeGreaterThan(takes.length);
   });
 
+  it("strikes the cymbal on every downbeat it blooms on, rolled into or not", () => {
+    // (a bloom bar that also rolled into the next lost its downbeat to the roll)
+    for (const seed of Array.from({ length: 40 }, (_, i) => i + 100)) {
+      const score = take("ambient", seed, 24);
+      const drums = drumsOf(score);
+      for (const r of drums.filter((n) => n.art === "roll")) expect(drums.some((n) => n.art !== "roll" && isCymbal(n.pitch) && n.start === r.start)).toBe(false);
+    }
+  });
+
   it("is heard: every cymbal is struck at a touch the kit sounds, not a tick under the band", () => {
     for (const score of takes) {
-      const cymbals = drumsOf(score).filter((n) => isCymbal(n.pitch));
+      const drums = drumsOf(score);
+      const cymbals = drums.filter((n) => isCymbal(n.pitch));
       expect(cymbals.length).toBeGreaterThan(0);
-      // (they were written at 0.05 to 0.18, which the kit plays 40 dB under the band)
-      for (const n of cymbals) expect(n.vel, `${score.id} beat ${n.start}`).toBeGreaterThanOrEqual(0.25);
+      const lands = new Set(drums.filter((n) => n.art === "roll").map((n) => n.start + n.dur));
+      // (they were written at 0.05 to 0.18, which the kit plays 40 dB under the band; a roll's
+      // landing stroke sounds on top of its swell's peak, so it can be softer)
+      for (const n of cymbals) expect(n.vel, `${score.id} beat ${n.start}`).toBeGreaterThanOrEqual(lands.has(n.start) ? 0.15 : 0.25);
     }
   });
 });
