@@ -3,6 +3,8 @@ import { feelOf, playLine } from "./playing";
 import { colorLine } from "./patterns/signatures";
 import { DYNAMIC_ENERGY, newMemory, type BarCtx, type PlayerMemory } from "./context";
 import { realizeDirective } from "./directives";
+import { WASH_CREST } from "./patterns/comp";
+import { tremolo } from "./patterns/lines";
 import { styleDynamic } from "./ending";
 import { ensemble } from "./ensemble";
 import { sectionAt } from "./form";
@@ -377,6 +379,18 @@ export function realize(o: RealizeOptions): RealizeResult {
       bar,
       parts[id].filter((n) => Math.floor(n.start / beats + 1e-9) === bar).map((n) => ({ ...n, start: n.start - bar * beats })),
     );
+  }
+  // a post-rock guitar carrying the tune at the crest tremolo-picks its long notes
+  if (frame.style === "postrock") {
+    for (const m of members) {
+      if (m.instrument !== "guitar") continue;
+      parts[m.id] = parts[m.id].flatMap((n) => {
+        const bar = Math.floor(n.start / beats + 1e-9);
+        const bp = plan[bar];
+        const loud = DYNAMIC_ENERGY[styleDynamic(frame.style, bp?.dynamic ?? "mf", bar === frame.bars - 1)] >= WASH_CREST;
+        return barSet.has(bar) && loud && bar < frame.bars - 1 && isFeaturedRole(bp?.roles[m.id]) ? tremolo(n) : [n];
+      });
+    }
   }
   // hold the last chord a little longer than written (a fermata) so endings breathe
   const lastStart = (frame.bars - 1) * beats;

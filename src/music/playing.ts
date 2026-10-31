@@ -87,6 +87,8 @@ export const FEELS: Record<FeelId, PlayingFeel> = {
   minimal: { name: "Minimalist", accent: 0.9, articulation: 0.92, looseness: 0.001, humanize: 0.015, rubato: "even", push: 0, dotted: 0, ostinato: true },
   baroque: { name: "Baroque", accent: 0.8, articulation: 0.85, looseness: 0.003, humanize: 0.02, rubato: "even", push: 0, dotted: 0.07 },
   ambient: { name: "Ambient", accent: 0.4, articulation: 1, looseness: 0.015, humanize: 0.04, rubato: "breathing", push: 0.15, dotted: 0.05 },
+  // in time (the delay is tempo-synced, and a band building together can't drift), every note let ring
+  postrock: { name: "Post-rock", accent: 0.7, articulation: 1, looseness: 0.005, humanize: 0.045, rubato: "even", push: 0.05, dotted: 0 },
   // the artists' hands (jev-playground's style voices, carried over to a band)
   bach: { name: "Bach", accent: 0.8, articulation: 0.9, looseness: 0.002, humanize: 0.016, rubato: "even", push: 0, dotted: 0.07 },
   chopin: { name: "Chopin", accent: 0.7, articulation: 1, looseness: 0.01, humanize: 0.024, rubato: "light", push: 0, dotted: 0.35 },

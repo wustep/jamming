@@ -45,7 +45,8 @@ export type StyleId =
   | "neworleans"
   | "minimal"
   | "baroque"
-  | "ambient";
+  | "ambient"
+  | "postrock";
 
 export type Mode = "improviser" | "composer";
 

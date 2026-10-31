@@ -1,7 +1,7 @@
 import type { Harm } from "../harmony";
 import { mod, type Chord } from "../theory";
 
-export type VoicingFamily = "rootless" | "triad" | "open" | "quartal" | "shell" | "evans" | "monk" | "sowhat";
+export type VoicingFamily = "rootless" | "triad" | "open" | "quartal" | "shell" | "evans" | "monk" | "sowhat" | "ringing";
 
 function rootlessForms(c: Chord): number[][] {
   const alt9 = c.tensions.includes(13) ? 13 : c.tensions.includes(15) ? 15 : 14;
@@ -198,6 +198,32 @@ function soWhatForms(c: Chord): number[][] {
   }
 }
 
+/**
+ * A guitarist's open, ringing shapes (post-rock): the root and its 5th underneath, the 9th or the
+ * octave above, the 3rd (or the sus note) on top, so the chord rings like open strings instead of a
+ * keyboard cluster. The 9th rubbing the 3rd a step away, high up, is the shimmer. Chords that
+ * aren't built on a plain triad keep the quartal shapes.
+ */
+function ringingForms(c: Chord): number[][] {
+  const third = c.tones[1];
+  const fifth = c.tones[2];
+  if (fifth !== 7 || !["maj", "maj7", "6", "min", "min7", "m6", "sus"].includes(c.quality)) return quartalForms(c);
+  const seventh = c.tones[3] !== undefined && c.quality !== "m6" && c.quality !== "6" ? c.tones[3] : null;
+  // a minor 3rd sits a half step over the 9th: the 9th rings an octave away from it instead
+  const ninth = third === 3 ? 26 : 14;
+  return [
+    [0, 7, 12, 12 + third],
+    [0, 7, 12 + third, 19],
+    [7, 12, 12 + third, 19],
+    [0, 7, ninth, 12 + third].sort((a, b) => a - b),
+    ...(seventh !== null ? [[0, 7, seventh, 12 + third]] : []),
+    // three strings, for a guitar squeezed under the tune: still open (a 5th, an octave), no 6ths
+    [0, 7, 12 + third],
+    [7, 12, 12 + third],
+    [third, 7, 12],
+  ];
+}
+
 function triadTones(c: Chord): number[] {
   return c.tones.slice(0, 3);
 }
@@ -233,6 +259,8 @@ function candidates(c: Chord, fam: VoicingFamily): number[][] {
       return monkForms(c);
     case "sowhat":
       return soWhatForms(c);
+    case "ringing":
+      return ringingForms(c);
     case "shell": {
       const third = c.tones[1] ?? 4;
       const seventh = c.tones[3] ?? (c.quality === "maj" ? 9 : 7);
@@ -293,7 +321,8 @@ export function voiceChord(
   let bestScore = Infinity;
   // the asked-for shape first; if it can't fit the room (a comp squeezed under the tune),
   // a closer shape of the same chord rather than a bare triad
-  const order: VoicingFamily[] = [fam, ...(["rootless", "shell", "triad"] as VoicingFamily[]).filter((f) => f !== fam)];
+  // (a guitarist's open shapes close up into a plain triad, never into a jazz voicing)
+  const order: VoicingFamily[] = fam === "ringing" ? ["ringing", "triad", "shell"] : [fam, ...(["rootless", "shell", "triad"] as VoicingFamily[]).filter((f) => f !== fam)];
   for (const f of order) {
     // Monk's half-step crunch is the point: it isn't fitted to the harmony
     const forms = candidates(c, f).map((x) => [...new Set(f === "monk" ? x : fitTensions(x, c, harm))]);

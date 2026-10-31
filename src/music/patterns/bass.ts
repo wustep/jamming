@@ -279,8 +279,36 @@ function pedalPc(tonic: string, c: Chord): number {
   return rubs ? c.bass : t;
 }
 
+/** Past this energy a post-rock bassist stops holding the pedal and drives it in 8ths. */
+export const PEDAL_DRIVE = 0.7;
+/** Past this one (but under the drive) the pedal is struck on 1 and 3. */
+const PEDAL_HALVES = 0.45;
+
+/**
+ * Post-rock pedal: the tonic under the moving chords (the chord's own bass where it would grind),
+ * held a whole bar while the band is quiet, struck on 1 and 3 as it builds, and driven in 8ths
+ * at the crest, the beat louder than the "and".
+ */
+function postrockPedal(ctx: BarCtx): NoteEvent[] {
+  const [lo, hi] = range(ctx);
+  const vel = velFor(ctx, 0.7);
+  const step = ctx.energy >= PEDAL_DRIVE ? 0.5 : ctx.energy >= PEDAL_HALVES ? 2 : ctx.beats;
+  const out: NoteEvent[] = [];
+  let p = ctx.mem.lastPitch ?? lo + 7;
+  for (const s of chordSpans(ctx)) {
+    p = fold(nearestPc(pedalPc(ctx.key.tonic, s.chord), Math.min(p, lo + 10)), lo, hi);
+    for (let t = s.start; t < s.end - 1e-6; t += step) {
+      const dur = Math.min(step, s.end - t);
+      out.push({ pitch: p, start: t, dur: step < 1 ? dur * 0.9 : dur, vel: vel * (t === 0 ? 1.05 : Math.abs(t - Math.round(t)) < 1e-6 ? 1 : 0.84) });
+    }
+  }
+  ctx.mem.lastPitch = p;
+  return out;
+}
+
 /** Pedal / drone: tonic (or root) held, optionally pulsing for minimalism. */
 export function pedal(ctx: BarCtx): NoteEvent[] {
+  if (ctx.style.id === "postrock") return postrockPedal(ctx);
   const [lo, hi] = range(ctx);
   const vel = velFor(ctx, 0.65);
   const pulse = ctx.style.id === "minimal";

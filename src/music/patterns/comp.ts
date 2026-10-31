@@ -211,7 +211,7 @@ function secondComper(ctx: BarCtx, hits: Hit[]): Hit[] {
 
 /** Style-aware comping. Args: "sparse", "busy". */
 export function comp(ctx: BarCtx): NoteEvent[] {
-  if (ctx.peerIndex >= 1 && !["minimal", "baroque", "ambient", "neworleans"].includes(ctx.style.id)) {
+  if (ctx.peerIndex >= 1 && !["minimal", "baroque", "ambient", "neworleans", "postrock"].includes(ctx.style.id)) {
     // the second comper: lighter and fewer, in the spaces of the first
     return compCore(ctx, true).map((n) => ({ ...n, vel: n.vel * 0.85 }));
   }
@@ -248,6 +248,8 @@ function compCore(ctx: BarCtx, second: boolean): NoteEvent[] {
       return prelude(ctx);
     case "ambient":
       return pad(ctx);
+    case "postrock":
+      return wash(ctx);
     case "swing":
     default: {
       let cell = pickCell(ctx.beats === 3 ? WALTZ_CELLS : SWING_CELLS);
@@ -528,6 +530,82 @@ export function shimmer(ctx: BarCtx): NoteEvent[] {
     const v = voiceChord(c, "quartal", 50, 70, ctx.mem.lastVoicing, hm);
     ctx.mem.lastVoicing = v;
     out.push(...chordHit(v, 0, ctx.beats, vel * 0.7, "legato"));
+  }
+  return out;
+}
+
+/** Past this energy a post-rock guitarist stops picking the chord and tremolos it (the crest). */
+export const WASH_CREST = 0.85;
+/** Under this one the strings are picked a beat apart and left to ring. */
+const WASH_QUIET = 0.45;
+
+/**
+ * Post-rock guitar: an open chord ringing like open strings, picked a string at a time and left to
+ * ring into the next (the delay on the guitar smears it into a wash; audio/echo.ts). Quiet, the
+ * strings are picked a beat apart; as the band builds the picking moves to 8ths, up the chord and
+ * back; at the crest the top two strings are tremolo-picked in 16ths over the chord struck on the
+ * one. A second guitar interlocks rather than doubling: it picks down from the top, an 8th behind.
+ * A third (a glockenspiel, a keyboard) rings the chord's top notes high up, a couple a bar.
+ */
+export function wash(ctx: BarCtx): NoteEvent[] {
+  if (ctx.peerIndex % 3 === 2) return bells(ctx);
+  const out: NoteEvent[] = [];
+  const second = ctx.peerIndex % 3 === 1;
+  const crest = !ctx.args.includes("sparse") && (ctx.energy >= WASH_CREST || ctx.args.includes("busy"));
+  const quiet = !crest && (ctx.energy < WASH_QUIET || ctx.args.includes("sparse"));
+  const vel = velFor(ctx, quiet ? 0.5 : 0.56) * (second ? 0.85 : 1);
+  for (const s of chordSpans(ctx)) {
+    // the second guitar takes the shape from the top of the room, the first from where it was
+    const [lo, hi] = voiceRange(ctx, s.start);
+    const v = second ? voiceIn(ctx, harmAt(ctx, s.start), "ringing", [Math.max(lo, Math.min(lo + 7, hi - 16)), hi]) : voice(ctx, harmAt(ctx, s.start), "ringing", s.start);
+    const order = second ? [...v].reverse() : v;
+    // the first guitar's strings ring on; the second's are picked lighter, each into the next (so
+    // the two never sit on the same held note: the delay does the rest)
+    const ring = (t: number) => (second ? 0.9 : Math.max(0.5, s.end - t));
+    if (crest && !second) {
+      // the chord on the one, then the top two strings tremolo-picked through the span
+      out.push(...chordHit(v, s.start, Math.min(0.9, s.end - s.start), vel * 1.05, "accent"));
+      const top = v.slice(-2);
+      for (let t = s.start + 0.25; t < s.end - 1e-6; t += 0.25) {
+        const onBeat = Math.abs(t - Math.round(t)) < 1e-6;
+        for (const p of top) out.push({ pitch: p, start: t, dur: 0.25, vel: vel * (onBeat ? 0.95 : 0.78) });
+      }
+    } else {
+      const step = quiet ? 1 : 0.5;
+      // the second guitar comes in an 8th later, so its notes fall between the first's
+      const from = s.start + (second ? 0.5 : 0);
+      // up the chord and back down (never the same string twice running)
+      const path = order.length > 2 ? [...order, ...order.slice(1, -1).reverse()] : order;
+      let i = 0;
+      for (let t = from; t < s.end - 1e-6; t += step, i++) {
+        const p = path[i % path.length];
+        // each string rings on until the chord changes (quiet) or under the next three picks
+        out.push({ pitch: p, start: t, dur: quiet ? ring(t) : Math.min(1.5, ring(t)), vel: vel * (i === 0 ? 1.08 : Math.abs(t - Math.round(t)) < 1e-6 ? 1 : 0.9) });
+      }
+    }
+    out.push(...leftHand(ctx, s.start, s.end - s.start, vel));
+  }
+  return out;
+}
+
+/** The third part of a post-rock wash: a chord tone or two rung high, on the beat, left to ring. */
+function bells(ctx: BarCtx): NoteEvent[] {
+  const out: NoteEvent[] = [];
+  const vel = velFor(ctx, 0.46);
+  const [lo, hi] = [Math.max(ctx.inst.range[0], 72), Math.min(ctx.inst.range[1], 91)];
+  const every = ctx.energy >= WASH_QUIET ? 1 : 2;
+  for (const s of chordSpans(ctx)) {
+    const h = harmAt(ctx, s.start);
+    const pool = pitchesIn(h.stable, lo, hi);
+    if (!pool.length) continue;
+    for (let t = s.start; t < s.end - 1e-6; t += every) {
+      // stepping through the chord's notes, never the same bell twice running
+      const last = ctx.mem.lastPitch;
+      const next = pool.filter((p) => p !== last);
+      const p = next.length ? next[(hashString(`${ctx.seed}:${ctx.member.id}:${ctx.bar}:${t}`) % next.length)] : pool[0];
+      out.push({ pitch: p, start: t, dur: Math.max(0.5, s.end - t), vel: vel * (t === s.start ? 1 : 0.88) });
+      ctx.mem.lastPitch = p;
+    }
   }
   return out;
 }

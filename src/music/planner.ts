@@ -35,9 +35,29 @@ function dynamicFor(style: StyleDef, frame: Frame, bar: number, s: Section): Dyn
   return d;
 }
 
+/**
+ * Post-rock is one long crescendo: from nearly nothing to forte across everything before the out
+ * head, a bar pulled back to roll up into it, and the out head at the crest.
+ */
+function postrockDynamic(frame: Frame, bar: number): Dynamic {
+  const crest = crestStart(frame);
+  if (bar >= crest) return "ff";
+  if (bar === crest - 1 && crest < frame.bars - 1) return "mf";
+  const climb: Dynamic[] = ["pp", "p", "p", "mp", "mp", "mf", "mf", "f"];
+  const x = crest > 1 ? bar / (crest - 1) : 1;
+  return climb[Math.min(climb.length - 1, Math.floor(x * climb.length))];
+}
+
+/** Where a post-rock piece crests: the out head, or its last bar when it has none. */
+function crestStart(frame: Frame): number {
+  const out = frame.sections.find((x) => x.kind === "out");
+  return out && out.start > 0 ? out.start : frame.bars - 1;
+}
+
 function arcDynamic(style: StyleDef, frame: Frame, bar: number, s: Section): Dynamic {
   const prog = frame.bars > 1 ? bar / (frame.bars - 1) : 0;
   const inSec = s.length > 1 ? (bar - s.start) / (s.length - 1) : 0;
+  if (style.id === "postrock") return postrockDynamic(frame, bar);
   if (style.id === "minimal") {
     // one long swell across the piece
     const lv: Dynamic[] = ["pp", "p", "mp", "mf", "f", "f", "mf"];
@@ -70,6 +90,14 @@ const SOLO_OPENING: Partial<Record<StyleId, Texture>> = { swing: "stoptime", new
 function textureFor(style: StyleDef, frame: Frame, bar: number, s: Section, isLastSolo: boolean, opensFirst: boolean): Texture {
   if (style.id === "minimal") return "ostinato";
   if (style.id === "ambient") return "sparse";
+  if (style.id === "postrock") {
+    // quiet and open until the band starts to climb, a roll into the crest, the crest itself
+    const crest = crestStart(frame);
+    if (bar === frame.bars - 1) return "tutti";
+    if (bar >= crest) return "peak";
+    if (bar === crest - 1 && crest < frame.bars - 1) return "build";
+    return s.kind === "intro" || (s.kind === "head" && bar - s.start < s.length / 2) ? "sparse" : "groove";
+  }
   const inSec = bar - s.start;
   if (bar === frame.bars - 1) return "tutti";
   if (s.kind === "solo") {
@@ -158,6 +186,12 @@ export function headLine(style: StyleDef, len: number, motifBars: number, rng: R
       res.push(cycle[inPhrase]);
       continue;
     }
+    if (style.id === "postrock") {
+      // said, said again, answered; then the same climb a step higher
+      const cycle = phraseIdx % 2 === 0 ? ["@motif", "@motif", answer, "@line long"] : ["@motif up 2", "@motif up 2", "@motif", "@line long"];
+      res.push(cycle[inPhrase]);
+      continue;
+    }
     const cycle =
       phraseIdx % 2 === 0
         ? ["@motif", answer, "@motif", "@line long"]
@@ -178,6 +212,24 @@ export function bassChairOf(members: Member[]): string | null {
 
 /** Styles whose intros can build up a player at a time, and how often they do. */
 const LAYERED_INTRO: Partial<Record<StyleId, number>> = { funk: 0.6, pop: 0.5, bossa: 0.4 };
+
+/**
+ * A post-rock intro starts from a guitar alone: the chords first, the bass halfway through, the
+ * drums only for the last bar's swell into the head (and the rest wait for the tune).
+ */
+function risingEntries(frame: Frame, members: Member[], bassChair: string | null): Map<string, number> {
+  const out = new Map<string, number>();
+  const intro = frame.sections.find((x) => x.kind === "intro");
+  if (!intro || intro.length < 2) return out;
+  const chords = members.filter((m) => INSTRUMENTS[m.instrument].fn === "chordal");
+  if (!chords.length) return out;
+  for (const m of members) {
+    if (chords.includes(m)) continue;
+    const at = m.id === bassChair ? Math.floor(intro.length / 2) : m.instrument === "drums" ? intro.length - 1 : intro.length;
+    out.set(m.id, intro.start + at);
+  }
+  return out;
+}
 
 /**
  * A layered intro: the groove built one player at a time. Drums alone, then the bass locks in,
@@ -212,7 +264,7 @@ export function planLocal(frame: Frame, members: Member[], motif: Motif, rng: Rn
   // the take's arrangement choices, drawn apart from everything else so they don't move it
   const arr = rng.fork("arrangement");
   const firstSoloOpens = arr.chance(0.5);
-  const entries = layeredEntries(frame, members, style, bassChair, arr);
+  const entries = style.id === "postrock" ? risingEntries(frame, members, bassChair) : layeredEntries(frame, members, style, bassChair, arr);
 
   // per-section lead lines
   const leadLines = new Map<Section, string[]>();

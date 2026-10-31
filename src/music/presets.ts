@@ -20,6 +20,7 @@ export type PresetId =
   | "debussy"
   | "glass"
   | "zimmer"
+  | "eits"
   | "fox"
   | "evans"
   | "monk"
@@ -253,6 +254,27 @@ export const PRESETS: Preset[] = [
     ],
     soloists: ["sheep"],
     sounds: { room: "hall", piano: "salamander", pad: "strings" },
+  },
+  {
+    id: "eits",
+    name: "Explosions in the Sky",
+    blurb: "Post-rock: two guitars through a delay, a glockenspiel, and a slow climb to the crest",
+    group: "film",
+    tags: "post rock crescendo guitars delay friday night lights instrumental",
+    style: "postrock",
+    feel: "postrock",
+    harmony: "postrock",
+    tempo: 100,
+    key: { tonic: "E", mode: "major" },
+    band: [
+      { animal: "fox", instrument: "guitar" },
+      { animal: "cat", instrument: "guitar" },
+      { animal: "penguin", instrument: "vibes" },
+      { animal: "frog", instrument: "bass" },
+      { animal: "owl", instrument: "drums" },
+    ],
+    soloists: ["cat"],
+    sounds: { room: "hall" },
   },
   {
     id: "fox",

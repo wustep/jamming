@@ -69,7 +69,7 @@ const RIFF_STYLES = new Set<StyleId>(["funk", "pop"]);
 const ACCOMPANIMENT: Record<InstrumentFunction, RegExp> = {
   rhythm: /^@(groove)$/,
   bass: /^@(walk|two|bossa|funk|baroque|pedal|pump|groove)$/,
-  chordal: /^@(comp|pulse|stride|arp|prelude|continuo|pad|shimmer|bossa|funk|groove|guide)$/,
+  chordal: /^@(comp|pulse|stride|arp|prelude|continuo|pad|shimmer|wash|bossa|funk|groove|guide)$/,
   melodic: /^@(guide|harmony|canon|riff|counter|pad|arp|comp|shimmer)$/,
 };
 // cellos also pluck and bow
@@ -420,7 +420,7 @@ export function enforceSlots(plan: BarPlan[], frame: Frame, members: Member[], r
       if (isFeaturedRole(locked)) {
         // an ending or a band hit in the middle of a solo isn't a solo either
         const ending = /^@(end|hits)\b/.test(d) && bp.index !== frame.bars - 1;
-        const accompaniment = ending || /^@(walk|two|bossa|funk|baroque|pedal|pump|comp|pulse|pizz|arco|stride|arp|prelude|continuo|pad|shimmer|groove|guide|harmony|canon|riff|counter|rest)\b/.test(d);
+        const accompaniment = ending || /^@(walk|two|bossa|funk|baroque|pedal|pump|comp|pulse|pizz|arco|stride|arp|prelude|continuo|pad|shimmer|wash|groove|guide|harmony|canon|riff|counter|rest)\b/.test(d);
         if (accompaniment && !(m.instrument === "drums" && locked === "groove")) {
           const fix = defaultFeaturedDirective(locked!, m);
           repairs.push(`bar ${bp.index + 1}: ${m.name} is featured (${locked}) but was given ${d}; playing ${fix}`);

@@ -1,6 +1,6 @@
 import type { InstrumentFunction, SectionKind, StyleId, SwingFeel } from "./types";
 
-// Seven distinct characters. Distinctness comes from texture priors (what each
+// Nine distinct characters. Distinctness comes from texture priors (what each
 // function in the band actually does), not from the style's name. Prompts quote
 // `texture`, never just the label.
 
@@ -25,7 +25,7 @@ export interface StyleDef {
   /** Drum fill density 0..1 */
   fills: number;
   /** Comp voicing family. */
-  voicing: "rootless" | "triad" | "open" | "quartal" | "shell";
+  voicing: "rootless" | "triad" | "open" | "quartal" | "shell" | "ringing";
   /** Feel label for the sheet. */
   feelLabel: string;
 }
@@ -279,9 +279,42 @@ export const STYLES: Record<StyleId, StyleDef> = {
     voicing: "quartal",
     feelLabel: "Floating",
   },
+  // Explosions in the Sky, Mogwai, Sigur Rós: not ambient (which never arrives anywhere) and not
+  // minimalism (which never stops pulsing). One long crescendo, from a guitar alone to the crest.
+  postrock: {
+    id: "postrock",
+    name: "Post-rock",
+    blurb: "Delayed guitar washes, a slow climb to a crest",
+    texture:
+      "Straight 8ths, patient, one long crescendo from near silence to a loud crest. Guitars ring open voicings (root, 5th, 9th, the 3rd on top) picked as slow arpeggios through a dotted-8th delay so the notes smear into a wash; at the crest they tremolo-pick. Bass holds the tonic as a pedal in long notes under the moving chords, then drives root 8ths once the band crests. Drums start with only cymbal swells, come in on floor tom and kick halfway, then half-time on the ride, and crest with crashes on every 8th, the kick on every beat and a snare roll swelling into the top. The melody is simple and singable: a short motif repeated, then stepped up, long notes high in the register, never busy. No swing, no blues, no reharmonization: add9 chords, IV to I.",
+    swing: 0.5,
+    tempo: { min: 66, max: 132, default: 96 },
+    key: { tonic: "E", mode: "major" },
+    section: {
+      intro: { bass: "@pedal", chordal: "@wash", rhythm: "@groove light", melodic: "@rest" },
+      head: { bass: "@pedal", chordal: "@wash", rhythm: "@groove", melodic: "@pad", "melodic-support": "@pad" },
+      solo: { bass: "@pedal", chordal: "@wash", rhythm: "@groove", melodic: "@pad", "melodic-support": "@pad" },
+      trade: { bass: "@pedal", chordal: "@wash", rhythm: "@groove", melodic: "@pad" },
+      vamp: { bass: "@pedal", chordal: "@wash", rhythm: "@groove", melodic: "@pad" },
+      // the crest: a second voice doubles the tune in 3rds (twin guitars), everyone in
+      out: { bass: "@pedal", chordal: "@wash", rhythm: "@groove peak", melodic: "@harmony", "melodic-support": "@harmony" },
+      tag: { bass: "@end", chordal: "@end", rhythm: "@end", melodic: "@end" },
+    },
+    lineDensity: 0.9,
+    motifCells: ["8 8 8 8 2", "4 8 8 2", "4. 8 4 4", "2 4 4"],
+    contours: [
+      [0, 1, 2, 1, 0],
+      [0, 0, 1, 2],
+      [2, 1, 0, 4],
+      [0, 2, 1, -1],
+    ],
+    fills: 0.4,
+    voicing: "ringing",
+    feelLabel: "Straight 8ths, building",
+  },
 };
 
-export const STYLE_LIST: StyleId[] = ["swing", "bossa", "funk", "pop", "neworleans", "minimal", "baroque", "ambient"];
+export const STYLE_LIST: StyleId[] = ["swing", "bossa", "funk", "pop", "neworleans", "minimal", "baroque", "ambient", "postrock"];
 
 /**
  * What a cellist does in each style when someone else holds the bass chair: tenor
@@ -297,6 +330,8 @@ export const CELLO_TEXTURE: Record<StyleId, Partial<Record<SectionKind, string>>
   minimal: { intro: "@arp", head: "@arp", solo: "@arp", trade: "@arp", vamp: "@arp", out: "@arp", tag: "@end" },
   baroque: { intro: "@rest", head: "@canon", solo: "@counter", trade: "@canon", vamp: "@counter", out: "@canon", tag: "@end" },
   ambient: { intro: "@pad", head: "@pad", solo: "@pad", trade: "@pad", vamp: "@pad", out: "@pad", tag: "@end" },
+  // a bowed swell under the build, then the tune's harmony at the crest
+  postrock: { intro: "@rest", head: "@pad", solo: "@pad", trade: "@pad", vamp: "@pad", out: "@harmony", tag: "@end" },
 };
 
 /**

@@ -224,6 +224,28 @@ const PHRASE: Record<StyleId, PhraseStyle> = {
     staccato: 0,
     guide: false,
   },
+  // a singer's line on a guitar: a short figure said again and stepped up, long notes that land
+  // on the 9th as often as the 3rd, a breath that lets the delay answer it. Never a run.
+  postrock: {
+    units: [["2", "4", "4"], ["4", "8 8", "4", "4"], ["8 8", "8 8", "4"]],
+    runs: ["8 8", "8 8", "4"],
+    pickupUnit: "r/8 8",
+    length: [3, 7],
+    landing: [1.5, 4],
+    breath: [1, 3],
+    pickup: 0.3,
+    anticipate: 0.25,
+    echo: 0.7,
+    pitchEcho: 0.65,
+    sequence: [1, 0, 2],
+    shapes: ["rise", "arch", "fall", "arch"],
+    span: [5, 9],
+    chromatic: 0,
+    arpeggio: 0.35,
+    staccato: 0,
+    guide: false,
+    pentatonic: true,
+  },
 };
 
 const SHAPE: Record<Shape, (x: number) => number> = {
@@ -401,9 +423,10 @@ function structuralPool(ctx: BarCtx, ps: PhraseStyle, h: Harm, landing: boolean,
   for (const pc of h.stable) pool.set(pc, h.tones.includes(pc) ? 1 : 2);
   for (const g of h.guides) if (ps.guide) pool.set(g, 0);
   if (landing) {
-    // land on the 3rd, 5th (or 7th); the root sounds final, colors sound unfinished (except in ambient/bossa)
+    // land on the 3rd, 5th (or 7th); the root sounds final, colors sound unfinished (except in
+    // ambient, bossa and post-rock, where a held 9th is the sound)
     pool.set(root, 2.5);
-    if (ctx.style.id !== "ambient" && ctx.style.id !== "bossa") for (const c of h.colors) pool.delete(c);
+    if (!["ambient", "bossa", "postrock"].includes(ctx.style.id)) for (const c of h.colors) pool.delete(c);
     if (!pool.size) pool.set(root, 0);
   } else if ((ctx.style.id === "funk" || ctx.style.id === "neworleans") && h.chord.tones.includes(4)) {
     // the blue b3 against a major 3rd can sit on a beat; other blue notes only pass
@@ -453,7 +476,8 @@ export function planPhrase(
   const secStart = ctx.section.start * ctx.beats;
   const secLen = Math.max(1, ctx.section.length * ctx.beats);
   const arc = Math.max(0, Math.min(1, (t0 - secStart) / secLen));
-  const center = lo + (hi - lo) * (featured ? 0.3 + 0.4 * arc : 0.45);
+  // (a post-rock line starts high and climbs higher: it sings over the wash)
+  const center = lo + (hi - lo) * (featured ? (ctx.style.id === "postrock" ? 0.5 + 0.3 * arc : 0.3 + 0.4 * arc) : 0.45);
   const last = ctx.mem.lastPitch;
   let start = last !== null && last >= lo - 2 && last <= hi + 2 ? last * 0.45 + center * 0.55 : center;
 

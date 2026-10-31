@@ -26,7 +26,7 @@ export const DIRECTIVE_HELP = `Each bar of each player's part is ONE of:
   @line [dense|sparse|run|long]  — improvise a line over the changes
   @answer  — open a solo by answering the previous soloist's last phrase (its rhythm, your register), then carry on
   @walk @two @bossa @funk @baroque @pedal @pump  — bass patterns (@pump: pop root 8ths)
-  @comp [sparse|busy] @pulse [sparse|busy] @stride @arp @prelude @continuo @pad @shimmer @hits  — chordal patterns (@pulse: pop block triads)
+  @comp [sparse|busy] @pulse [sparse|busy] @stride @arp @prelude @continuo @pad @shimmer @wash [sparse|busy] @hits  — chordal patterns (@pulse: pop block triads; @wash: post-rock open chords picked through a delay, tremolo at the crest)
   @pizz [sparse|busy] @arco  — bowed strings: plucked double-stop comping / sustained bowed tones
   @guide @harmony @canon @riff @counter @fill  — supporting lines (guide tones, 3rds under the lead, imitation, backing riff)
   @groove [light|peak] @solo @fill  — drums
@@ -101,7 +101,7 @@ function rehearse(ctx: BarCtx, notes: NoteEvent[], issues: string[]): NoteEvent[
 
 /** The directives an artist's bass figure or comping figure stands in for. */
 const BASS_PATTERNS = new Set(["walk", "two", "bossa", "funk", "baroque", "pedal", "pump"]);
-const COMP_PATTERNS = new Set(["comp", "pulse", "pump", "stride", "arp", "prelude", "continuo", "pad", "shimmer", "bossa", "funk", "groove"]);
+const COMP_PATTERNS = new Set(["comp", "pulse", "pump", "stride", "arp", "prelude", "continuo", "pad", "shimmer", "wash", "bossa", "funk", "groove"]);
 
 /** Bowed strings pluck these patterns. */
 const PLUCKED = new Set(["walk", "two", "bossa", "funk", "pizz"]);
@@ -186,7 +186,7 @@ function realizeRaw(ctx: BarCtx, text: string): DirectiveResult {
   }
 
   // the string machine holds the harmony whatever the comping figure would have been
-  if (ctx.inst.id === "pad" && ["comp", "stride", "arp", "prelude", "continuo", "shimmer", "pizz", "arco", "bossa", "funk", "riff"].includes(name)) return done(comp.pad(c));
+  if (ctx.inst.id === "pad" && ["comp", "stride", "arp", "prelude", "continuo", "shimmer", "wash", "pizz", "arco", "bossa", "funk", "riff"].includes(name)) return done(comp.pad(c));
 
   // an artist's own figures, where the style's bass line or comping would have been
   const sig = ctx.feel.sig;
@@ -319,6 +319,9 @@ function realizeRaw(ctx: BarCtx, text: string): DirectiveResult {
       return done(lines.melodicPad(c));
     case "shimmer":
       return done(fn === "chordal" ? comp.shimmer(c) : lines.melodicPad(c));
+    case "wash":
+      if (fn === "bass") return done(bass.pedal(c));
+      return done(fn === "chordal" ? comp.wash(c) : ctx.inst.id === "cello" ? lines.celloPad(c) : lines.melodicPad(c));
     case "hits":
       if (fn === "chordal") return done(comp.hits(c));
       return done(lines.guide(c).slice(0, 1).map((n) => ({ ...n, dur: 0.35, art: "accent" as const })));
