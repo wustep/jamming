@@ -27,6 +27,7 @@ const HEAD = ["Here's the tune.", "This is how it goes.", "Listen to this one."]
 const OUT = ["Back to the tune.", "Taking it home.", "One more time through the tune."];
 const TAG = ["Again, the last bit!", "Once more…"];
 const VAMP = ["Vamp till ready.", "Just the groove for a bit."];
+const LAYERED = ["I'll start. Come in one at a time.", "Me first. The rest of you, one by one."];
 const INTRO = ["I'll set it up. Four bars, then the tune.", "Intro first, then the head.", "We'll ease into it."];
 const ANSWER = (prev: string) => [`I'll pick up where ${prev} left off.`, `Answering ${prev}.`, `${prev}, I heard that. Here's mine.`];
 const STOPTIME = ["Everybody hit the one and lay out.", "Stop-time: hit and wait."];
@@ -101,9 +102,12 @@ export function narrateLocal(frame: Frame, plan: BarPlan[], members: Member[], r
         say(who ?? leader, rng.pick(TAG), "jam", s.start);
         break;
       case "intro": {
-        // the pianist (or whoever leads the rhythm section) sets it up
-        const v = byFn("chordal") ?? drummer ?? bassist ?? leader;
-        say(v, rng.pick(INTRO), "jam", s.start);
+        // a layered intro is the drummer's (or the bassist's) to start; otherwise the pianist
+        // (or whoever leads the rhythm section) sets it up
+        const first = members.filter((m) => plan[s.start]?.roles[m.id] && plan[s.start].roles[m.id] !== "rest").map((m) => m.id);
+        const layered = first.length > 0 && members.some((m) => !first.includes(m.id) && INSTRUMENTS[m.instrument].fn !== "melodic");
+        if (layered) say(first.includes(drummer ?? "") ? drummer! : first[0], rng.pick(LAYERED), "jam", s.start);
+        else say(byFn("chordal") ?? drummer ?? bassist ?? leader, rng.pick(INTRO), "jam", s.start);
         break;
       }
       case "vamp": {

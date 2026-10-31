@@ -155,3 +155,49 @@ describe("how the take is built", () => {
     expect(longHead.moves).toEqual(expect.arrayContaining(["two-feel", "walking bass"]));
   });
 });
+
+describe("arrangements that differ from take to take", () => {
+  const firstSolo = (score: Score) => score.frame.sections.find((s) => s.kind === "solo")!;
+
+  it("a one-soloist swing take sometimes opens its solo in stop-time", () => {
+    const opens = Array.from({ length: 12 }, (_, i) => take("swing", i + 1, 16, quartet)).map((s) => s.plan[firstSolo(s).start].texture === "stoptime");
+    expect(opens.some(Boolean)).toBe(true);
+    expect(opens.every(Boolean)).toBe(false);
+  });
+
+  it("a funk intro sometimes builds one layer at a time: drums, then bass, then the rest", () => {
+    let layered = 0;
+    let together = 0;
+    for (let seed = 1; seed <= 12; seed++) {
+      const score = take("funk", seed, 32, quartet);
+      const intro = score.frame.sections.find((s) => s.kind === "intro")!;
+      const on = (id: string, bar: number) => score.plan[bar].roles[id] !== "rest";
+      const guide = jamGuide(score)[0];
+      if (!on("frog", intro.start)) {
+        layered++;
+        expect(on("owl", intro.start)).toBe(true);
+        expect(on("frog", intro.start + 1)).toBe(true);
+        expect(guide.moves[0]).toBe("layered intro");
+        expect(guide.what).toBe("The groove is built one layer at a time: Hoot first, then Lily.");
+        // the drummer counts it in and says how it goes
+        expect(score.chat.find((c) => c.bar === intro.start)?.from).toBe("owl");
+      } else {
+        together++;
+        expect(guide.moves).not.toContain("layered intro");
+      }
+    }
+    expect(layered).toBeGreaterThan(0);
+    expect(together).toBeGreaterThan(0);
+  });
+
+  it("a layered bossa intro brings the chords in on the third bar", () => {
+    const score = Array.from({ length: 12 }, (_, i) => take("bossa", i + 1, 32, quartet)).find((s) => s.plan[0].roles.frog === "rest");
+    expect(score).toBeTruthy();
+    expect(jamGuide(score!)[0].what).toBe("The groove is built one layer at a time: Hoot first, then Lily, then Bruno.");
+    const roles = (bar: number) => quartet.filter((m) => m.id !== "fox").map((m) => score!.plan[bar].roles[m.id] !== "rest");
+    // bear, frog, owl
+    expect(roles(0)).toEqual([false, false, true]);
+    expect(roles(1)).toEqual([false, true, true]);
+    expect(roles(2)).toEqual([true, true, true]);
+  });
+});

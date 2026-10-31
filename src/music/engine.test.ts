@@ -1355,7 +1355,8 @@ describe("swing in two", () => {
       const solo = frame.sections.find((s) => s.kind === "solo");
       if (!head || !solo) continue;
       const headBars = Array.from({ length: head.length - 1 }, (_, i) => head.start + i);
-      const soloBars = Array.from({ length: solo.length - 1 }, (_, i) => solo.start + i);
+      // (a solo can open in stop-time, where the bass hits the one and waits)
+      const soloBars = Array.from({ length: solo.length - 1 }, (_, i) => solo.start + i).filter((b) => score.plan[b].texture !== "stoptime");
       expect(mean(headBars)).toBeLessThanOrEqual(3);
       expect(mean(soloBars)).toBeGreaterThanOrEqual(3.5);
       // walking into the solos: the head's last bar is in four

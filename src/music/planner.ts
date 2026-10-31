@@ -5,7 +5,7 @@ import type { Rng } from "./rng";
 import { getStandard } from "./standards";
 import { mod, parseChord, pcOf } from "./theory";
 import { CELLO_TEXTURE, STYLES, type StyleDef } from "./styles";
-import type { BarPlan, Dynamic, Frame, Member, Motif, Role, Section, Texture } from "./types";
+import type { BarPlan, Dynamic, Frame, Member, Motif, Role, Section, StyleId, Texture } from "./types";
 
 // Level 1 (local): fill roles, textures, dynamics and per-bar directives inside
 // the locked frame. The model planners produce the same shape.
@@ -63,19 +63,21 @@ function arcDynamic(style: StyleDef, frame: Frame, bar: number, s: Section): Dyn
   }
 }
 
-function textureFor(style: StyleDef, frame: Frame, bar: number, s: Section, isLastSolo: boolean): Texture {
+/** How a solo can open with an arrangement change: stop-time behind a swing or New Orleans
+ * soloist, a bass-and-drums breakdown under a funk or pop one. */
+const SOLO_OPENING: Partial<Record<StyleId, Texture>> = { swing: "stoptime", neworleans: "stoptime", funk: "breakdown", pop: "breakdown" };
+
+function textureFor(style: StyleDef, frame: Frame, bar: number, s: Section, isLastSolo: boolean, opensFirst: boolean): Texture {
   if (style.id === "minimal") return "ostinato";
   if (style.id === "ambient") return "sparse";
   const inSec = bar - s.start;
   if (bar === frame.bars - 1) return "tutti";
   if (s.kind === "solo") {
-    // a later solo in a long chart opens with an arrangement change: stop-time behind a swing
-    // or New Orleans soloist, a bass-and-drums breakdown under a funk one
+    // a later solo in a long chart opens with an arrangement change, and now and then the first
+    // one does too (so a one-soloist take isn't always the same shape)
     const laterSolo = frame.sections.some((x) => x.kind === "solo" && x.start < s.start);
-    if (laterSolo && s.length >= 6 && inSec < 2) {
-      if (style.id === "swing" || style.id === "neworleans") return "stoptime";
-      if (style.id === "funk") return "breakdown";
-    }
+    const opening = SOLO_OPENING[style.id];
+    if (opening && (laterSolo || opensFirst) && s.length >= 6 && inSec < 2) return opening;
     if (inSec === 0) return "sparse";
     if (isLastSolo && inSec >= s.length - 2) return "peak";
     if (inSec >= s.length - 2) return "build";
@@ -174,6 +176,30 @@ export function bassChairOf(members: Member[]): string | null {
   return members.find((m) => INSTRUMENTS[m.instrument].bassCapable)?.id ?? null;
 }
 
+/** Styles whose intros can build up a player at a time, and how often they do. */
+const LAYERED_INTRO: Partial<Record<StyleId, number>> = { funk: 0.6, pop: 0.5, bossa: 0.4 };
+
+/**
+ * A layered intro: the groove built one player at a time. Drums alone, then the bass locks in,
+ * then the chords (a two-bar intro brings drums and bass in together). The bar each player comes
+ * in on; anyone not listed plays from the top. Empty when the intro starts with everyone.
+ */
+function layeredEntries(frame: Frame, members: Member[], style: StyleDef, bassChair: string | null, rng: Rng): Map<string, number> {
+  const out = new Map<string, number>();
+  const intro = frame.sections.find((x) => x.kind === "intro");
+  const odds = LAYERED_INTRO[style.id] ?? 0;
+  if (!intro || intro.length < 2 || !rng.chance(odds)) return out;
+  const drummer = members.find((m) => m.instrument === "drums")?.id;
+  const others = members.filter((m) => m.id !== drummer && m.id !== bassChair);
+  // the bass after the drums when there's room for three entries, else with them
+  const bassIn = drummer && intro.length >= 4 ? 1 : 0;
+  const restIn = bassChair ? bassIn + 1 : drummer ? 1 : 0;
+  if (!restIn) return out;
+  if (bassChair) out.set(bassChair, intro.start + bassIn);
+  for (const m of others) out.set(m.id, intro.start + Math.min(restIn, intro.length - 1));
+  return out;
+}
+
 export function planLocal(frame: Frame, members: Member[], motif: Motif, rng: Rng): BarPlan[] {
   const style = STYLES[frame.style];
   const motifBars = Math.max(1, Math.ceil(motif.length / frame.meter.beats - 1e-6));
@@ -182,6 +208,11 @@ export function planLocal(frame: Frame, members: Member[], motif: Motif, rng: Rn
   const lastSolo = soloSections[soloSections.length - 1];
   const melodic = members.filter((m) => INSTRUMENTS[m.instrument].fn === "melodic");
   const bassChair = bassChairOf(members);
+
+  // the take's arrangement choices, drawn apart from everything else so they don't move it
+  const arr = rng.fork("arrangement");
+  const firstSoloOpens = arr.chance(0.5);
+  const entries = layeredEntries(frame, members, style, bassChair, arr);
 
   // per-section lead lines
   const leadLines = new Map<Section, string[]>();
@@ -251,7 +282,8 @@ export function planLocal(frame: Frame, members: Member[], motif: Motif, rng: Rn
         directives[m.id] = "@solo";
         continue;
       }
-      if (slot === "rest") {
+      // a layered intro: this player hasn't come in yet
+      if (slot === "rest" || bar < (entries.get(m.id) ?? 0)) {
         roles[m.id] = "rest";
         directives[m.id] = "@rest";
         continue;
@@ -291,7 +323,7 @@ export function planLocal(frame: Frame, members: Member[], motif: Motif, rng: Rn
       section: s.name,
       chords: frame.chords[bar],
       roles,
-      texture: textureFor(style, frame, bar, s, isLastSolo),
+      texture: textureFor(style, frame, bar, s, isLastSolo, firstSoloOpens),
       dynamic: dynamicFor(style, frame, bar, s),
       directives,
     });
