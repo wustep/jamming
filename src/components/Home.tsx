@@ -8,6 +8,7 @@ import { BrainsButton, BrainsSheet } from "@/components/BrainsSheet";
 import { ControlPanel } from "@/components/ControlPanel";
 import { DebugPanel } from "@/components/DebugPanel";
 import { KeyDialog } from "@/components/KeyDialog";
+import { Listening } from "@/components/Listening";
 import { PlayAlong } from "@/components/PlayAlong";
 import { Stage } from "@/components/Stage";
 import { SavedJams, Takes, Transport } from "@/components/Transport";
@@ -76,6 +77,10 @@ export function Home() {
               <PlayAlong />
             </div>
             {debugOpen && <DebugPanel sheetStats={sheetStats} />}
+          </div>
+          {/* how the take is built, by the stage on a wide screen; on a phone after the band settings */}
+          <div className="order-3 min-w-0 lg:order-none lg:mt-l">
+            <Listening />
           </div>
           <div className="order-3 grid min-w-0 gap-m md:grid-cols-[minmax(0,1fr)_260px] lg:order-none lg:mt-l">
             <BandTalk />

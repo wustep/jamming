@@ -5,6 +5,7 @@ import { AnimalSprite, IDLE_STATE, isPhrasing, type SpriteHandle } from "@/art/A
 import { troopAudio } from "@/audio/engine";
 import { ANIMAL_LIST, ANIMALS, INSTRUMENTS } from "@/music/instruments";
 import { echoerFor, type Block } from "@/music/live";
+import { techniqueAt } from "@/music/teach";
 import type { Member, MemberFrameState } from "@/music/types";
 import { liveCore, usePlayAlong } from "@/state/playalong";
 import { useDebug } from "@/state/debug";
@@ -353,6 +354,7 @@ export function Stage() {
             const row = Math.floor(i / perRow);
             const crowded = band.some((o, j) => j !== i && Math.floor(j / perRow) === row && (bubbles[o.id] || thinking.has(o.id)));
             const fit = bubbleFit(i, n, perRow, spriteW, width, crowded);
+            const doing = heard && playing && bar >= 0 && m.id !== YOU ? techniqueAt(heard, m.id, bar) : null;
             return (
               <div key={`${m.id}:${m.instrument}`} className="band-slot relative flex flex-col items-center">
                 <div
@@ -402,8 +404,9 @@ export function Stage() {
                       {m.name}
                       {score?.frame.leaderId === m.id && <span className="ml-xxs text-s text-(--color-1)" aria-label="leader">★</span>}
                     </div>
-                    <div className="text-s text-ink-soft">
-                      {isMuted ? "muted · tap to unmute" : inst.name}
+                    <div className="text-s text-ink-soft" title={doing ? `${inst.name}: ${doing.what}` : undefined}>
+                      {/* while the band plays, what they're doing (walking bass, comping…); stopped, what they play */}
+                      {isMuted ? "muted · tap to unmute" : doing ? <span className="text-(--color-3)">{doing.tag ?? doing.name}</span> : inst.name}
                       {!isMuted && <span className="ml-xxs hidden text-xs group-hover:inline">· tap to mute</span>}
                     </div>
                   </button>
