@@ -2,10 +2,10 @@ import {
   DrumMachine,
   ElectricPiano,
   Instrument,
+  LAYERS,
   Mallet,
   Sampler,
   Soundfont,
-  SplendidGrandPiano,
   type Scheduler,
   type Smplr,
   type SmplrPreset,
@@ -73,22 +73,100 @@ export interface PackContext {
 
 export interface PackSpec {
   pack: string;
+  /** Its own level, when it isn't level with the instrument's (the volume it's created with). */
+  volume?: number;
   create(p: PackContext): Smplr;
   /** Rebuild/extend sample set for new notes without a new instance (Salamander). */
   extend?: (inst: Smplr, notes: number[], failedUrls: Set<string>) => Promise<void>;
+}
+
+// ─── Grand pianos sampled at roots: only the roots a chart needs ────────────
+
+interface RootSample {
+  name: string;
+  midi: number;
+}
+
+function nearestRoot(all: RootSample[], note: number): RootSample {
+  let best = all[0];
+  for (const s of all) {
+    if (Math.abs(s.midi - note) < Math.abs(best.midi - note)) best = s;
+  }
+  return best;
+}
+
+/** Roots needed to cover `notes` (the nearest to each). All of them when notes is empty/undefined. */
+export function rootSubset(all: RootSample[], notes?: number[]): RootSample[] {
+  if (!notes || notes.length === 0) return all;
+  const picked = new Map<string, RootSample>();
+  for (const n of notes) {
+    if (!Number.isFinite(n)) continue;
+    const s = nearestRoot(all, Math.round(n));
+    picked.set(s.name, s);
+  }
+  // Always keep a low, middle and high anchor so stray notes don't pitch-shift absurdly.
+  for (const anchor of [36, 60, 84]) {
+    const s = nearestRoot(all, anchor);
+    picked.set(s.name, s);
+  }
+  return [...picked.values()].sort((a, b) => a.midi - b.midi);
+}
+
+/** Spread key ranges so every MIDI key maps to its nearest loaded root (at every velocity). */
+function spreadRoots(samples: RootSample[]): SmplrPreset["groups"][number]["regions"] {
+  const sorted = [...samples].sort((a, b) => a.midi - b.midi);
+  return sorted.map((s, i) => {
+    const lo = i === 0 ? 0 : Math.floor((sorted[i - 1].midi + s.midi) / 2) + 1;
+    const hi = i === sorted.length - 1 ? 127 : Math.floor((s.midi + sorted[i + 1].midi) / 2);
+    return { sample: s.name, keyRange: [lo, hi] as [number, number], pitch: s.midi };
+  });
+}
+
+/**
+ * A piano that loads the roots a chart needs, and more when a later one needs them (rebuilt without
+ * any that failed). `volume` is its own level when it isn't level with the piano's.
+ */
+function rootedPiano(pack: string, all: RootSample[], presetOf: (samples: RootSample[]) => SmplrPreset, volume?: number): PackSpec {
+  const loaded = new WeakMap<Smplr, Set<string>>();
+  return {
+    pack,
+    volume,
+    create(p) {
+      const subset = rootSubset(all, p.notes);
+      const inst = Sampler(p.ctx, {
+        preset: presetOf(subset),
+        destination: p.destination,
+        scheduler: p.scheduler,
+        storage: p.storage,
+        volume: p.volume,
+        pan: p.pan,
+        onLoadProgress: ({ loaded, total }) => p.onProgress(loaded, total),
+      });
+      loaded.set(inst, new Set(subset.map((s) => s.name)));
+      return inst;
+    },
+    async extend(inst, notes, failedUrls) {
+      const have = loaded.get(inst) ?? new Set<string>();
+      const want = rootSubset(all, notes);
+      const missing = want.filter((s) => !have.has(s.name));
+      const failed = (name: string) => [...failedUrls].some((u) => u.includes(`/${name}.`));
+      const union = all.filter((s) => (have.has(s.name) || want.includes(s)) && !failed(s.name));
+      const anyFailedLoaded = [...have].some(failed);
+      if (missing.length === 0 && !anyFailedLoaded) return;
+      const sampler = inst as Smplr & { reload?: (p: SmplrPreset) => Promise<void> };
+      if (typeof sampler.reload !== "function" || union.length === 0) return;
+      await sampler.reload(presetOf(union));
+      loaded.set(inst, new Set(union.map((s) => s.name)));
+    },
+  };
 }
 
 // ─── Salamander Grand Piano (Tone.js hosted, CC-BY 3.0, Alexander Holm) ──────
 
 export const SALAMANDER_BASE = "https://tonejs.github.io/audio/salamander";
 
-interface SalSample {
-  name: string;
-  midi: number;
-}
-
-export const SALAMANDER_SAMPLES: SalSample[] = (() => {
-  const out: SalSample[] = [{ name: "A0", midi: 21 }];
+export const SALAMANDER_SAMPLES: RootSample[] = (() => {
+  const out: RootSample[] = [{ name: "A0", midi: 21 }];
   for (let oct = 1; oct <= 7; oct++) {
     const c = 12 * (oct + 1);
     out.push({ name: `C${oct}`, midi: c });
@@ -100,39 +178,7 @@ export const SALAMANDER_SAMPLES: SalSample[] = (() => {
   return out;
 })();
 
-function nearestSalamander(note: number): SalSample {
-  let best = SALAMANDER_SAMPLES[0];
-  for (const s of SALAMANDER_SAMPLES) {
-    if (Math.abs(s.midi - note) < Math.abs(best.midi - note)) best = s;
-  }
-  return best;
-}
-
-/** Samples needed to cover `notes` (nearest root per note). All samples when notes is empty/undefined. */
-export function salamanderSubset(notes?: number[]): SalSample[] {
-  if (!notes || notes.length === 0) return SALAMANDER_SAMPLES;
-  const picked = new Map<string, SalSample>();
-  for (const n of notes) {
-    if (!Number.isFinite(n)) continue;
-    const s = nearestSalamander(Math.round(n));
-    picked.set(s.name, s);
-  }
-  // Always keep a low, middle and high anchor so stray notes don't pitch-shift absurdly.
-  for (const anchor of [36, 60, 84]) {
-    const s = nearestSalamander(anchor);
-    picked.set(s.name, s);
-  }
-  return [...picked.values()].sort((a, b) => a.midi - b.midi);
-}
-
-/** Spread key ranges so every MIDI key maps to its nearest loaded sample. */
-export function salamanderPreset(samples: SalSample[]): SmplrPreset {
-  const sorted = [...samples].sort((a, b) => a.midi - b.midi);
-  const regions = sorted.map((s, i) => {
-    const lo = i === 0 ? 0 : Math.floor((sorted[i - 1].midi + s.midi) / 2) + 1;
-    const hi = i === sorted.length - 1 ? 127 : Math.floor((s.midi + sorted[i + 1].midi) / 2);
-    return { sample: s.name, keyRange: [lo, hi] as [number, number], pitch: s.midi };
-  });
+export function salamanderPreset(samples: RootSample[]): SmplrPreset {
   return {
     meta: {
       name: "Salamander Grand Piano",
@@ -141,64 +187,36 @@ export function salamanderPreset(samples: SalSample[]): SmplrPreset {
     },
     samples: { baseUrl: SALAMANDER_BASE, formats: ["ogg", "mp3"] },
     defaults: { ampRelease: 0.7 },
-    groups: [{ regions }],
+    groups: [{ regions: spreadRoots(samples) }],
   };
 }
 
-const salamanderLoaded = new WeakMap<Smplr, Set<string>>();
+const salamander = rootedPiano("salamander", SALAMANDER_SAMPLES, salamanderPreset);
 
-const salamander: PackSpec = {
-  pack: "salamander",
-  create(p) {
-    const subset = salamanderSubset(p.notes);
-    const inst = Sampler(p.ctx, {
-      preset: salamanderPreset(subset),
-      destination: p.destination,
-      scheduler: p.scheduler,
-      storage: p.storage,
-      volume: p.volume,
-      pan: p.pan,
-      onLoadProgress: ({ loaded, total }) => p.onProgress(loaded, total),
-    });
-    salamanderLoaded.set(inst, new Set(subset.map((s) => s.name)));
-    return inst;
-  },
-  async extend(inst, notes, failedUrls) {
-    const have = salamanderLoaded.get(inst) ?? new Set<string>();
-    const want = salamanderSubset(notes);
-    const missing = want.filter((s) => !have.has(s.name));
-    const failed = (s: SalSample) => [...failedUrls].some((u) => u.includes(`/${s.name}.`));
-    const union = SALAMANDER_SAMPLES.filter((s) => (have.has(s.name) || want.includes(s)) && !failed(s));
-    const anyFailedLoaded = [...have].some((n) => failed({ name: n, midi: 0 }));
-    if (missing.length === 0 && !anyFailedLoaded) return;
-    const sampler = inst as Smplr & { reload?: (p: SmplrPreset) => Promise<void> };
-    if (typeof sampler.reload !== "function" || union.length === 0) return;
-    await sampler.reload(salamanderPreset(union));
-    salamanderLoaded.set(inst, new Set(union.map((s) => s.name)));
-  },
-};
+// ─── Splendid Grand Piano (Akai, public domain) ──────────────────────────────
+// Its mezzo layer only (one download, like Salamander's), playing every velocity: smplr's own
+// loader keeps that layer's 68–84 velocity range, so every softer or harder note was silent.
 
-const splendid: PackSpec = {
-  pack: "splendid",
-  create(p) {
-    return SplendidGrandPiano(p.ctx, {
-      destination: p.destination,
-      scheduler: p.scheduler,
-      storage: p.storage,
-      volume: p.volume,
-      pan: p.pan,
-      decayTime: 0.6,
-      // One velocity layer (MP) and only the roots we need keeps the download sane;
-      // other notes/velocities fall back to the nearest loaded sample.
-      notesToLoad: {
-        velocityRange: [70, 84],
-        ...(p.notes && p.notes.length ? { notes: p.notes } : {}),
-        fallback: "nearest",
-      },
-      onLoadProgress: ({ loaded, total }) => p.onProgress(loaded, total),
-    } as Parameters<typeof SplendidGrandPiano>[1]);
-  },
-};
+export const SPLENDID_BASE = "https://smpldsnds.github.io/sfzinstruments-splendid-grand-piano/samples";
+
+export const SPLENDID_SAMPLES: RootSample[] = (LAYERS.find((l) => l.name === "MP")?.samples ?? []).map(([midi, name]) => ({
+  midi: Number(midi),
+  name: encodeURI(String(name)),
+}));
+
+export function splendidPreset(samples: RootSample[]): SmplrPreset {
+  return {
+    meta: { name: "Splendid Grand Piano (mezzo)", license: "public domain", source: "https://github.com/sfzinstruments/SplendidGrandPiano" },
+    samples: { baseUrl: SPLENDID_BASE, formats: ["ogg", "m4a"] },
+    defaults: { ampRelease: 0.6 },
+    groups: [{ regions: spreadRoots(samples) }],
+  };
+}
+
+/** Its mezzo layer runs 11 dB over Salamander on the same line (it's Salamander's fallback too). */
+export const SPLENDID_VOLUME = 55;
+
+const splendid = rootedPiano("splendid", SPLENDID_SAMPLES, splendidPreset, SPLENDID_VOLUME);
 
 type SoundfontKit = "MusyngKite" | "FluidR3_GM";
 
@@ -209,11 +227,15 @@ type SoundfontKit = "MusyngKite" | "FluidR3_GM";
 const SUSTAINED = new Set(["violin", "cello", "trumpet", "tenor_sax", "trombone", "clarinet", "flute", "string_ensemble_1", "choir_aahs", "church_organ", "drawbar_organ"]);
 
 /**
- * Loop points goldst.dev doesn't publish, worked out from the samples themselves (a matching
- * rising zero crossing in the sustain, by scripts/soundfont-loops.py) and served from public/.
+ * Loop points worked out from the samples themselves (scripts/soundfont-loops.py: late in the
+ * sustain, where the level and the waveform both join up) and served from public/. goldst.dev,
+ * smplr's default, has none for some voices, and for others loops a few milliseconds that aren't
+ * a whole number of the note's cycles, shared across notes: every MusyngKite trumpet note held
+ * past about half a second turned into a buzz at another pitch, and so did some of the sax's and
+ * the flute's; the violin's stepped up 8 dB six times a second.
  */
 const OWN_LOOPS: Record<SoundfontKit, string[]> = {
-  MusyngKite: ["string_ensemble_1", "choir_aahs", "trombone", "clarinet"],
+  MusyngKite: ["trumpet", "tenor_sax", "trombone", "clarinet", "flute", "violin", "cello", "drawbar_organ", "string_ensemble_1", "choir_aahs"],
   FluidR3_GM: ["string_ensemble_1", "choir_aahs"],
 };
 
@@ -259,7 +281,7 @@ function bowed(instrument: InstrumentId, kit: SoundfontKit): PackSpec {
         const bus = ctx.createGain();
         bus.gain.value = SOUNDFONT_GAIN;
         smplr.output.addInsert(bus);
-        return loadBowedSamples(ctx, p.storage, name, kit, INSTRUMENTS[instrument].range, p.onProgress).then((samples) => {
+        return loadBowedSamples(ctx, p.storage, name, kit, INSTRUMENTS[instrument].range, p.onProgress, loopSource(name, kit).loopDataUrl).then((samples) => {
           setBowed(smplr, new BowedVoice(ctx, bus, samples));
         });
       });
@@ -348,9 +370,10 @@ const vibes: PackSpec = {
 
 // ─── Electric pianos (Greg Sullivan, CC-BY 3.0) ──────────────────────────────
 
-// Their samples are normalized, ~15 dB hotter than Salamander's (measured at C4, mezzo): this
-// is the piano's level-matched volume brought down by that much.
-export const EPIANO_VOLUME = 45;
+// Their samples are normalized hot: at the piano's volume the Wurlitzer runs 9 dB over Salamander on
+// the same line, the CP80 7.5 dB. (Matched once at a single note, both had taken 15 dB off, which
+// left them 6 to 7 dB under the band.)
+export const EPIANO_VOLUME: Record<"WurlitzerEP200" | "CP80", number> = { WurlitzerEP200: 64, CP80: 69 };
 
 // Files the hosted sets are missing (404) or that won't decode, each replaced by the same note
 // one velocity layer over: a region with no sample would play silence.
@@ -377,11 +400,13 @@ export function bridgeGaps(storage: Storage, gaps: Record<string, string>): Stor
 function epiano(name: "WurlitzerEP200" | "CP80", pack: string): PackSpec {
   return {
     pack,
+    volume: EPIANO_VOLUME[name],
     create(p) {
       return ElectricPiano(p.ctx, {
         instrument: name,
         destination: p.destination,
-        volume: EPIANO_VOLUME,
+        scheduler: p.scheduler,
+        volume: p.volume,
         storage: bridgeGaps(p.storage, EPIANO_GAPS),
         pan: p.pan,
         onLoadProgress: ({ loaded, total }) => p.onProgress(loaded, total),
@@ -561,37 +586,37 @@ const SOUNDFONT_NAME: Record<InstrumentId, string> = {
 };
 
 /**
- * Default instrument volume (smplr 0..127), level-matched: each pack was measured playing
- * the same line at the same velocity in the browser and brought to ~−31 dB RMS (the sample
- * packs differ by up to 9 dB out of the box — the VCSL vibraphone and the clarinet/sax
- * soundfonts are hot, the violin is quiet). Musical balance (melody on top) is done by
- * role in the engine, not here.
+ * Default instrument volume (smplr 0..127), level-matched: each pack plays the same line at the
+ * same touch, bounced offline, and is brought to the grand's loudness (−21.7 LUFS, within 1 LU;
+ * "Measure the packs" in the audio lab). The packs differ by up to 9 dB out of the box: the VCSL
+ * vibraphone, the cello and the clarinet/sax soundfonts are hot, the organ and the bass quiet. The
+ * drums are matched on a groove. Musical balance (melody on top) is done by role, not here.
  */
 export const DEFAULT_VOLUME: Record<InstrumentId, number> = {
   piano: 106,
-  bass: 111,
+  bass: 125,
   drums: 80,
   trumpet: 93,
-  sax: 79,
-  trombone: 106,
+  sax: 83,
+  trombone: 112,
   clarinet: 78,
   flute: 87,
   violin: 114,
-  cello: 102,
+  cello: 85,
   guitar: 104,
-  vibes: 63,
-  organ: 84,
+  vibes: 59,
+  organ: 100,
   pad: 96,
 };
 
 /**
  * The string pad's two voices sit 9 dB apart out of the box (the string ensemble is hot, the
- * choir quiet); each is matched to the horns on a held note.
+ * choir quiet); each is matched like the rest.
  */
-export const PAD_VOLUME: Record<PadVoice, number> = { strings: 62, choir: 104 };
+export const PAD_VOLUME: Record<PadVoice, number> = { strings: 66, choir: 93 };
 
-/** The harpsichord soundfont runs 3 dB over Salamander on the same line. */
-export const HARPSICHORD_VOLUME = 89;
+/** The harpsichord soundfont runs 2 dB over Salamander on the same line. */
+export const HARPSICHORD_VOLUME = 95;
 
 /** An instrument's volume with these sounds (the pad's depends on its voice, the keys on their pack). */
 export function instrumentVolume(instrument: InstrumentId, sounds: Sounds): number {

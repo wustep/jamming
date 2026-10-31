@@ -5,6 +5,9 @@ import { troopAudio, type DrumKit, type LoadState, type PianoPack, type Playback
 import { DEFAULT_SOUNDS, DRUM_KITS, PIANO_PACKS } from "@/audio/packs";
 import { notesHintFromScore } from "@/audio/engine";
 import { AUDIO_FIXTURE } from "@/audio/fixture";
+import * as levels from "@/audio/levels";
+
+const fmt = (x: number) => (Number.isFinite(x) ? x.toFixed(1) : "—");
 
 export default function AudioLab() {
   const [pack, setPack] = useState<PianoPack>("salamander");
@@ -14,12 +17,13 @@ export default function AudioLab() {
   const [stats, setStats] = useState<PlaybackStats | null>(null);
   const [loop, setLoop] = useState(false);
   const [ended, setEnded] = useState(0);
+  const [packLevels, setPackLevels] = useState<levels.PackLevel[] | "measuring" | null>(null);
   const beatRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => troopAudio.onLoad(setLoads), []);
   useEffect(() => {
     // Handles for poking the engine from devtools / automated checks.
-    Object.assign(window, { __troopAudio: troopAudio, __fixture: AUDIO_FIXTURE });
+    Object.assign(window, { __troopAudio: troopAudio, __fixture: AUDIO_FIXTURE, __levels: levels });
   }, []);
   useEffect(() => troopAudio.onEnded(() => setEnded((n) => n + 1)), []);
 
@@ -114,6 +118,44 @@ export default function AudioLab() {
       </ul>
       <h2 style={{ marginTop: 16 }}>Scheduler</h2>
       <pre data-testid="stats">{stats ? JSON.stringify(stats, null, 2) : "—"}</pre>
+      <h2 style={{ marginTop: 16 }}>Levels</h2>
+      <p>Each pack plays the same line, bounced offline at its own volume (BS.1770 loudness).</p>
+      <button
+        data-testid="measure-packs"
+        disabled={packLevels === "measuring"}
+        onClick={async () => {
+          setPackLevels("measuring");
+          setPackLevels(await levels.measurePacks({ ...DEFAULT_SOUNDS, piano: pack, drums: kit }));
+        }}
+      >
+        {packLevels === "measuring" ? "Measuring…" : "Measure the packs"}
+      </button>
+      {Array.isArray(packLevels) && (
+        <table data-testid="pack-levels" style={{ marginTop: 8, borderSpacing: "12px 2px" }}>
+          <thead>
+            <tr>
+              <th align="left">instrument</th>
+              <th align="left">pack</th>
+              <th>volume</th>
+              <th>LUFS</th>
+              <th>RMS</th>
+              <th>peak</th>
+            </tr>
+          </thead>
+          <tbody>
+            {packLevels.map((l) => (
+              <tr key={l.instrument}>
+                <td>{l.instrument}</td>
+                <td>{l.failed ? "FAILED" : l.pack}</td>
+                <td align="right">{l.volume}</td>
+                <td align="right">{fmt(l.lufs)}</td>
+                <td align="right">{fmt(l.rms)}</td>
+                <td align="right">{fmt(l.peak)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </main>
   );
 }

@@ -218,10 +218,67 @@ export function Transport() {
           </span>
         )}
       </div>
-      <div className="flex flex-wrap items-baseline gap-x-m gap-y-xs">
+      <div className="flex flex-wrap items-center gap-x-m gap-y-xs">
+        <Volume />
         <PlayAlongToggle />
         <KeepMenu />
       </div>
+    </div>
+  );
+}
+
+/** A pencil-drawn speaker: no waves when it's silent, one when it's quiet, two when it's up. */
+function SpeakerGlyph({ level }: { level: number }) {
+  return (
+    <svg aria-hidden width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2.8 7.6h3l4.2-3.4v11.6l-4.2-3.4h-3z" />
+      {level === 0 ? <path d="M13.4 8.1l3.8 3.8m0-3.8l-3.8 3.8" /> : <path d="M13.2 7.4c1.3 1.5 1.3 3.7 0 5.2" />}
+      {level > 0.5 && <path d="M15.6 5c2.5 2.8 2.5 7.2 0 10" />}
+    </svg>
+  );
+}
+
+/**
+ * How loud the band plays here (saved in this browser): the speaker silences it and brings it back
+ * where it was. It turns down only what you hear: a downloaded take is the same at any volume.
+ */
+function Volume() {
+  const volume = useTroop((s) => s.volume);
+  const setVolume = useTroop((s) => s.setVolume);
+  // where the speaker brings it back to
+  const last = useRef(1);
+  const pct = Math.round(volume * 100);
+  return (
+    <div className="flex items-center gap-xxs" role="group" aria-label="Volume">
+      <button
+        type="button"
+        className="tap min-h-xl min-w-xl text-ink-soft transition-colors duration-(--motion-duration) hover:text-ink"
+        onClick={() => {
+          if (volume > 0) last.current = volume;
+          setVolume(volume > 0 ? 0 : last.current);
+        }}
+        aria-pressed={volume === 0}
+        aria-label="Silence the band"
+        title={volume > 0 ? "Silence" : "Sound on"}
+      >
+        <SpeakerGlyph level={volume} />
+      </button>
+      <input
+        type="range"
+        className="sketch-range w-24"
+        min={0}
+        max={100}
+        step={1}
+        value={pct}
+        onChange={(e) => {
+          const v = parseInt(e.target.value, 10) / 100;
+          if (v > 0) last.current = v;
+          setVolume(v);
+        }}
+        aria-label="Volume"
+        aria-valuetext={`${pct}%`}
+        title={`Volume ${pct}%`}
+      />
     </div>
   );
 }

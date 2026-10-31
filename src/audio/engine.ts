@@ -124,6 +124,9 @@ const END_TAIL_SEC = 0.8;
 const RING_SEC = 0.4;
 const PAN_WIDTH = 0.65;
 
+/** The volume slider's gain: squared, so its travel follows the ear (halfway is −12 dB). */
+export const volumeGain = (level: number) => level * level;
+
 const sortedCache = new WeakMap<NoteEvent[], NoteEvent[]>();
 function sortedNotes(notes: NoteEvent[] | undefined): NoteEvent[] {
   if (!notes) return [];
@@ -207,8 +210,10 @@ const RECORD_TYPES = ["audio/webm;codecs=opus", "audio/mp4;codecs=mp4a.40.2", "a
 export class TroopAudio {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
-  /** The end of the mix, what the speakers get: the level meter and recordings listen here. */
+  /** The end of the mix: the level meter and recordings listen here. */
   private output: DynamicsCompressorNode | null = null;
+  /** The volume slider, between the end of the mix and the speakers (see setVolume). */
+  private monitor: GainNode | null = null;
   private analyser: AnalyserNode | null = null;
   private levelBuf: Float32Array<ArrayBuffer> | null = null;
   private reverb: ReturnType<typeof Reverb> | null = null;
@@ -223,6 +228,7 @@ export class TroopAudio {
   private failListeners = new Set<(message: string) => void>();
   private muted = new Set<string>();
   private masterVolume = 0.85;
+  private volume = 1;
   private sounds: Sounds = DEFAULT_SOUNDS;
 
   private click: Smplr | null = null;
@@ -246,20 +252,31 @@ export class TroopAudio {
   /** The instrument you play along on (see prepareLive), and the notes you're holding down. */
   private live: { key: string; instrument: InstrumentId; held: Map<number, StopFn> } | null = null;
 
+  /**
+   * An engine that plays into an offline context (see bounce) instead of the speakers. It's only
+   * ever prepared and handed notes: never resumed, recorded, played along on or asked the time.
+   */
+  constructor(private offline: OfflineAudioContext | null = null) {}
+
   // ─── Context ───────────────────────────────────────────────────────────────
 
   private ensureContext(): AudioContext | null {
     if (!isBrowser()) return null;
     if (this.ctx && this.ctx.state !== "closed") return this.ctx;
-    playThroughSilentSwitch();
-    const ctx = new AudioContext({ latencyHint: "interactive" });
+    let ctx: AudioContext;
+    if (this.offline) {
+      ctx = this.offline as BaseAudioContext as AudioContext;
+    } else {
+      playThroughSilentSwitch();
+      ctx = new AudioContext({ latencyHint: "interactive" });
+      // A phone suspends audio (iOS "interrupts" it) when the app goes to the background or a call
+      // comes in. The clock stops with it, so the take stops too rather than sitting frozen and
+      // silent behind a Stop button; Play starts it again (and resumes the audio).
+      ctx.addEventListener("statechange", () => {
+        if (this.ctx === ctx && ctx.state !== "running" && this.state === "playing") this.halt(true);
+      });
+    }
     this.ctx = ctx;
-    // A phone suspends audio (iOS "interrupts" it) when the app goes to the background or a call
-    // comes in. The clock stops with it, so the take stops too rather than sitting frozen and
-    // silent behind a Stop button; Play starts it again (and resumes the audio).
-    ctx.addEventListener("statechange", () => {
-      if (this.ctx === ctx && ctx.state !== "running" && this.state === "playing") this.halt(true);
-    });
     const compressor = ctx.createDynamicsCompressor();
     compressor.threshold.value = -10;
     compressor.knee.value = 12;
@@ -279,7 +296,10 @@ export class TroopAudio {
     limiter.ratio.value = 20;
     limiter.attack.value = 0.001;
     limiter.release.value = 0.08;
-    compressor.connect(loudness).connect(limiter).connect(ctx.destination);
+    const monitor = ctx.createGain();
+    monitor.gain.value = volumeGain(this.volume);
+    compressor.connect(loudness).connect(limiter).connect(monitor).connect(ctx.destination);
+    this.monitor = monitor;
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 1024;
     limiter.connect(analyser);
@@ -303,7 +323,9 @@ export class TroopAudio {
       this.reverb = null;
     }
     // Large lookahead so every note we hand smplr is dispatched synchronously; we own timing.
-    this.scheduler = Scheduler(ctx, { lookaheadMs: 4000, intervalMs: 50 });
+    // (Offline, the whole render is the lookahead: its clock only moves once every note is in.)
+    const lookaheadMs = this.offline ? (this.offline.length / this.offline.sampleRate) * 1000 + 1000 : 4000;
+    this.scheduler = Scheduler(ctx, { lookaheadMs, intervalMs: 50 });
     this.entries.clear();
     this.click = null;
     this.clickReady = null;
@@ -489,7 +511,7 @@ export class TroopAudio {
           destination: this.master,
           scheduler: this.scheduler,
           storage,
-          volume: entry.key.endsWith("|pizz") ? PIZZ_VOLUME : instrumentVolume(entry.instrument, this.sounds),
+          volume: entry.key.endsWith("|pizz") ? PIZZ_VOLUME : (spec.volume ?? instrumentVolume(entry.instrument, this.sounds)),
           pan: 0,
           notes: hint,
           onProgress: (loaded, total) => {
@@ -547,7 +569,7 @@ export class TroopAudio {
 
   private ensureClick() {
     const ctx = this.ctx;
-    if (!ctx || !this.master || this.clickReady) return;
+    if (!ctx || !this.master || this.clickReady || this.offline) return;
     try {
       const click = DrumMachine(ctx, {
         instrument: "LM-2",
@@ -895,6 +917,17 @@ export class TroopAudio {
     return this.muted.has(memberId);
   }
 
+  /**
+   * How loud the band plays here, 0..1 (the volume slider; 1 is the full mix). It turns down only
+   * what this device plays: it comes after the limiter, so a recording and the level meter are the
+   * same at any volume, and the mix isn't compressed any differently.
+   */
+  setVolume(level: number): void {
+    this.volume = clamp(Number.isFinite(level) ? level : 1, 0, 1);
+    if (this.monitor && this.ctx) this.monitor.gain.setTargetAtTime(volumeGain(this.volume), this.ctx.currentTime, 0.02);
+  }
+
+  /** The mix into the bus (before the compressor and limiter): 0.85 leaves them their headroom. */
   setMasterVolume(v: number): void {
     this.masterVolume = clamp(Number.isFinite(v) ? v : 0.85, 0, 1);
     if (this.master && this.ctx) {
@@ -939,6 +972,43 @@ export class TroopAudio {
       return keep && chunks.length ? new Blob(chunks, { type: mimeType }) : null;
     };
     return { mimeType, stop: () => finish(true), cancel: () => void finish(false) };
+  }
+
+  /**
+   * A chart played into an offline context, faster than real time: the same instruments, touch,
+   * room and bus the speakers get, with no count-in. The audio lab measures the band's levels
+   * with it (levels.ts). `at(beat)` is where a beat of the chart lands in the buffer (seconds).
+   */
+  static async bounce(
+    score: Score,
+    opts: { sounds?: Sounds; master?: number; sampleRate?: number } = {},
+  ): Promise<{ buffer: AudioBuffer; stats: PlaybackStats; at: (beat: number) => number }> {
+    const sampleRate = opts.sampleRate ?? 48000;
+    const spb = beatToSeconds(1, tempoOf(score));
+    const end = endBeatOf(score);
+    const seconds = START_DELAY_SEC + secAt({ spb, rit: score.rit }, end) + END_TAIL_SEC + 2;
+    const ctx = new OfflineAudioContext(2, Math.ceil(seconds * sampleRate), sampleRate);
+    const engine = new TroopAudio(ctx);
+    if (opts.master !== undefined) engine.setMasterVolume(opts.master);
+    await engine.prepare(score.members, { sounds: opts.sounds ?? DEFAULT_SOUNDS, notesHint: notesHintFromScore(score) });
+    await engine.reverb?.ready();
+    engine.score = score;
+    engine.spb = spb;
+    engine.rit = score.rit;
+    engine.t0 = engine.prevT0 = START_DELAY_SEC;
+    engine.endBeat = end;
+    engine.buildTracks(score, 0);
+    engine.state = "playing";
+    const swing = Number.isFinite(score.swing) ? score.swing : 0.5;
+    for (const track of engine.tracks) {
+      for (let i = 0; i < track.notes.length; i++) {
+        track.lastStart = track.notes[i].start;
+        engine.scheduleNote(track, i, swing, 0);
+      }
+    }
+    const buffer = await ctx.startRendering();
+    engine.state = "stopped";
+    return { buffer, stats: engine.getStats(), at: (beat) => START_DELAY_SEC + secAt({ spb, rit: score.rit }, beat) };
   }
 
   /** RMS of the master output right now (0..~1). Cheap enough to call every frame. */

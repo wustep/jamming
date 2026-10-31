@@ -10,7 +10,7 @@ vi.stubGlobal("localStorage", {
   clear: () => ls.clear(),
 });
 
-const { useTroop } = await import("./store");
+const { readVolume, useTroop } = await import("./store");
 const initial = useTroop.getState();
 
 beforeEach(() => {
@@ -128,5 +128,28 @@ describe("asking for a jam with no key", () => {
     await useTroop.getState().arrangeFrom("christmas music");
     expect(useTroop.getState().settings.standard).toBe("jingle-bells");
     expect(useTroop.getState().arranged?.missed).toBeUndefined();
+  });
+});
+
+describe("the volume", () => {
+  it("is saved in this browser once the slider settles, and read back safely", () => {
+    vi.useFakeTimers();
+    try {
+      useTroop.getState().setVolume(0.4);
+      expect(useTroop.getState().volume).toBe(0.4);
+      vi.advanceTimersByTime(500);
+      expect(JSON.parse(ls.get("improv-troop:v1")!).volume).toBe(0.4);
+      useTroop.getState().setVolume(3);
+      expect(useTroop.getState().volume).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect([readVolume(undefined), readVolume("loud"), readVolume(-2), readVolume(0.25)]).toEqual([1, 1, 0, 0.25]);
+  });
+
+  it("isn't part of a jam: a link or a saved jam leaves the listener's volume alone", () => {
+    useTroop.getState().setVolume(0.3);
+    useTroop.getState().applyPreset("basie");
+    expect(JSON.stringify(useTroop.getState().jamConfig())).not.toContain("volume");
   });
 });

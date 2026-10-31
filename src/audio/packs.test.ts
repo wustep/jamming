@@ -1,7 +1,23 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { DRUM } from "@/music/instruments";
+import { DRUM, INSTRUMENTS } from "@/music/instruments";
 import { LANES } from "@/music/notation";
-import { acousticKitPreset, bridgeGaps, DEFAULT_SOUNDS, lm2Sample, packChain, readSounds } from "./packs";
+import type { InstrumentId } from "@/music/types";
+import { noteMidi } from "./bowed";
+import {
+  acousticKitPreset,
+  bridgeGaps,
+  DEFAULT_SOUNDS,
+  EPIANO_VOLUME,
+  lm2Sample,
+  loopSource,
+  packChain,
+  readSounds,
+  rootSubset,
+  SPLENDID_SAMPLES,
+  SPLENDID_VOLUME,
+  splendidPreset,
+} from "./packs";
 
 describe("the acoustic kit", () => {
   const preset = acousticKitPreset();
@@ -50,5 +66,64 @@ describe("sample gaps", () => {
     await storage.fetch(`${base}/080-G%235-MP.ogg`);
     await storage.fetch(`${base}/060-C4-MP.ogg`);
     expect(asked).toEqual([`${base}/080-G%235-F.ogg`, `${base}/060-C4-MP.ogg`]);
+  });
+});
+
+describe("held notes", () => {
+  // every voice the band holds, by the MusyngKite soundfont it plays
+  const HELD: [InstrumentId, string][] = [
+    ["trumpet", "trumpet"],
+    ["sax", "tenor_sax"],
+    ["trombone", "trombone"],
+    ["clarinet", "clarinet"],
+    ["flute", "flute"],
+    ["violin", "violin"],
+    ["cello", "cello"],
+    ["organ", "drawbar_organ"],
+    ["pad", "string_ensemble_1"],
+    ["pad", "choir_aahs"],
+  ];
+
+  it("loop on our own points, every note in the range, long and late in the sample", () => {
+    for (const [instrument, name] of HELD) {
+      const { loopDataUrl } = loopSource(name, "MusyngKite");
+      expect(loopDataUrl, name).toBe(`/soundfont-loops/MusyngKite/${name}-loop.json`);
+      const loops = JSON.parse(readFileSync(`public${loopDataUrl}`, "utf8")) as Record<string, [number, number]>;
+      const byMidi = new Map(Object.entries(loops).map(([note, loop]) => [noteMidi(note), loop]));
+      const [lo, hi] = INSTRUMENTS[instrument].range;
+      for (let midi = lo; midi <= hi; midi++) {
+        const loop = byMidi.get(midi);
+        expect(loop, `${name} ${midi}`).toBeDefined();
+        // goldst.dev's trumpet looped 1.5 to 9 ms from half a second in: a buzz at another pitch
+        const [start, end] = loop!.map((x) => x / 44100);
+        expect(end - start, `${name} ${midi} loop length`).toBeGreaterThanOrEqual(0.5);
+        expect(end - start, `${name} ${midi} loop length`).toBeLessThanOrEqual(1.6);
+        expect(start, `${name} ${midi} loop start`).toBeGreaterThan(1);
+      }
+    }
+  });
+});
+
+describe("the grand pianos", () => {
+  it("the Splendid's one loaded layer plays every velocity on every key", () => {
+    const preset = splendidPreset(rootSubset(SPLENDID_SAMPLES, [48, 60, 67, 72]));
+    expect(preset.groups).toHaveLength(1);
+    const [group] = preset.groups;
+    expect(group.velRange).toBeUndefined();
+    for (const r of group.regions) {
+      expect(r.velRange).toBeUndefined();
+      expect(r.sample).not.toMatch(/ /);
+    }
+    for (let key = 0; key <= 127; key++) expect(group.regions.some((r) => r.keyRange![0] <= key && key <= r.keyRange![1]), `key ${key}`).toBe(true);
+  });
+
+  it("packs that aren't level with the piano carry their own volume, picked or as a fallback", () => {
+    const splendid = (sounds = DEFAULT_SOUNDS) => packChain("piano", sounds).find((p) => p.pack === "splendid");
+    expect(splendid()?.volume).toBe(SPLENDID_VOLUME); // Salamander's fallback
+    expect(splendid({ ...DEFAULT_SOUNDS, piano: "splendid" })?.volume).toBe(SPLENDID_VOLUME);
+    expect(packChain("piano", { ...DEFAULT_SOUNDS, piano: "wurlitzer" })[0].volume).toBe(EPIANO_VOLUME.WurlitzerEP200);
+    expect(packChain("piano", { ...DEFAULT_SOUNDS, piano: "cp80" })[0].volume).toBe(EPIANO_VOLUME.CP80);
+    // the e-pianos' soundfont fallbacks play at the piano's own level
+    expect(packChain("piano", { ...DEFAULT_SOUNDS, piano: "wurlitzer" })[1].volume).toBeUndefined();
   });
 });

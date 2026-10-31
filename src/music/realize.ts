@@ -32,18 +32,22 @@ const FEATURED: Role[] = ["lead", "solo", "trade"];
 /**
  * Mix by role: whoever carries the tune sits on top. Comping and the rhythm section
  * sit a little under; sustained counter-lines and pads further under (long tones
- * add up fast).
+ * add up fast). These scale the touch, and the samplers play a touch squared: 0.8 is
+ * −4 dB. Measured on bounced takes (levels.ts), the tune sits about 4 LU over the
+ * rhythm section in a head and a horn section's backing about 10 under it, heard
+ * rather than buried. The bass's pack is matched as loud as the rest; it sits under
+ * here.
  */
 const ROLE_MIX: Record<Role, number> = {
-  lead: 1.08,
-  solo: 1.08,
+  lead: 1.04,
+  solo: 1.04,
   trade: 1,
-  bass: 0.92,
-  groove: 0.84,
+  bass: 0.82,
+  groove: 0.8,
   comp: 0.82,
   fill: 0.9,
-  counter: 0.6,
-  pad: 0.55,
+  counter: 0.8,
+  pad: 0.72,
   rest: 1,
 };
 
