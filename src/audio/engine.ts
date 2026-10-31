@@ -124,6 +124,9 @@ const END_TAIL_SEC = 0.8;
 const RING_SEC = 0.4;
 const PAN_WIDTH = 0.65;
 
+/** The volume slider's gain: squared, so its travel follows the ear (halfway is −12 dB). */
+export const volumeGain = (level: number) => level * level;
+
 const sortedCache = new WeakMap<NoteEvent[], NoteEvent[]>();
 function sortedNotes(notes: NoteEvent[] | undefined): NoteEvent[] {
   if (!notes) return [];
@@ -207,8 +210,10 @@ const RECORD_TYPES = ["audio/webm;codecs=opus", "audio/mp4;codecs=mp4a.40.2", "a
 export class TroopAudio {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
-  /** The end of the mix, what the speakers get: the level meter and recordings listen here. */
+  /** The end of the mix: the level meter and recordings listen here. */
   private output: DynamicsCompressorNode | null = null;
+  /** The volume slider, between the end of the mix and the speakers (see setVolume). */
+  private monitor: GainNode | null = null;
   private analyser: AnalyserNode | null = null;
   private levelBuf: Float32Array<ArrayBuffer> | null = null;
   private reverb: ReturnType<typeof Reverb> | null = null;
@@ -223,6 +228,7 @@ export class TroopAudio {
   private failListeners = new Set<(message: string) => void>();
   private muted = new Set<string>();
   private masterVolume = 0.85;
+  private volume = 1;
   private sounds: Sounds = DEFAULT_SOUNDS;
 
   private click: Smplr | null = null;
@@ -290,7 +296,10 @@ export class TroopAudio {
     limiter.ratio.value = 20;
     limiter.attack.value = 0.001;
     limiter.release.value = 0.08;
-    compressor.connect(loudness).connect(limiter).connect(ctx.destination);
+    const monitor = ctx.createGain();
+    monitor.gain.value = volumeGain(this.volume);
+    compressor.connect(loudness).connect(limiter).connect(monitor).connect(ctx.destination);
+    this.monitor = monitor;
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 1024;
     limiter.connect(analyser);
@@ -906,6 +915,16 @@ export class TroopAudio {
 
   isMuted(memberId: string): boolean {
     return this.muted.has(memberId);
+  }
+
+  /**
+   * How loud the band plays here, 0..1 (the volume slider; 1 is the full mix). It turns down only
+   * what this device plays: it comes after the limiter, so a recording and the level meter are the
+   * same at any volume, and the mix isn't compressed any differently.
+   */
+  setVolume(level: number): void {
+    this.volume = clamp(Number.isFinite(level) ? level : 1, 0, 1);
+    if (this.monitor && this.ctx) this.monitor.gain.setTargetAtTime(volumeGain(this.volume), this.ctx.currentTime, 0.02);
   }
 
   /** The mix into the bus (before the compressor and limiter): 0.85 leaves them their headroom. */

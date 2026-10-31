@@ -64,6 +64,8 @@ interface TroopState {
   keyDialog: boolean;
   /** Which piano and drum kit the band plays (saved in this browser). */
   sounds: Sounds;
+  /** How loud the band plays on this device, 0..1 (saved in this browser; not part of a jam). */
+  volume: number;
   current: Score | null;
   /** True when `current` is the local sketch for the current settings. */
   isSketch: boolean;
@@ -128,6 +130,7 @@ interface TroopState {
   /** The heuristic band on or off, keeping whatever keys are saved. */
   setHeuristic(on: boolean): void;
   setSounds(patch: Partial<Sounds>): void;
+  setVolume(level: number): void;
   generate(): Promise<void>;
   cancel(): void;
   /** After a failed model run: drop the error and play the local band's take for these settings. */
@@ -142,7 +145,7 @@ const LS_INTRO = "jamming:intro-seen";
 /** Set once the key dialog has been answered (a key, the heuristic band, or just closed). */
 const LS_KEY_ASKED = "jamming:key-asked";
 
-type Saved = Pick<TroopState, "members" | "settings" | "apiKey" | "anthropicKey" | "sounds" | "heuristic">;
+type Saved = Pick<TroopState, "members" | "settings" | "apiKey" | "anthropicKey" | "sounds" | "heuristic" | "volume">;
 
 /**
  * Open the key dialog on arrival? Only for a first visit with nothing to go on: not once it's been
@@ -192,11 +195,16 @@ function save(s: Saved) {
   try {
     localStorage.setItem(
       LS,
-      JSON.stringify({ members: s.members, settings: s.settings, apiKey: s.apiKey, anthropicKey: s.anthropicKey || undefined, sounds: s.sounds, heuristic: s.heuristic || undefined }),
+      JSON.stringify({ members: s.members, settings: s.settings, apiKey: s.apiKey, anthropicKey: s.anthropicKey || undefined, sounds: s.sounds, heuristic: s.heuristic || undefined, volume: s.volume < 1 ? s.volume : undefined }),
     );
   } catch {
     /* private mode etc. */
   }
+}
+
+/** A saved volume read back (anything that isn't one is full volume). */
+export function readVolume(raw: unknown): number {
+  return typeof raw === "number" && Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : 1;
 }
 
 /**
@@ -367,6 +375,7 @@ export const useTroop = create<TroopState>((set, get) => {
     heuristic: false,
     keyDialog: false,
     sounds: DEFAULT_SOUNDS,
+    volume: 1,
     current: null,
     isSketch: true,
     takes: [],
@@ -409,10 +418,12 @@ export const useTroop = create<TroopState>((set, get) => {
         anthropicKey: saved.anthropicKey ?? "",
         heuristic: !!saved.heuristic,
         sounds: readSounds(saved.sounds, saved.pianoPack),
+        volume: readVolume(saved.volume),
         takes: loadTakes(),
         saved: loadSaved(),
         seenIntro,
       });
+      troopAudio.setVolume(get().volume);
       // the key dialog waits to hear whether the server lends a key (if the server can't say, ask)
       let arrivedShared = false;
       const offerKey = (serverKey: boolean) => {
@@ -638,6 +649,14 @@ export const useTroop = create<TroopState>((set, get) => {
     setHeuristic(heuristic) {
       set({ heuristic });
       persist();
+    },
+
+    setVolume(level) {
+      const volume = readVolume(level);
+      set({ volume });
+      troopAudio.setVolume(volume);
+      // the slider fires on every pixel of a drag: save once it settles
+      persistSoon();
     },
 
     setSounds(patch) {
