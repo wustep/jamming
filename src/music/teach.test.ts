@@ -311,8 +311,14 @@ describe("the drummer's fills and rolls", () => {
     expect(hoot.steps[1].what).toBe("Where a phrase ends: a run down the toms. A fill tells the band the next phrase is coming; the last one leads into Bruno's solo.");
     expect(head.moves).toContain("tom run into Bruno's solo");
     const solo = guide.find((g) => g.section.kind === "solo")!.players.find((p) => p.id === "owl")!;
-    expect(solo.steps.filter((s) => s.id === "fills")).toHaveLength(1);
-    expect(solo.steps.find((s) => s.id === "fills")!.name).toBe("fills");
+    // three kinds of fill in the solo: one step, called fills, standing for all three
+    const fills = solo.steps.filter((s) => s.id === "fills");
+    expect(fills).toHaveLength(1);
+    expect(fills[0].name).toBe("fills");
+    expect(fills[0].covers).toEqual(["drag", "tom-run", "tom-fill"]);
+    // two kinds are named
+    const two = jamGuide(take("neworleans", 1, 32, quartet)).find((g) => g.section.kind === "head")!.players.find((p) => p.id === "owl")!;
+    expect(two.steps.map((s) => s.name)).toEqual(["street beat", "press roll and tom run"]);
   });
 });
 

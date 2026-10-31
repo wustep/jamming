@@ -62,7 +62,7 @@ function PlayerLine({ animal, name, techniques, muted, idea }: { animal: Paramet
               {techniques.map((x, i) => (
                 <span key={`${x.id}:${i}`}>
                   {i > 0 && " → "}
-                  <span className={x.id === idea ? "rounded-xs bg-(--color-2-transparent) px-xxs text-ink" : undefined}>{x.name}</span>
+                  <span className={idea && (x.id === idea || x.covers?.includes(idea)) ? "rounded-xs bg-(--color-2-transparent) px-xxs text-ink" : undefined}>{x.name}</span>
                 </span>
               ))}
             </span>

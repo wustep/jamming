@@ -24,6 +24,8 @@ export interface Technique {
    * does: a soloist's inversion, then sequence, then run, is all "solo".
    */
   tag?: string;
+  /** The techniques a folded step stands for (a section's fills, told as one). */
+  covers?: string[];
 }
 
 const t = (id: string, name: string, what: string, tag?: string): Technique => ({ id, name, what, ...(tag ? { tag } : {}) });
@@ -527,7 +529,10 @@ export function jamGuide(score: Score): SectionGuide[] {
       const fillStep = steps.find((s) => s.id === "fills");
       if (fillStep) {
         const glosses = fills.map((f) => (f ? MOVE_GLOSS[f] : "a fill"));
-        fillStep.name = fills.length === 1 ? (fills[0] ? DRUM_MOVES[fills[0]].name : WRITTEN_FILL.name) : "fills";
+        const kinds = fills.map((f) => (f ? DRUM_MOVES[f] : WRITTEN_FILL));
+        // one or two kinds by name ("press roll and tom run"); more are just "fills"
+        fillStep.name = kinds.length <= 2 ? list(kinds.map((x) => x.name)) : "fills";
+        fillStep.covers = kinds.map((x) => x.id);
         const last = into && next ? `; the last one leads into ${sectionNoun(next, name)}` : "";
         fillStep.what = `Where a phrase ends: ${list(glosses)}. A fill tells the band the next phrase is coming${last}.`;
         if (into && next) move(`${into.name} into ${sectionNoun(next, name)}`);
