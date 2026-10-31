@@ -1,7 +1,13 @@
-"""Find sustain loop points for MIDI.js soundfonts that goldst.dev has no loop data for.
+"""Find sustain loop points for the MIDI.js soundfonts' held voices.
 
 usage: python3 scripts/soundfont-loops.py KIT INSTRUMENT public/soundfont-loops/KIT/INSTRUMENT-loop.json  (macOS: uses afconvert)
 Writes {"C4": [startSample, endSample], ...} at 44.1 kHz, the format smplr's loadLoopData reads.
+
+A held note plays its sample to the loop's end, then goes round the loop for as long as it's held,
+so the loop has to join up two ways: the level coming into its end has to be the level leaving its
+start (most samples fade as they hold, and a loop across the fade steps up every time round), and
+the waveform around the end has to be the waveform around the start. This takes the loop (0.5 to
+1.6 s, late in the sustain, between rising zero crossings) that does both best.
 """
 import array
 import base64
@@ -20,6 +26,8 @@ url = f"https://gleitz.github.io/midi-js-soundfonts/{kit}/{name}-mp3.js"
 src = urllib.request.urlopen(url).read().decode()
 tmp = tempfile.mkdtemp()
 loops = {}
+sr = 44100
+win = sr // 20
 
 
 def decode(note, b64):
@@ -32,56 +40,61 @@ def decode(note, b64):
     return a
 
 
-def rms(a, i, n):
-    seg = a[i : i + n]
-    return math.sqrt(sum(x * x for x in seg) / max(1, len(seg)))
+def find_loop(a):
+    n = len(a)
+    # running sum of squares: the level of any stretch in constant time
+    cs = [0.0]
+    for x in a:
+        cs.append(cs[-1] + x * x)
+
+    def level(i):
+        return 10 * math.log10(max(1.0, (cs[i + win] - cs[i]) / win))
+
+    env = [level(i) for i in range(0, n - win, win)]
+    if not env or max(env) < 20 * math.log10(50):  # silent
+        return None
+    # the sustain: past the attack, before any release; the last frame still above 45% of peak
+    last = max(i for i, e in enumerate(env) if e > max(env) + 20 * math.log10(0.45))
+    end_t = min(n - win, (last + 1) * win)
+    lo_t = max(int(0.35 * n), int(end_t - 1.6 * sr))
+    if end_t - lo_t < sr // 2:
+        return None
+    rising = [i for i in range(max(1, lo_t), min(n - win - 1, end_t)) if a[i - 1] < 0 <= a[i]]
+    ends = [i for i in rising if i >= end_t - 0.3 * sr]
+    starts = [i for i in rising if i <= end_t - 0.5 * sr]
+    starts = starts[:: max(1, len(starts) // 60)]
+    half = 300
+
+    def mismatch(s, e):
+        """The waveform either side of the end against either side of the start (a click if they differ)."""
+        if s < half or e + half > n:
+            return None
+        ref = a[s - half : s + half : 3]
+        seg = a[e - half : e + half : 3]
+        return sum((x - y) ** 2 for x, y in zip(seg, ref)) / max(1.0, sum(y * y for y in ref))
+
+    # a dB of level step costs about as much as a third of a cycle that doesn't match
+    best, best_cost = None, None
+    for s in starts:
+        for e in ends:
+            if not sr // 2 <= e - s <= 1.6 * sr:
+                continue
+            step = abs(level(e - win) - level(s))
+            if best_cost is not None and 0.3 * step >= best_cost:
+                continue
+            err = mismatch(s, e)
+            if err is None:
+                continue
+            cost = err + 0.3 * step
+            if best_cost is None or cost < best_cost:
+                best, best_cost = [s, e], cost
+    return best
 
 
 for note, b64 in re.findall(r'"([A-G]b?\d)": ?"data:audio/mp3;base64,([^"]+)"', src):
-    a = decode(note, b64)
-    sr = 44100
-    n = len(a)
-    win = sr // 20
-    env = [rms(a, i, win) for i in range(0, n - win, win)]
-    if not env:
-        continue
-    peak = max(env)
-    if peak < 50:
-        continue
-    # the sustain: past the attack, before any release; the last frame still above 45% of peak
-    last = max(i for i, e in enumerate(env) if e > 0.45 * peak)
-    end_t = min(n - sr // 20, (last + 1) * win)  # sample index
-    start_t = max(int(0.35 * n), int(end_t - 1.6 * sr))
-    if end_t - start_t < sr // 4:
-        continue
-
-    def rising(i):
-        return a[i - 1] < 0 <= a[i]
-
-    def nearest_rising(t, span):
-        best = None
-        for d in range(span):
-            for i in (t + d, t - d):
-                if 1 <= i < n - 1 and rising(i):
-                    return i
-        return best
-
-    s = nearest_rising(start_t, sr // 50)
-    if s is None:
-        continue
-    # end: the rising crossing near end_t whose following cycle best matches the loop start's
-    cyc = 600
-    ref = a[s : s + cyc]
-    best, best_err = None, None
-    for i in range(max(s + sr // 4, end_t - sr // 10), min(n - cyc - 1, end_t)):
-        if not rising(i):
-            continue
-        seg = a[i : i + cyc]
-        err = sum((x - y) ** 2 for x, y in zip(seg[:cyc:4], ref[:cyc:4]))
-        if best_err is None or err < best_err:
-            best, best_err = i, err
-    if best:
-        loops[note] = [s, best]
+    loop = find_loop(decode(note, b64))
+    if loop:
+        loops[note] = loop
 
 json.dump(loops, open(out, "w"), separators=(",", ":"))
 print(name, kit, len(loops), "notes")

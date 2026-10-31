@@ -347,7 +347,7 @@ function base64Buffer(dataUrl: string): ArrayBuffer {
 
 /**
  * Decode a soundfont's notes in [lo, hi] (the gleitz MIDI.js files smplr loads, through the same
- * storage), with loop points where goldst.dev publishes them, as smplr does.
+ * storage), with the loop points the plain soundfont would use (`loopUrl`; goldst.dev's otherwise).
  */
 export async function loadBowedSamples(
   ctx: BaseAudioContext,
@@ -356,6 +356,7 @@ export async function loadBowedSamples(
   kit: "MusyngKite" | "FluidR3_GM",
   [lo, hi]: [number, number],
   onProgress?: (loaded: number, total: number) => void,
+  loopUrl = `https://goldst.dev/midi-js-soundfonts/${kit}/${name}-loop.json`,
 ): Promise<Map<number, Sample>> {
   const format = oggOk() ? "ogg" : "mp3";
   const res = await storage.fetch(`https://gleitz.github.io/midi-js-soundfonts/${kit}/${name}-${format}.js`);
@@ -365,7 +366,7 @@ export async function loadBowedSamples(
     .filter((x): x is readonly [number, string] => x[0] !== null && x[0] >= lo - 2 && x[0] <= hi + 2);
   let loops: Record<string, [number, number]> = {};
   try {
-    const l = await fetch(`https://goldst.dev/midi-js-soundfonts/${kit}/${name}-loop.json`);
+    const l = await fetch(loopUrl);
     if (l.ok) loops = await l.json();
   } catch {
     /* no loop points: notes hold as long as the samples do */

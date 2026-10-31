@@ -37,7 +37,7 @@ export function Home() {
     hydrate();
     // dev-only handle for automated play-throughs (transport + store)
     if (process.env.NODE_ENV !== "production") {
-      (window as unknown as { __jamming?: unknown }).__jamming = { audio: troopAudio, store: useTroop, debug: useDebug, playAlong: usePlayAlong };
+      (window as unknown as { __jamming?: unknown }).__jamming = { audio: troopAudio, store: useTroop, debug: useDebug, playAlong: usePlayAlong, levels: () => import("@/audio/levels") };
     }
     try {
       if (new URLSearchParams(location.search).has("debug")) setDebugOpen(true);
