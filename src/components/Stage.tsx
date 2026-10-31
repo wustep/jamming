@@ -5,7 +5,7 @@ import { AnimalSprite, IDLE_STATE, isPhrasing, type SpriteHandle } from "@/art/A
 import { troopAudio } from "@/audio/engine";
 import { ANIMAL_LIST, ANIMALS, INSTRUMENTS } from "@/music/instruments";
 import { echoerFor, type Block } from "@/music/live";
-import { techniqueAt } from "@/music/teach";
+import { changesIn, takeIdea, techniqueAt } from "@/music/teach";
 import type { Member, MemberFrameState } from "@/music/types";
 import { liveCore, usePlayAlong } from "@/state/playalong";
 import { useDebug } from "@/state/debug";
@@ -166,6 +166,8 @@ export function Stage() {
   const chordRef = useRef<HTMLDivElement>(null);
   const nextChordRef = useRef<HTMLSpanElement>(null);
   const [bar, setBar] = useState(-1);
+  // where in the bar a name tag last changed: a drummer's fill is named from the beat it starts
+  const [barBeat, setBarBeat] = useState(0);
   const muted = useTroop((s) => s.muted);
   const toggleMute = useTroop((s) => s.toggleMute);
   const readyBars = useTroop((s) => s.readyBars);
@@ -198,6 +200,9 @@ export function Stage() {
   // with call and response the band plays the chart with room left for you (and your phrase answered)
   const heard = playing && arranged && score && arranged.id === score.id ? arranged : score;
   const computer = useMemo(() => (heard ? new FrameComputer(heard) : null), [heard]);
+  // the beats inside each bar where a tag changes, and the one idea this take is good for learning
+  const changes = useMemo(() => (heard ? Array.from({ length: heard.frame.bars }, (_, b) => changesIn(heard, b)) : []), [heard]);
+  const idea = useMemo(() => (score ? takeIdea(score) : null), [score]);
 
   // a take played to its end (not stopped): the band cheers
   useEffect(() => troopAudio.onEnded(() => sprites.current.forEach((h) => h?.cheer())), []);
@@ -208,6 +213,7 @@ export function Stage() {
     let raf = 0;
     // -3: not drawn yet, so a stop (which restarts this effect) clears the header on its first frame
     let lastBar = -3;
+    let lastAt = 0;
     // call and response: whose turn it is, and who answers you
     let turn: Block | null = null;
     let echoer: string | null = null;
@@ -241,6 +247,13 @@ export function Stage() {
       if (score && Number.isFinite(beat)) {
         const beats = score.frame.meter.beats;
         const b = beat < 0 ? -1 : Math.min(score.frame.bars - 1, Math.floor(beat / beats));
+        // the last change point in this bar the playhead has passed (0 when none has)
+        const inBar = beat - b * beats;
+        const at = (changes[b] ?? []).reduce((x, c) => (inBar >= c - 1e-6 ? c : x), 0);
+        if (at !== lastAt || b !== lastBar) {
+          lastAt = at;
+          setBarBeat(at);
+        }
         if (b !== lastBar) {
           lastBar = b;
           setBar(b);
@@ -251,7 +264,6 @@ export function Stage() {
           if (counterRef.current) counterRef.current.textContent = b < 0 ? "" : `· bar ${b + 1}/${score.frame.bars}`;
         }
         if (chordRef.current && b >= 0) {
-          const inBar = beat - b * beats;
           const chords = score.frame.chords[b] ?? [];
           let sym = chords[0]?.symbol ?? "";
           for (const c of chords) if (c.beat <= inBar + 1e-6) sym = c.symbol;
@@ -287,7 +299,7 @@ export function Stage() {
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [band, computer, playing, score, muted]);
+  }, [band, computer, changes, playing, score, muted]);
 
   // what the band is saying: while a new take is being thought up, only its own lines (the last
   // take's stayed up as if the band were saying them now, until the director's first word)
@@ -354,7 +366,9 @@ export function Stage() {
             const row = Math.floor(i / perRow);
             const crowded = band.some((o, j) => j !== i && Math.floor(j / perRow) === row && (bubbles[o.id] || thinking.has(o.id)));
             const fit = bubbleFit(i, n, perRow, spriteW, width, crowded);
-            const doing = heard && playing && bar >= 0 && m.id !== YOU ? techniqueAt(heard, m.id, bar) : null;
+            const doing = heard && playing && bar >= 0 && m.id !== YOU ? techniqueAt(heard, m.id, bar, barBeat) : null;
+            // the take's one idea, marked with the highlighter while it's being played
+            const isIdea = !!doing && doing.id === idea?.technique.id;
             return (
               <div key={`${m.id}:${m.instrument}`} className="band-slot relative flex flex-col items-center">
                 <div
@@ -406,7 +420,13 @@ export function Stage() {
                     </div>
                     <div className="text-s text-ink-soft" title={doing ? `${inst.name}: ${doing.what}` : undefined}>
                       {/* while the band plays, what they're doing (walking bass, comping…); stopped, what they play */}
-                      {isMuted ? "muted · tap to unmute" : doing ? <span className="text-(--color-3)">{doing.tag ?? doing.name}</span> : inst.name}
+                      {isMuted ? (
+                        "muted · tap to unmute"
+                      ) : doing ? (
+                        <span className={`rounded-xs text-(--color-3) ${isIdea ? "bg-(--color-2-transparent) px-xxs text-ink" : ""}`}>{doing.tag ?? doing.name}</span>
+                      ) : (
+                        inst.name
+                      )}
                       {!isMuted && <span className="ml-xxs hidden text-xs group-hover:inline">· tap to mute</span>}
                     </div>
                   </button>

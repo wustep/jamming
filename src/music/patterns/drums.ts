@@ -4,7 +4,7 @@ import { DRUM, drumPiece } from "../instruments";
 import { parseDrumGrid } from "../notation";
 import { hashString } from "../rng";
 import { sigGroove } from "./signatures";
-import type { NoteEvent, Texture } from "../types";
+import type { DrumMove, NoteEvent, Texture } from "../types";
 
 type Grid = { base: string; light?: string; peak?: string };
 
@@ -192,7 +192,7 @@ const hit = (pitch: number, start: number, vel: number, art?: NoteEvent["art"]):
  * The other things a drummer says at the end of a phrase. Each fills the last `len` beats;
  * `step` is the subdivision (triplets in swing and New Orleans, 16ths otherwise).
  */
-const FILL_SHAPES: Record<string, FillShape> = {
+const FILL_SHAPES: Record<Exclude<DrumMove, "ring">, FillShape> = {
   run: (ctx, _start, len) => fill(ctx, len),
   // set-up: snare on the last beat, kick on its last partial, kicking the band into the one
   setup: (_ctx, start, len, step) => {
@@ -275,7 +275,8 @@ function snareRoll(start: number, len: number, from: number): NoteEvent[] {
 }
 
 /** Small fills (a beat) at phrase ends; big ones (two beats) into a new section. */
-const FILL_VOCAB: Record<string, { small: string[]; big: string[] }> = {
+type Fill = keyof typeof FILL_SHAPES;
+const FILL_VOCAB: Record<string, { small: Fill[]; big: Fill[] }> = {
   swing: { small: ["run", "setup", "drag"], big: ["run", "toms"] },
   neworleans: { small: ["run", "press", "drag"], big: ["press", "toms", "run"] },
   funk: { small: ["ghosts", "hats", "run"], big: ["ghosts", "toms", "run"] },
@@ -284,16 +285,22 @@ const FILL_VOCAB: Record<string, { small: string[]; big: string[] }> = {
   postrock: { small: ["toms", "run"], big: ["roll", "toms"] },
 };
 
-/** Pick a fill shape for this style and length, never the same one twice in a row. */
+/**
+ * Pick a fill shape for this style and length (the one asked for, "@fill press", or else never the
+ * same one twice in a row). Its notes are marked with its name, so the band can say which it was.
+ */
 function pickFill(ctx: BarCtx, len: number): NoteEvent[] {
-  const vocab = FILL_VOCAB[ctx.style.id] ?? { small: ["run", "setup"], big: ["run", "toms"] };
+  const vocab: { small: Fill[]; big: Fill[] } = FILL_VOCAB[ctx.style.id] ?? { small: ["run", "setup"], big: ["run", "toms"] };
   const pool = len >= 2 ? vocab.big : vocab.small;
   const fresh = pool.filter((n) => n !== ctx.mem.lastFill);
-  const name = ctx.rng.pick(fresh.length ? fresh : pool);
+  const asked = ctx.args.find((a): a is Fill => Object.hasOwn(FILL_SHAPES, a));
+  const name = asked ?? ctx.rng.pick(fresh.length ? fresh : pool);
   ctx.mem.lastFill = name;
   const step = ctx.style.id === "swing" || ctx.style.id === "neworleans" ? 1 / 3 : 0.25;
   const start = ctx.beats - len;
-  return FILL_SHAPES[name](ctx, start, len, step).filter((n) => n.start >= start - 1e-6 && n.start < ctx.beats - 1e-6);
+  return FILL_SHAPES[name](ctx, start, len, step)
+    .filter((n) => n.start >= start - 1e-6 && n.start < ctx.beats - 1e-6)
+    .map((n) => ({ ...n, move: name }));
 }
 
 /** A cymbal roll in the bar before swelled up to this bar's downbeat. */
@@ -379,7 +386,7 @@ function postrockKit(ctx: BarCtx): NoteEvent[] {
       notes = notes.filter((n) => !(n.start === 0 && (n.pitch === DRUM.ride || n.pitch === DRUM.crash)));
       notes.push({ pitch: DRUM.crash, start: 0, dur: 1, vel: 0.9, art: "accent" });
     }
-    const wantsFill = !ctx.lastBar && (ctx.sectionEnd ? ctx.rng.chance(0.85) : ctx.phraseEnd && ctx.rng.chance(ctx.style.fills * (0.5 + ctx.energy)));
+    const wantsFill = !ctx.lastBar && (ctx.args.includes("fill") || (ctx.sectionEnd ? ctx.rng.chance(0.85) : ctx.phraseEnd && ctx.rng.chance(ctx.style.fills * (0.5 + ctx.energy))));
     if (wantsFill) {
       const len = ctx.sectionEnd && ctx.energy > 0.6 ? 2 : 1;
       notes = notes.filter((n) => n.start < ctx.beats - len);
@@ -412,11 +419,11 @@ export function groove(ctx: BarCtx): NoteEvent[] {
     if (!soft) notes.push({ pitch: DRUM.kick, start: 0, dur: 0.2, vel: 0.8 });
   }
 
-  // phrase-end fills
+  // phrase-end fills ("@fill" asks for one outright)
   const wantsFill =
     ctx.style.fills > 0 &&
     !ctx.lastBar &&
-    (ctx.sectionEnd ? ctx.rng.chance(0.85) : ctx.phraseEnd && ctx.rng.chance(ctx.style.fills * (0.5 + ctx.energy)));
+    (ctx.args.includes("fill") || (ctx.sectionEnd ? ctx.rng.chance(0.85) : ctx.phraseEnd && ctx.rng.chance(ctx.style.fills * (0.5 + ctx.energy))));
   if (wantsFill) {
     const len = ctx.sectionEnd && ctx.energy > 0.6 ? 2 : 1;
     const cut = ctx.beats - len;
@@ -486,7 +493,7 @@ export function endDrums(ctx: BarCtx): NoteEvent[] {
       return [
         { pitch: DRUM.crash, start: 0, dur: ctx.beats, vel: v, art: "accent" },
         { pitch: DRUM.kick, start: 0, dur: 0.5, vel: v },
-        { pitch: DRUM.ride, start: 1, dur: ctx.beats - 1, vel: v * 0.8, art: "roll" },
+        { pitch: DRUM.ride, start: 1, dur: ctx.beats - 1, vel: v * 0.8, art: "roll", move: "ring" },
       ];
   }
 }

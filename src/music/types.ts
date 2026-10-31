@@ -93,7 +93,15 @@ export interface NoteEvent {
   written?: true;
   /** Bowed in the same stroke as the note before it (a slur): no new attack, no change of bow. */
   slur?: true;
+  /** Part of a drum fill or roll, by name (patterns/drums.ts marks them, so teach.ts can say which). */
+  move?: DrumMove;
 }
+
+/**
+ * The fills and rolls a drummer plays at the end of a phrase, and the cymbal roll under a big
+ * last chord ("ring"). Each is a technique with a name (teach.ts).
+ */
+export type DrumMove = "run" | "setup" | "drag" | "toms" | "press" | "ghosts" | "hats" | "rim" | "roll" | "ring";
 
 export interface ChordChange {
   /** Beat offset within the bar (0 = downbeat). */

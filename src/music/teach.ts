@@ -5,11 +5,12 @@
 
 import { sectionAt } from "./form";
 import { DYNAMIC_ENERGY } from "./context";
-import { INSTRUMENTS } from "./instruments";
+import { DRUM, INSTRUMENTS } from "./instruments";
 import { PEDAL_DRIVE } from "./patterns/bass";
 import { postrockStage, type PostrockStage } from "./patterns/drums";
 import { feelOf } from "./playing";
-import type { Role, Score, Section, StyleId } from "./types";
+import { hashString } from "./rng";
+import type { DrumMove, NoteEvent, Role, Score, Section, StyleId } from "./types";
 
 export interface Technique {
   /** Stable key, e.g. "walk", "comp", "stoptime". Consecutive bars with the same id are one passage. */
@@ -23,6 +24,8 @@ export interface Technique {
    * does: a soloist's inversion, then sequence, then run, is all "solo".
    */
   tag?: string;
+  /** The techniques a folded step stands for (a section's fills, told as one). */
+  covers?: string[];
 }
 
 const t = (id: string, name: string, what: string, tag?: string): Technique => ({ id, name, what, ...(tag ? { tag } : {}) });
@@ -57,6 +60,38 @@ const POSTROCK_DRUMS: Record<PostrockStage, Technique> = {
   crest: t("crest", "the crest", "Crashes on every 8th and the kick on every beat: the top of the climb."),
   roll: t("snare-roll", "snare roll", "A snare roll swelling from a whisper into the crest."),
 };
+/**
+ * A drummer's fills and rolls, by name: what each sounds like (when and why it comes is added
+ * where it's played, see `drumMove`). The patterns mark the notes they write with these names.
+ */
+const DRUM_MOVES: Record<DrumMove, Technique> = {
+  run: t("tom-run", "tom run", "A run from the snare down the toms, high to low, getting louder."),
+  setup: t("set-up", "set-up", "A crack on the snare and a kick just before the one."),
+  drag: t("drag", "drag", "Soft grace strokes into one hard crack on the snare: a drummer's rudiment."),
+  toms: t("tom-fill", "tom fill", "Floor tom and kick on the beat, the snare answering in between."),
+  press: t("press-roll", "press roll", "The sticks pressed into the snare so they buzz, swelling up to one accent."),
+  ghosts: t("ghost-fill", "ghost-note fill", "Whispered 16ths on the snare, then one hard crack."),
+  hats: t("open-hat", "open hi-hat", "The hi-hat opens on the last “and” while the snare snaps."),
+  rim: t("rim-pickup", "cross-stick pickup", "Two quiet clicks on the rim: a bossa drummer's fill is a whisper."),
+  roll: t("snare-roll", "snare roll", "A snare roll swelling from a whisper to a crack."),
+  ring: t("cymbal-roll", "cymbal roll", "A crash on the last chord, then a roll on the cymbal swelling under it until the band cuts off."),
+};
+/** How a fill reads after "Fills where the phrases end:". */
+const MOVE_GLOSS: Record<DrumMove, string> = {
+  run: "a run down the toms",
+  setup: "a set-up (a snare crack and a kick just before the one)",
+  drag: "a drag (soft grace strokes into a snare crack)",
+  toms: "a tom fill",
+  press: "a press roll (the snare buzzing up to an accent)",
+  ghosts: "a ghost-note fill (whispered 16ths, then a crack)",
+  hats: "an open hi-hat on the last “and”",
+  rim: "a cross-stick pickup",
+  roll: "a snare roll",
+  ring: "a cymbal roll under the last chord",
+};
+/** A drum fill written into a model's own grid: it has no name of its own. */
+const WRITTEN_FILL = t("drum-fill", "fill", "A burst on the snare and toms at the end of the bar.");
+
 const SNARE_BUILD = t("snare-build", "snare build", "The snare in 8ths, then 16ths, louder and louder: the drummer lifting the band into the last chorus.");
 /** A swing drummer keeps the head on the closed hi-hat and moves to the ride for the solos. */
 const HAT_TIME = t("hat-time", "hi-hat time", "Swung time on the closed hi-hat, tighter and quieter than the ride the drummer saves for the solos.");
@@ -175,6 +210,23 @@ const STOPTIME = t("stoptime", "stop-time", "Everyone hits the one together, the
 const BREAKDOWN = t("breakdown", "breakdown", "Just bass and drums: the groove stripped bare under the soloist.");
 const DRUM_SOLO = t("drum-solo", "drum solo", "The drummer's turn to play the melody, on the kit.");
 
+/** A section as it reads in a sentence: "the head", "Bruno's solo". */
+function sectionNoun(s: Section, name: (id: string) => string): string {
+  const who = s.featured?.[0];
+  switch (s.kind) {
+    case "solo":
+      return who ? `${name(who)}'s solo` : "the solo";
+    case "trade":
+      return "the trading";
+    case "out":
+      return "the tune's return";
+    case "head":
+      return "the tune";
+    default:
+      return `the ${s.kind}`;
+  }
+}
+
 /** How a jam's sections are built: a sentence each, with the players in it. */
 function sectionWhat(score: Score, s: Section, name: (id: string) => string): string {
   const who = s.featured?.[0];
@@ -240,12 +292,73 @@ const BY_ROLE: Record<Role, Technique> = {
   rest: LAYING_OUT,
 };
 
+// ─── Fills and rolls ─────────────────────────────────────────────────────────
+
+const TOMS = new Set<number>([DRUM.highTom, DRUM.midTom, DRUM.floorTom, DRUM.lowTom, 41, 48]);
+
+/** A player's notes that start in a bar, in beats from its downbeat. */
+function barNotes(score: Score, id: string, bar: number): NoteEvent[] {
+  const beats = score.frame.meter.beats;
+  const from = bar * beats;
+  return (score.parts[id] ?? []).filter((n) => n.start >= from - 1e-6 && n.start < from + beats - 1e-6).map((n) => ({ ...n, start: n.start - from }));
+}
+
+/**
+ * A fill in a drum grid a model wrote, which carries no name: two or more tom strokes, or a run of
+ * four snare strokes a 16th apart, in the bar's last two beats. Where it starts, or null.
+ */
+function writtenFill(notes: NoteEvent[], beats: number): number | null {
+  const late = notes.filter((n) => n.start >= beats - 2 - 1e-6).sort((a, b) => a.start - b.start);
+  const toms = late.filter((n) => TOMS.has(n.pitch));
+  if (toms.length >= 2) return toms[0].start;
+  const snare = late.filter((n) => n.pitch === DRUM.snare);
+  for (let i = 0; i + 3 < snare.length; i++) if (snare[i + 3].start - snare[i].start <= 0.75 + 1e-6) return snare[i].start;
+  return null;
+}
+
+/** The drummer's fill or roll in a bar, if there is one: which, and the beat of the bar it starts on. */
+export function drumMoveAt(score: Score, id: string, bar: number): { move: DrumMove | null; from: number } | null {
+  const member = score.members.find((m) => m.id === id);
+  if (member?.instrument !== "drums") return null;
+  const notes = barNotes(score, id, bar);
+  const marked = notes.filter((n) => n.move);
+  if (marked.length) return { move: marked[0].move!, from: Math.min(...marked.map((n) => n.start)) };
+  // a grid the model wrote (anything that isn't an @directive)
+  const d = directiveOf(score, id, bar);
+  if (!d || d.startsWith("@")) return null;
+  const from = writtenFill(notes, score.frame.meter.beats);
+  return from === null ? null : { move: null, from };
+}
+
+/** The beats inside a bar where some player's technique changes mid-bar (a fill starting), in order. */
+export function changesIn(score: Score, bar: number): number[] {
+  const at = score.members.map((m) => drumMoveAt(score, m.id, bar)?.from).filter((x): x is number => x !== undefined && x > 1e-6);
+  return [...new Set(at)].sort((a, b) => a - b);
+}
+
+/**
+ * A fill or roll by name, with when and why it comes: at the end of a phrase it kicks the band
+ * into the next one; at the end of a section it leads the band into what comes next.
+ */
+function drumMove(score: Score, move: DrumMove | null, bar: number): Technique {
+  const base = move ? DRUM_MOVES[move] : WRITTEN_FILL;
+  if (move === "ring") return base;
+  const frame = score.frame;
+  const sec = sectionAt(frame, bar);
+  const next = sec.start + sec.length === bar + 1 ? frame.sections.find((s) => s.start === bar + 1) : undefined;
+  const name = (id: string) => score.members.find((m) => m.id === id)?.name ?? id;
+  const why = next ? `It closes ${sectionNoun(sec, name)} and leads the band into ${sectionNoun(next, name)}.` : "It ends the phrase, so the band hears the next one coming.";
+  return { ...base, what: `${base.what} ${why}` };
+}
+
 /**
  * What a player is doing in a bar, by name. Arrangement textures come first (in stop-time the
  * pianist's chord is a hit on the one, not comping), then the directive the plan gave them, read
- * in the style's and the artist's own vocabulary.
+ * in the style's and the artist's own vocabulary. Given a beat of the bar, a drummer's fill or
+ * roll is named from where it starts (the rest of the bar is their time); without one, the bar
+ * is read as a whole and a fill is left to `drumMoveAt`.
  */
-export function techniqueAt(score: Score, id: string, bar: number): Technique {
+export function techniqueAt(score: Score, id: string, bar: number, beat?: number): Technique {
   const frame = score.frame;
   const bp = score.plan[bar];
   const member = score.members.find((m) => m.id === id);
@@ -268,7 +381,11 @@ export function techniqueAt(score: Score, id: string, bar: number): Technique {
     if (sec.kind === "intro") return t("rest", "waiting", "Comes in a little later, once the intro has set up the groove.");
     return LAYING_OUT;
   }
+  // the cymbal roll under a big last chord, and a fill once it has started
+  const move = fn === "rhythm" && !featured ? drumMoveAt(score, id, bar) : null;
+  if (move?.move === "ring") return drumMove(score, "ring", bar);
   if (name === "end") return LAST_CHORD;
+  if (move && beat !== undefined && beat >= move.from - 1e-6) return drumMove(score, move.move, bar);
 
   // arrangement textures change who plays, not how (realize.ts `arrange`)
   if (!featured && bar < frame.bars - 1) {
@@ -295,7 +412,7 @@ export function techniqueAt(score: Score, id: string, bar: number): Technique {
   if (role === "trade") return t("drum-break", "drum break", `The band lays out and the drummer answers with ${turnLength(sec.turn)} alone.`);
 
   if (fn === "rhythm") {
-    if (name === "fill") return t("drum-fill", "fill", "A short burst that kicks the band into the next phrase.");
+    if (name === "fill") return move ? drumMove(score, move.move, bar) : t("drum-fill", "fill", "A short burst that kicks the band into the next phrase.");
     if (name === "solo") return DRUM_SOLO;
     if (name === "hits") return CHORDAL.hits;
     if (args.includes("build")) return SNARE_BUILD;
@@ -375,11 +492,15 @@ export function jamGuide(score: Score): SectionGuide[] {
     const end = Math.min(score.frame.bars, section.start + section.length);
     const moves: string[] = [];
     const move = (x: string) => !moves.includes(x) && moves.push(x);
+    const next = score.frame.sections.find((s) => s.start === end);
     const players: PlayerPart[] = score.members.map((m) => {
       const steps: Technique[] = [];
       // the tune and a solo are each one story, told over the section: folded into one step
       const told: Technique[] = [];
       const folds = (role: Role | undefined) => (role === "solo" && section.kind === "solo") || (role === "lead" && (section.kind === "head" || section.kind === "out"));
+      // a drummer's fills, folded into one step where the first one comes
+      const fills: (DrumMove | null)[] = [];
+      let into: Technique | null = null;
       for (let b = section.start; b < end; b++) {
         const role = score.plan[b]?.roles[m.id];
         const tech = techniqueAt(score, m.id, b);
@@ -388,14 +509,33 @@ export function jamGuide(score: Score): SectionGuide[] {
           told.push(tech);
           continue;
         }
+        const fill = role === "trade" || role === "solo" ? null : drumMoveAt(score, m.id, b);
+        if (fill && fill.move !== "ring") {
+          if (!fills.length) steps.push(t("fills", "", ""));
+          if (!fills.includes(fill.move)) fills.push(fill.move);
+          if (b === end - 1 && next) into = fill.move ? DRUM_MOVES[fill.move] : WRITTEN_FILL;
+          // a bar the plan asked to be a fill is all fill
+          if (tech.id === WRITTEN_FILL.id || Object.values(DRUM_MOVES).some((x) => x.id === tech.id)) continue;
+        }
         // each technique once, in the order it first comes (trading goes back and forth)
         if (!steps.some((x) => x.id === tech.id)) steps.push(tech);
         if (MOVES.has(tech.id)) move(tech.name);
       }
-      const story = steps.find((s) => !s.what);
+      const story = steps.find((s) => !s.what && s.id !== "fills");
       if (story) {
         story.what = story.id === "solo" ? soloStory(told) : tuneStory(told);
         if (story.id === "solo" && OPENERS[told[0]?.id]) move(told[0].name);
+      }
+      const fillStep = steps.find((s) => s.id === "fills");
+      if (fillStep) {
+        const glosses = fills.map((f) => (f ? MOVE_GLOSS[f] : "a fill"));
+        const kinds = fills.map((f) => (f ? DRUM_MOVES[f] : WRITTEN_FILL));
+        // one or two kinds by name ("press roll and tom run"); more are just "fills"
+        fillStep.name = kinds.length <= 2 ? list(kinds.map((x) => x.name)) : "fills";
+        fillStep.covers = kinds.map((x) => x.id);
+        const last = into && next ? `; the last one leads into ${sectionNoun(next, name)}` : "";
+        fillStep.what = `Where a phrase ends: ${list(glosses)}. A fill tells the band the next phrase is coming${last}.`;
+        if (into && next) move(`${into.name} into ${sectionNoun(next, name)}`);
       }
       return { id: m.id, name: m.name, steps };
     });
@@ -460,5 +600,82 @@ const ARTICLE: Record<string, string> = {
 };
 
 const MOTIF_IDS = new Set(Object.values(MOTIF).map((x) => x.id));
-const list = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
+/** Words in a list the way they're said: "a, b and c". */
+export const list = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 
+
+// ─── One idea per take ───────────────────────────────────────────────────────
+
+/**
+ * What a newcomer could learn from each style, most telling first: the techniques that make it
+ * sound like itself (technique ids, as above).
+ */
+const STYLE_IDEAS: Record<StyleId, string[]> = {
+  swing: ["walk", "ride", "comp", "two", "stoptime", "hat-time", "guide", "trading", "set-up", "drag", "shout"],
+  bossa: ["bossa-bass", "bossa-groove", "bossa-comp", "rim-pickup", "counter"],
+  funk: ["pocket", "funk-bass", "stabs", "breakdown", "ghost-fill", "open-hat"],
+  pop: ["backbeat", "block", "snare-build", "pump", "set-up", "breakdown"],
+  neworleans: ["polyphony", "street-beat", "press-roll", "stride", "two", "stoptime", "backing-riff"],
+  minimal: ["additive", "arp", "pulse", "displace", "canon"],
+  baroque: ["continuo-bass", "prelude", "continuo", "canon", "timpani"],
+  ambient: ["swells", "pad", "pedal", "shimmer", "augment"],
+  postrock: ["wash", "tom-build", "crest", "snare-roll", "pedal", "half-time", "pedal-8ths"],
+};
+/** An artist's own figures say the most about how they play: they come first. */
+const SIGNATURE_IDEAS = ["sowhat-chords", "sowhat-bass", "montuno", "tumbao", "clave", "brushes", "afrobeat", "afro-bass", "interlock", "clav", "riff-bass", "ostinato", "sway", "broken", "repeated", "bells", "waltz"];
+/** Ideas any take can teach once the style's own are heard: how the motif is worked, how the band talks. */
+const SHARED_IDEAS = ["answer", "invert", "sequence", "retro", "augment", "fragment", "displace", "trading", "counter", "harmony", "canon", "guide"];
+/** How many of the most telling ideas a take chooses from, so the next take teaches another. */
+const IDEA_CHOICE = 4;
+
+export interface TakeIdea {
+  technique: Technique;
+  /** Who plays it, in the band's order. */
+  who: string[];
+  /** The bars it's heard in, 1-based. */
+  bars: number[];
+}
+
+/**
+ * The one idea a take is good for learning: a technique its style is known by that the band
+ * really plays in it, with who plays it and in which bars. Takes of a style take turns (by seed)
+ * among its few most telling ideas, so a newcomer hears something new in the next take.
+ */
+export function takeIdea(score: Score): TakeIdea | null {
+  const heard = new Map<string, { technique: Technique; who: Set<string>; bars: Set<number> }>();
+  const hear = (x: Technique, who: string, bar: number) => {
+    const h = heard.get(x.id) ?? heard.set(x.id, { technique: x, who: new Set(), bars: new Set() }).get(x.id)!;
+    h.who.add(who);
+    h.bars.add(bar);
+  };
+  for (const m of score.members) {
+    for (let bar = 0; bar < score.frame.bars; bar++) {
+      hear(techniqueAt(score, m.id, bar), m.name, bar);
+      const role = score.plan[bar]?.roles[m.id];
+      const fill = role === "solo" || role === "trade" ? null : drumMoveAt(score, m.id, bar);
+      if (fill?.move && fill.move !== "ring") hear(DRUM_MOVES[fill.move], m.name, bar);
+    }
+  }
+  const order = [...new Set([...SIGNATURE_IDEAS, ...STYLE_IDEAS[score.frame.style], ...SHARED_IDEAS])].filter((id) => heard.has(id));
+  if (!order.length) return null;
+  const { technique, who, bars } = heard.get(order[hashString(`${score.settings.seed}:idea`) % Math.min(IDEA_CHOICE, order.length)])!;
+  // a fill is heard where phrases end: say so, since its own words only say how it sounds
+  const fill = Object.values(DRUM_MOVES).some((x) => x.id === technique.id);
+  return {
+    technique: fill ? { ...technique, what: `${technique.what} A drummer plays it where a phrase ends, to tell the band the next one is coming.` } : technique,
+    who: score.members.filter((m) => who.has(m.name)).map((m) => m.name),
+    bars: [...bars].sort((a, b) => a - b).map((b) => b + 1),
+  };
+}
+
+/** Bars as a reader counts them: "bar 4", "bars 9–24", "bars 4, 12 and 16–18". */
+export function barsText(bars: number[]): string {
+  const runs: [number, number][] = [];
+  for (const b of bars) {
+    const last = runs[runs.length - 1];
+    if (last && b === last[1] + 1) last[1] = b;
+    else runs.push([b, b]);
+  }
+  const words = runs.map(([a, b]) => (a === b ? `${a}` : `${a}–${b}`));
+  return `${bars.length === 1 ? "bar" : "bars"} ${list(words)}`;
+}

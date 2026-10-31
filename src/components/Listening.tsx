@@ -4,38 +4,47 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimalPortrait } from "@/art/AnimalPortrait";
 import { troopAudio } from "@/audio/engine";
 import { sectionAt } from "@/music/form";
-import { jamGuide, techniqueAt, type Technique } from "@/music/teach";
+import { barsText, changesIn, jamGuide, list, takeIdea, techniqueAt, type Technique } from "@/music/teach";
 import type { Score } from "@/music/types";
 import { usePlayAlong } from "@/state/playalong";
 import { useTroop } from "@/state/store";
 
-/** The bar the band is playing (-1 when stopped or counting in), updated once a bar. */
-function usePlayingBar(score: Score | null, playing: boolean): number {
-  const [bar, setBar] = useState(-1);
+/**
+ * The bar the band is playing (-1 when stopped or counting in), and the beat in it where what
+ * someone's doing last changed (a drummer's fill starting; 0 otherwise). Updated only when either
+ * moves on.
+ */
+function usePlayingMoment(score: Score | null, playing: boolean): { bar: number; beat: number } {
+  const [moment, setMoment] = useState({ bar: -1, beat: 0 });
   useEffect(() => {
     if (!score || !playing) return;
     let raf = 0;
-    let last = -2;
+    let last = "";
     const beats = score.frame.meter.beats;
+    const changes = Array.from({ length: score.frame.bars }, (_, b) => changesIn(score, b));
     const loop = () => {
       const beat = troopAudio.isPlaying() ? troopAudio.getBeat() : -Infinity;
       const b = Number.isFinite(beat) && beat >= 0 ? Math.min(score.frame.bars - 1, Math.floor(beat / beats)) : -1;
-      if (b !== last) setBar((last = b));
+      const at = b < 0 ? 0 : (changes[b] ?? []).reduce((x, c) => (beat - b * beats >= c - 1e-6 ? c : x), 0);
+      if (`${b}:${at}` !== last) {
+        last = `${b}:${at}`;
+        setMoment({ bar: b, beat: at });
+      }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
     return () => {
       cancelAnimationFrame(raf);
-      setBar(-1);
+      setMoment({ bar: -1, beat: 0 });
     };
   }, [score, playing]);
-  return score && playing ? bar : -1;
+  return score && playing ? moment : { bar: -1, beat: 0 };
 }
 
 const span = (from: number, to: number) => (from === to ? `bar ${from}` : `bars ${from}–${to}`);
 
-/** One player's line: who, the technique by name, and what it is. */
-function PlayerLine({ animal, name, techniques, muted }: { animal: Parameters<typeof AnimalPortrait>[0]["animal"]; name: string; techniques: Technique[]; muted: boolean }) {
+/** One player's line: who, the technique by name, and what it is (the take's idea in highlighter). */
+function PlayerLine({ animal, name, techniques, muted, idea }: { animal: Parameters<typeof AnimalPortrait>[0]["animal"]; name: string; techniques: Technique[]; muted: boolean; idea?: string }) {
   return (
     <li className="flex gap-xs">
       {/* a fixed slot, so names line up whatever the animal's shape */}
@@ -49,7 +58,14 @@ function PlayerLine({ animal, name, techniques, muted }: { animal: Parameters<ty
           <span className="text-ink-soft">muted</span>
         ) : (
           <>
-            <span className="font-heavy text-(--color-3)">{techniques.map((x) => x.name).join(" → ")}</span>
+            <span className="font-heavy text-(--color-3)">
+              {techniques.map((x, i) => (
+                <span key={`${x.id}:${i}`}>
+                  {i > 0 && " → "}
+                  <span className={idea && (x.id === idea || x.covers?.includes(idea)) ? "rounded-xs bg-(--color-2-transparent) px-xxs text-ink" : undefined}>{x.name}</span>
+                </span>
+              ))}
+            </span>
             <div className="text-s text-ink-soft">{techniques.map((x) => x.what).join(" ")}</div>
           </>
         )}
@@ -71,8 +87,9 @@ export function Listening() {
   const arranged = usePlayAlong((s) => s.arranged);
   // playing along in call and response, the band plays the chart with room left for you
   const score = playing && arranged && current && arranged.id === current.id ? arranged : current;
-  const bar = usePlayingBar(score, playing);
+  const { bar, beat } = usePlayingMoment(score, playing);
   const guide = useMemo(() => (score ? jamGuide(score) : []), [score]);
+  const idea = useMemo(() => (current ? takeIdea(current) : null), [current]);
   // the section opened to read, for this take (a new take opens on its head)
   const [picked, setPicked] = useState<{ take: string; i: number } | null>(null);
 
@@ -86,6 +103,32 @@ export function Listening() {
       <h2 id="listening-heading" className="type-section mb-xs">
         How it’s built
       </h2>
+      {idea && (
+        // one idea to learn from this take: what it's called, who plays it, where, and a way to hear it
+        <div className="mb-s flex items-start gap-xxs">
+          <p className="min-w-0 flex-1 px-xs text-m">
+            <span className="type-label mr-xs">Listen for</span>
+            <span className="rounded-xs bg-(--color-2-transparent) px-xxs font-heavy">{idea.technique.name}</span>
+            <span className="text-ink-soft">
+              {" "}
+              · {list(idea.who)}, {barsText(idea.bars)}
+            </span>
+            <span className="block text-s text-ink-soft">
+              {idea.technique.what} {idea.who.length === 1 ? `${idea.who[0]}’s name tag lights up when it comes.` : "Their name tags light up when it comes."}
+            </span>
+          </p>
+          <button
+            type="button"
+            className="tap min-h-xl min-w-xl shrink-0 text-m text-ink-soft transition-colors duration-(--motion-duration) hover:text-(--color-4)"
+            // from the bar before, so you hear what it grows out of
+            onClick={() => void play(Math.max(0, idea.bars[0] - 2))}
+            aria-label={`Play from just before bar ${idea.bars[0]}: ${idea.technique.name}`}
+            title={`Play from bar ${Math.max(1, idea.bars[0] - 1)}`}
+          >
+            ▶
+          </button>
+        </div>
+      )}
       <ol className="space-y-xxs">
         {guide.map((g, i) => {
           const isOpen = i === open;
@@ -125,10 +168,10 @@ export function Listening() {
               {isOpen && (
                 <ul className="mb-xs ml-xs mt-xxs space-y-xxs pl-xs shadow-[inset_var(--border-m)_0_0_0_var(--neutral-5)]" aria-label={isLive ? `What each player is doing in bar ${bar + 1}` : `What each player does in ${g.section.name}`}>
                   {score.members.map((m) => {
-                    const steps = isLive ? [techniqueAt(score, m.id, bar)] : (g.players.find((p) => p.id === m.id)?.steps ?? []);
+                    const steps = isLive ? [techniqueAt(score, m.id, bar, beat)] : (g.players.find((p) => p.id === m.id)?.steps ?? []);
                     // the final chord is part of every ending: not worth a line of its own
                     const shown = steps.length > 1 ? steps.filter((x) => x.id !== "end") : steps;
-                    return <PlayerLine key={m.id} animal={m.animal} name={m.name} techniques={shown} muted={muted.includes(m.id)} />;
+                    return <PlayerLine key={m.id} animal={m.animal} name={m.name} techniques={shown} muted={muted.includes(m.id)} idea={idea?.technique.id} />;
                   })}
                 </ul>
               )}

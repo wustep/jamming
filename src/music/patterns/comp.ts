@@ -506,7 +506,7 @@ export function pad(ctx: BarCtx): NoteEvent[] {
 /** Ambient shimmer: a few high bell tones (chord tones + tensions) with space. */
 export function shimmer(ctx: BarCtx): NoteEvent[] {
   const out: NoteEvent[] = [];
-  const vel = velFor(ctx, 0.42);
+  const vel = velFor(ctx, 0.7);
   const hm = harmAt(ctx, 0);
   const c = hm.chord;
   // bells ring high, but under the tune when someone is carrying it
