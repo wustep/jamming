@@ -29,7 +29,7 @@ export const DIRECTIVE_HELP = `Each bar of each player's part is ONE of:
   @comp [sparse|busy] @pulse [sparse|busy] @stride @arp @prelude @continuo @pad @shimmer @wash [sparse|busy] @hits  — chordal patterns (@pulse: pop block triads; @wash: post-rock open chords picked through a delay, tremolo at the crest)
   @pizz [sparse|busy] @arco  — bowed strings: plucked double-stop comping / sustained bowed tones
   @guide @harmony @canon @riff @counter @fill  — supporting lines (guide tones, 3rds under the lead, imitation, backing riff)
-  @groove [light|peak|build] @solo @fill  — drums (build: a whole bar of snare into the next section)
+  @groove [light|peak|build] @solo @fill [setup|drag|run|toms|press|ghosts|hats|rim|roll]  — drums (build: a whole bar of snare into the next section; @fill: a fill at the bar's end into the next phrase, the one you name or the style's own)
   @end  — final chord / last note
   @rest  — tacet`;
 
@@ -171,7 +171,8 @@ function realizeRaw(ctx: BarCtx, text: string): DirectiveResult {
       case "end":
         return done(drums.endDrums(c));
       case "fill":
-        return done(drums.groove({ ...c, phraseEnd: true, sectionEnd: true }));
+        // asked for, so it comes for sure (the style's own fills are only likely)
+        return done(drums.groove({ ...c, args: [...args, "fill"], phraseEnd: true, sectionEnd: true }));
       case "hits":
         return done([
           { pitch: DRUM.crash, start: 0, dur: 1, vel: velFor(c, 0.9), art: "accent" },

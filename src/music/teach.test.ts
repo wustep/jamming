@@ -3,8 +3,10 @@ import { ANIMALS, defaultMembers } from "./instruments";
 import { defaultSettings, generateLocal } from "./local";
 import { PRESETS } from "./presets";
 import { STYLES, STYLE_LIST } from "./styles";
-import { jamGuide, techniqueAt } from "./teach";
-import type { Member, Score, StyleId } from "./types";
+import { parseDrumGrid } from "./notation";
+import { realize } from "./realize";
+import { barsText, changesIn, drumMoveAt, jamGuide, takeIdea, techniqueAt } from "./teach";
+import type { DrumMove, Member, Score, StyleId } from "./types";
 
 const quartet = defaultMembers(); // Bruno piano, Lily bass, Hoot drums, Rusty trumpet (leader)
 const band: Member[] = [...quartet, { id: "cat", animal: "cat", name: "Mochi", instrument: "sax" }];
@@ -40,6 +42,12 @@ describe("what each player is doing", () => {
           expect(tech.what, where).toMatch(/^[A-Z“].+[.”]$/);
           // a phone's name tag holds about 20 characters
           expect((tech.tag ?? tech.name).length, `${where}: ${tech.tag ?? tech.name}`).toBeLessThanOrEqual(20);
+          // and so does a fill's, from the beat it starts
+          for (const at of changesIn(score, bar)) {
+            const fill = techniqueAt(score, m.id, bar, at);
+            expect(fill.what, where).toMatch(/^[A-Z“].+[.”]$/);
+            expect((fill.tag ?? fill.name).length, `${where}: ${fill.name}`).toBeLessThanOrEqual(20);
+          }
         }
       }
     }
@@ -199,5 +207,150 @@ describe("arrangements that differ from take to take", () => {
     expect(roles(0)).toEqual([false, false, true]);
     expect(roles(1)).toEqual([false, true, true]);
     expect(roles(2)).toEqual([true, true, true]);
+  });
+});
+
+describe("the drummer's fills and rolls", () => {
+  const FILL_STYLES: StyleId[] = ["swing", "bossa", "funk", "pop", "neworleans", "postrock"];
+  const NAMES: Record<Exclude<DrumMove, "ring">, string> = {
+    run: "tom run",
+    setup: "set-up",
+    drag: "drag",
+    toms: "tom fill",
+    press: "press roll",
+    ghosts: "ghost-note fill",
+    hats: "open hi-hat",
+    rim: "cross-stick pickup",
+    roll: "snare roll",
+  };
+
+  it("names each fill from the beat it starts, and says why it's there", () => {
+    const heard = new Set<string>();
+    for (const style of FILL_STYLES) {
+      for (let seed = 1; seed <= 6; seed++) {
+        const score = take(style, seed, 32, quartet);
+        for (let bar = 0; bar < score.frame.bars; bar++) {
+          const move = drumMoveAt(score, "owl", bar);
+          if (!move || move.move === "ring") continue;
+          const where = `${style} ${seed} bar ${bar + 1}`;
+          const fill = techniqueAt(score, "owl", bar, move.from);
+          expect(fill.name, where).toBe(NAMES[move.move!]);
+          heard.add(move.move!);
+          // the bar's time comes first: the tag says the groove until the fill starts
+          if (move.from > 0) expect(techniqueAt(score, "owl", bar, 0).name, where).not.toBe(fill.name);
+          const sec = score.frame.sections.find((s) => bar >= s.start && bar < s.start + s.length)!;
+          const sectionEnd = bar === sec.start + sec.length - 1 && bar < score.frame.bars - 1;
+          expect(fill.what, where).toMatch(sectionEnd ? / leads the band into .+\.$/ : /It ends the phrase, so the band hears the next one coming\.$/);
+        }
+      }
+    }
+    // every fill a style keeps in its vocabulary is played, and named, somewhere (post-rock's
+    // big snare roll would come where a loud section ends, but its climb already rolls up there:
+    // the "snare roll" stage)
+    expect([...heard].sort()).toEqual(Object.keys(NAMES).filter((k) => k !== "roll").sort());
+  });
+
+  it("says when the whole band's tags change mid-bar: only where a fill starts", () => {
+    const score = take("neworleans", 2, 32, quartet);
+    for (let bar = 0; bar < score.frame.bars; bar++) {
+      const move = drumMoveAt(score, "owl", bar);
+      expect(changesIn(score, bar), `bar ${bar + 1}`).toEqual(move && move.from > 0 ? [move.from] : []);
+    }
+  });
+
+  it("names the cymbal roll under a big last chord, and not a button ending", () => {
+    const last = (style: StyleId) => {
+      const score = take(style, 1, 32, quartet);
+      return techniqueAt(score, "owl", score.frame.bars - 1).name;
+    };
+    for (const style of ["swing", "neworleans", "pop", "postrock"] as const) expect(last(style), style).toBe("cymbal roll");
+    for (const style of ["funk", "bossa", "baroque"] as const) expect(last(style), style).toBe("last chord");
+  });
+
+  it("plays the fill a model's drummer asks for, every time, and names it", () => {
+    for (const [style, ask, name] of [["neworleans", "press", "press roll"], ["swing", "drag", "drag"], ["funk", "hats", "open hi-hat"]] as const) {
+      const score = take(style, 1, 32, quartet);
+      for (const bar of [5, 6, 9, 10]) {
+        const plan = score.plan.map((bp, i) => (i === bar ? { ...bp, directives: { ...bp.directives, owl: `@fill ${ask}` } } : bp));
+        const asked: Score = { ...score, plan, parts: realize({ frame: score.frame, members: score.members, plan, motif: score.motif, seed: 1 }).parts };
+        const move = drumMoveAt(asked, "owl", bar);
+        expect(move?.move, `${style} bar ${bar + 1}`).toBe(ask);
+        expect(techniqueAt(asked, "owl", bar).name).toBe(name);
+        // and the guide folds it in with the section's other fills
+        const sec = jamGuide(asked).find((g) => bar + 1 >= g.from && bar + 1 <= g.to)!;
+        const fills = sec.players.find((p) => p.id === "owl")!.steps.find((x) => x.id === "fills")!;
+        expect(fills.what).toContain(name === "open hi-hat" ? "an open hi-hat" : `a ${name}`);
+      }
+    }
+  });
+
+  it("finds a fill in a drum grid a model wrote, from where it starts", () => {
+    const score = take("funk", 1, 32, quartet);
+    const bar = 6;
+    const grid = "hh:x.x.x.x.x.x.... sd:....X.......XXXX bd:x.....x.........";
+    const beats = score.frame.meter.beats;
+    const notes = parseDrumGrid(grid, beats).notes.map((n) => ({ ...n, start: n.start + bar * beats }));
+    const written: Score = {
+      ...score,
+      plan: score.plan.map((bp, i) => (i === bar ? { ...bp, directives: { ...bp.directives, owl: grid } } : bp)),
+      parts: { ...score.parts, owl: [...score.parts.owl.filter((n) => Math.floor(n.start / beats) !== bar), ...notes] },
+    };
+    expect(drumMoveAt(written, "owl", bar)).toEqual({ move: null, from: 3 });
+    expect(techniqueAt(written, "owl", bar, 3).name).toBe("fill");
+    expect(techniqueAt(written, "owl", bar, 0).name).toBe("the pocket");
+    // a plain written groove has no fill in it
+    const plain = { ...written, parts: { ...written.parts, owl: written.parts.owl.filter((n) => !(n.start >= bar * beats + 3.5 && n.start < (bar + 1) * beats)) } };
+    expect(drumMoveAt(plain, "owl", bar)).toBeNull();
+  });
+
+  it("folds a section's fills into one step for the drummer, and calls out the one into the next section", () => {
+    const guide = jamGuide(take("neworleans", 2, 32, quartet));
+    const head = guide.find((g) => g.section.kind === "head")!;
+    const hoot = head.players.find((p) => p.id === "owl")!;
+    expect(hoot.steps.map((s) => s.name)).toEqual(["street beat", "tom run"]);
+    expect(hoot.steps[1].what).toBe("Where a phrase ends: a run down the toms. A fill tells the band the next phrase is coming; the last one leads into Bruno's solo.");
+    expect(head.moves).toContain("tom run into Bruno's solo");
+    const solo = guide.find((g) => g.section.kind === "solo")!.players.find((p) => p.id === "owl")!;
+    expect(solo.steps.filter((s) => s.id === "fills")).toHaveLength(1);
+    expect(solo.steps.find((s) => s.id === "fills")!.name).toBe("fills");
+  });
+});
+
+describe("one idea per take", () => {
+  it("is something the band really plays in that take, in the bars it says", () => {
+    for (const score of allTakes()) {
+      const idea = takeIdea(score);
+      expect(idea, score.title).not.toBeNull();
+      const { technique, who, bars } = idea!;
+      expect(technique.what, score.title).toMatch(/^[A-Z“].+[.”]$/);
+      expect(who.length, score.title).toBeGreaterThan(0);
+      for (const name of who) {
+        const m = score.members.find((x) => x.name === name)!;
+        const plays = bars.some((b) => techniqueAt(score, m.id, b - 1).id === technique.id || changesIn(score, b - 1).some((at) => techniqueAt(score, m.id, b - 1, at).id === technique.id));
+        expect(plays, `${score.title}: ${name} ${technique.name}`).toBe(true);
+      }
+    }
+  });
+
+  it("changes from take to take, among what the style is known by", () => {
+    for (const style of STYLE_LIST) {
+      const ideas = new Set(Array.from({ length: 12 }, (_, i) => takeIdea(take(style, 100 + i * 37, 32, quartet))!.technique.name));
+      expect(ideas.size, `${style}: ${[...ideas].join(", ")}`).toBeGreaterThanOrEqual(3);
+    }
+    // swing teaches the walking bass, the ride and comping before anything else
+    const swing = new Set(Array.from({ length: 12 }, (_, i) => takeIdea(take("swing", 100 + i * 37, 32, quartet))!.technique.name));
+    expect([...swing]).toEqual(expect.arrayContaining(["walking bass", "ride pattern", "comping"]));
+  });
+
+  it("an artist's own figure is one of the ideas their takes teach", () => {
+    const son = PRESETS.find((p) => p.id === "son")!;
+    const ideas = new Set(Array.from({ length: 12 }, (_, i) => takeIdea(presetTake(son, i + 1))!.technique.name));
+    expect([...ideas]).toEqual(expect.arrayContaining(["tumbao", "clave"]));
+  });
+
+  it("says its bars the way a reader counts them", () => {
+    expect(barsText([4])).toBe("bar 4");
+    expect(barsText([9, 10, 11, 12])).toBe("bars 9–12");
+    expect(barsText([4, 12, 16, 17, 18])).toBe("bars 4, 12 and 16–18");
   });
 });
