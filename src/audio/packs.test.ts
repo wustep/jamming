@@ -47,6 +47,14 @@ describe("the acoustic kit", () => {
     expect(hat[0]).not.toBe(hat[1]);
   });
 
+  it("trims the ride's layers by how loud they ring, so a harder stroke never jumps", () => {
+    // its mf stroke peaks no higher than its mp one but rings 12.5 dB louder: trimmed by its peak
+    // it came in 5 dB over the layer below, where the ride is played (0.60: -33.0 LUFS, 0.70: -17.4)
+    const [pp, mp, mf] = [30, 64, 110].map((v) => covering(DRUM.ride, v)[0].volume ?? 0);
+    expect(mp).toBeLessThan(pp);
+    expect(mf).toBeLessThan(mp - 6);
+  });
+
   it("chokes the open hat with the closed and pedal hat", () => {
     // smplr: a region with offBy N, when it plays, stops the voices in group N
     const open = covering(DRUM.hatOpen, 100)[0].group;

@@ -441,14 +441,16 @@ interface KitPiece {
  * softest tap peaks 27 dB under its hardest), and smplr scales by velocity on top of that, so
  * each layer is trimmed onto a gentle curve, -13 dB for the softest up to -1 dB for the hardest
  * (a single-layer piece sits at -3, like the LinnDrum the drum parts were balanced on).
+ * `rings` takes dB more off a layer that rings louder than its peak says (a cymbal's peak is the
+ * stick's click, not the wash after it).
  */
-function layers(peaks: number[], file: (layer: number, rr: number) => string, rr = 2): KitLayer[] {
+function layers(peaks: number[], file: (layer: number, rr: number) => string, rr = 2, rings: number[] = []): KitLayer[] {
   const n = peaks.length;
   const out: KitLayer[] = [];
   peaks.forEach((peak, i) => {
     const vel: [number, number] = [i === 0 ? 1 : Math.round((127 * i) / n) + 1, Math.round((127 * (i + 1)) / n)];
     const target = n === 1 ? -3 : -13 + (12 * i) / (n - 1);
-    const trim = Math.round(Math.min(24, target - peak) * 10) / 10;
+    const trim = Math.round(Math.min(24, target - peak - (rings[i] ?? 0)) * 10) / 10;
     for (let k = 1; k <= rr; k++) out.push({ file: file(i, k), vel: n > 1 ? vel : undefined, rr: rr > 1 ? k : undefined, trim });
   });
   return out;
@@ -473,7 +475,11 @@ export const ACOUSTIC_KIT: KitPiece[] = [
   { keys: [42], offBy: 1, layers: layers([-36.3, -24.1, -13.7, -8.3], (i, k) => `${HAT}/HiHat_HitC_v${i + 1}_rr${k}_Mid`) },
   { keys: [44], offBy: 1, layers: layers([-21.7], (_, k) => `${HAT}/HiHat_Close_rr${k}_Mid`) },
   { keys: [46], group: 1, release: 0.08, layers: layers([-10.4], (_, k) => `${HAT}/HiHat_HitO_rr${k}_Mid`) },
-  { keys: [51, 59], pitch: 51, release: 1.2, layers: layers([-32.5, -18.8, -18.1], (i) => `${RIDE}_stick_${["pp1", "mp1", "mf1"][i]}`, 1) },
+  // the ride's mf stroke peaks no higher than its mp one but rings 12.5 dB louder: trimmed by its
+  // peak, a stroke either side of velocity 0.67 (where the ride is played, the drummer's jitter
+  // flipping it between the two) jumped 15 LU (0.60: -33.0 LUFS, 0.70: -17.4), and a swing out
+  // head's ride drowned the tune. Taken off, the two layers meet level.
+  { keys: [51, 59], pitch: 51, release: 1.2, layers: layers([-32.5, -18.8, -18.1], (i) => `${RIDE}_stick_${["pp1", "mp1", "mf1"][i]}`, 1, [0, 0, 12.5]) },
   { keys: [53], release: 1.2, layers: layers([-16.9, -12.5], (i) => `${RIDE}_bell_${["p1", "f1"][i]}`, 1) },
   { keys: [49, 57], pitch: 49, release: 1.5, layers: layers([-34.1, -25.3, -15.5], (i) => `${CRASH}_stick_${["pp1", "mp1", "f1"][i]}`, 1) },
   // the rack toms are VCSL's high tom, the floor toms its low one, each retuned a little
@@ -699,7 +705,10 @@ const SOUNDFONT_NAME: Record<InstrumentId, string> = {
  * same touch, bounced offline, and is brought to the grand's loudness (−21.7 LUFS, within 1 LU;
  * "Measure the packs" in the audio lab). The packs differ by up to 9 dB out of the box: the VCSL
  * vibraphone, the cello and the clarinet/sax soundfonts are hot, the organ and the bass quiet. The
- * drums are matched on a groove. Musical balance (melody on top) is done by role, not here.
+ * drums were matched on a groove whose ride sat on its top layer, then 12.5 dB too hot (see the
+ * kit): that groove now reads 6.8 LU lower, all of it the ride, and the kit stays where it was,
+ * since the rest of it measured in balance (or a little loud) under the band. Musical balance
+ * (melody on top) is done by role, not here.
  */
 export const DEFAULT_VOLUME: Record<InstrumentId, number> = {
   piano: 106,
