@@ -94,7 +94,7 @@ describe("held notes", () => {
       for (let midi = lo; midi <= hi; midi++) {
         const loop = byMidi.get(midi);
         expect(loop, `${name} ${midi}`).toBeDefined();
-        // goldst.dev's trumpet looped 2 to 6 ms from half a second in: a buzz at another pitch
+        // goldst.dev's trumpet looped 1.5 to 9 ms from half a second in: a buzz at another pitch
         const [start, end] = loop!.map((x) => x / 44100);
         expect(end - start, `${name} ${midi} loop length`).toBeGreaterThanOrEqual(0.5);
         expect(end - start, `${name} ${midi} loop length`).toBeLessThanOrEqual(1.6);
