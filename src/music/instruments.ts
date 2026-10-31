@@ -159,6 +159,10 @@ export const DRUM = {
 
 export type DrumPiece = "kick" | "snare" | "hat" | "ride" | "crash" | "tom" | "aux";
 
+const CYMBALS = new Set([DRUM.crash, 57, DRUM.ride, 59, DRUM.rideBell]);
+/** A suspended cymbal (crash or ride), which a roll swells on. */
+export const isCymbal = (pitch: number) => CYMBALS.has(pitch as 49);
+
 export function drumPiece(pitch: number): DrumPiece {
   switch (pitch) {
     case DRUM.kick:

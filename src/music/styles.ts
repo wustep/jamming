@@ -24,6 +24,8 @@ export interface StyleDef {
   contours: number[][];
   /** Drum fill density 0..1 */
   fills: number;
+  /** The drummer plays soft mallets, not sticks: cymbals bloom and swell, toms thud. */
+  mallets?: boolean;
   /** Comp voicing family. */
   voicing: "rootless" | "triad" | "open" | "quartal" | "shell" | "ringing";
   /** Feel label for the sheet. */
@@ -276,6 +278,7 @@ export const STYLES: Record<StyleId, StyleDef> = {
       [0, 3, 2, 4],
     ],
     fills: 0,
+    mallets: true,
     voicing: "quartal",
     feelLabel: "Floating",
   },

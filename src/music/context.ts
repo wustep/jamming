@@ -30,6 +30,8 @@ export interface PlayerMemory {
   lastFill: string | null;
   /** Absolute beat a held pad chord rings until (it floats over the barline instead of re-striking). */
   padHeldUntil: number;
+  /** Absolute beat the drummer's last cymbal roll swells up to (its peak is that bar's bloom). */
+  rollInto: number;
 }
 
 export function newMemory(): PlayerMemory {
@@ -48,6 +50,7 @@ export function newMemory(): PlayerMemory {
     lastTier: null,
     lastFill: null,
     padHeldUntil: -1,
+    rollInto: -1,
   };
 }
 

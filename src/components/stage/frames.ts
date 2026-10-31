@@ -1,8 +1,9 @@
 import { applyFeel, pocketOf } from "@/audio/feel";
 import { bowsLines, strokesOf, swellsOf } from "@/music/bowing";
 import { DYNAMIC_ENERGY } from "@/music/context";
-import { INSTRUMENTS } from "@/music/instruments";
+import { INSTRUMENTS, isCymbal } from "@/music/instruments";
 import { isFeaturedRole } from "@/music/realize";
+import { STYLES } from "@/music/styles";
 import type { ActiveNote, MemberFrameState, NoteEvent, OnsetInfo, Score, UpcomingOnset } from "@/music/types";
 
 // Turns the score + playhead into per-member animation state every frame.
@@ -12,6 +13,8 @@ import type { ActiveNote, MemberFrameState, NoteEvent, OnsetInfo, Score, Upcomin
 
 /** How far ahead rigs can see (seconds): enough for a stick or hand to wind up. */
 const LOOKAHEAD_SEC = 0.6;
+/** A cymbal roll's mallet strokes, in beats apart. */
+const ROLL_STEP = 1 / 6;
 
 interface Track {
   start: Float64Array; // felt start, beats
@@ -51,6 +54,16 @@ export class FrameComputer {
         }
         return { s, e, p, x };
       });
+      // a cymbal roll is mallet strokes getting louder up to the beat it lands on, where the
+      // swell peaks and the part strikes its next note (the audio engine plays it as one swell)
+      for (const r of felt.filter((f) => m.instrument === "drums" && f.x.art === "roll" && isCymbal(f.p))) {
+        felt.splice(felt.indexOf(r), 1);
+        const n = Math.max(1, Math.round((r.e - r.s) / ROLL_STEP));
+        for (let k = 0; k < n; k++) {
+          const s = r.s + ((r.e - r.s) * k) / n;
+          felt.push({ s, e: s + ROLL_STEP, p: r.p, x: { ...r.x, start: s, dur: ROLL_STEP, vel: r.x.vel * (0.25 + (0.75 * (k + 1)) / n) } });
+        }
+      }
       // sorted by when they're heard (a late backbeat can land after a hat struck on the same beat)
       felt.sort((a, b) => a.s - b.s);
       const n = felt.length;
@@ -142,6 +155,7 @@ export class FrameComputer {
       energy: DYNAMIC_ENERGY[bp?.dynamic ?? "mf"],
       featured: isFeaturedRole(role),
       lookX: this.lookX(memberId, bar),
+      mallets: !!STYLES[score.frame.style]?.mallets,
     };
     const t = this.tracks.get(memberId);
     if (!t || !playing || !Number.isFinite(beat)) return base;

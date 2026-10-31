@@ -1,10 +1,14 @@
 import { DrumMachine, Reverb, Scheduler, type Smplr, type StopFn } from "smplr";
 import type { InstrumentId, Member, NoteEvent, Score, StyleId } from "@/music/types";
-import { INSTRUMENTS } from "@/music/instruments";
+import { INSTRUMENTS, isCymbal } from "@/music/instruments";
+import { STYLES } from "@/music/styles";
 import { applyFeel, beatAt, beatToSeconds, ghostVel, jitter, pocketOf, secAt, spbAt, type TempoMap } from "./feel";
 import {
   DECAYING,
   instrumentVolume,
+  kitHas,
+  kitKeys,
+  MALLET_KEY,
   REVERB_SEND,
   lm2Sample,
   packChain,
@@ -13,6 +17,8 @@ import {
   RELEASE_SEC,
   ROOM_SEND,
   DEFAULT_SOUNDS,
+  SWELL_RING,
+  swellFor,
   type DrumKit,
   type PackSpec,
   type PianoPack,
@@ -69,6 +75,8 @@ interface InstEntry {
   failedAt?: number;
   /** Last time a member was assigned this entry (a counter), for keeping a few spares. */
   used: number;
+  /** Samples being added for a later chart's notes (spec.extend), until they're in. */
+  extending?: Promise<void>;
 }
 
 /** Unused instruments kept loaded so switching back is instant; older ones are disposed. */
@@ -94,6 +102,8 @@ interface Track {
   voices: VoiceBook;
   /** Numbers each started voice, so it can be let go on its own. */
   serial: number;
+  /** A drummer playing soft mallets (the style's): cymbals and toms use the kit's mallet keys. */
+  mallets: boolean;
 }
 
 type SmplrNote = Exclude<Parameters<Smplr["start"]>[0], string | number>;
@@ -122,6 +132,8 @@ function playThroughSilentSwitch() {
 /** +4 dB after the bus compressor (the limiter adds ~2.3 dB of its own make-up): see ensureContext. */
 const MAKEUP_GAIN = 1.6;
 const END_TAIL_SEC = 0.8;
+/** A swell starts at most this long after its roll does: the Scheduler dispatches 4 s ahead, and only what it has dispatched can be stopped. */
+const MAX_SWELL_LEAD_SEC = 3.5;
 /** How long a pitched note's voice goes on after its written end (the packs' releases run 0.3–0.7 s). */
 const RING_SEC = 0.4;
 const PAN_WIDTH = 0.65;
@@ -189,12 +201,18 @@ function endBeatOf(score: Score): number {
   return end;
 }
 
-/** Pitches each member plays — handy as `prepare(..., { notesHint })`. */
-/** Pitches each member will need. Plucked notes on bowed strings go under "<id>|pizz". */
+/** Whether this score's drummer plays soft mallets (its style says so). */
+const malletsIn = (score: Score) => !!STYLES[score.frame?.style]?.mallets;
+
+/**
+ * Pitches each member will need (handy as `prepare(..., { notesHint })`). Plucked notes on bowed
+ * strings go under "<id>|pizz"; a drummer's include the kit's mallet and swell keys it plays.
+ */
 export function notesHintFromScore(score: Score): Record<string, number[]> {
   const out: Record<string, number[]> = {};
   for (const [id, notes] of Object.entries(score.parts ?? {})) {
     out[id] = [...new Set(notes.filter((n) => n.art !== "pizz").map((n) => n.pitch))];
+    if (score.members?.find((m) => m.id === id)?.instrument === "drums") out[id].push(...kitKeys(notes, malletsIn(score), 60 / (tempoOf(score) || 120)));
     const pizz = notes.filter((n) => n.art === "pizz");
     if (pizz.length) out[`${id}|pizz`] = [...new Set(pizz.map((n) => n.pitch))];
   }
@@ -407,25 +425,36 @@ export class TroopAudio {
           /* disposed */
         }
       }
-      if (hint && hint.length && entry.spec?.extend && entry.inst && entry.ready) {
-        const fresh = hint.filter((n) => !entry.notes.has(n));
-        if (fresh.length) {
-          for (const n of fresh) entry.notes.add(n);
-          const inst = entry.inst;
-          const storage = entry.storage;
-          waits.push(
-            entry.spec
-              .extend(inst, [...entry.notes], storage?.failedUrls ?? new Set())
-              .catch((err) => console.warn("[audio] extend failed", err)),
-          );
-        }
-      }
+      // notes this chart needs that the instrument hasn't loaded (once it has loaded at all)
+      if (hint?.length) waits.push(entry.ready ? this.extendEntry(entry, hint) : entry.done.then(() => this.extendEntry(entry, hint)));
       waits.push(entry.done);
     }
     this.sweepEntries();
     this.emitLoad();
     await Promise.all(waits);
     this.emitLoad();
+  }
+
+  /**
+   * Load the samples for notes an instrument hasn't loaded yet (packs that can: spec.extend), and
+   * resolve once they're in, along with any extending already under way.
+   */
+  private extendEntry(entry: InstEntry, hint: number[]): Promise<void> {
+    const fresh = hint.filter((n) => !entry.notes.has(n));
+    if (fresh.length && entry.spec?.extend && entry.inst && entry.ready) {
+      for (const n of fresh) entry.notes.add(n);
+      const spec = entry.spec;
+      const inst = entry.inst;
+      const failed = entry.storage?.failedUrls ?? new Set<string>();
+      const next = (entry.extending ?? Promise.resolve())
+        .then(() => spec.extend!(inst, [...entry.notes], failed))
+        .catch((err) => console.warn("[audio] extend failed", err));
+      entry.extending = next;
+      void next.then(() => {
+        if (entry.extending === next) entry.extending = undefined;
+      });
+    }
+    return entry.extending ?? Promise.resolve();
   }
 
   /**
@@ -754,6 +783,7 @@ export class TroopAudio {
         beats: beatsPerBar(score),
         voices: new VoiceBook(VOICE_CAP[m.instrument] ?? 8, m.instrument !== "drums"),
         serial: 0,
+        mallets: m.instrument === "drums" && malletsIn(score),
       };
     });
   }
@@ -762,6 +792,13 @@ export class TroopAudio {
     const prev = this.score;
     this.score = score;
     if (this.state !== "playing" || !prev) return;
+    // a model's take arrives a phrase at a time: a drummer's mallets and swells load as they come
+    // (other instruments play a note they haven't loaded on its nearest sample meanwhile)
+    const hint = notesHintFromScore(score);
+    for (const m of score.members ?? []) {
+      const entry = m.instrument === "drums" ? this.entries.get(this.memberEntry.get(m.id) ?? "") : undefined;
+      if (entry && hint[m.id]?.length) void this.extendEntry(entry, hint[m.id]);
+    }
     this.endBeat = endBeatOf(score);
     this.rit = score.rit;
     const byId = new Map(this.tracks.map((t) => [t.memberId, t]));
@@ -787,6 +824,7 @@ export class TroopAudio {
         beats: beatsPerBar(score),
         voices: old?.voices ?? new VoiceBook(VOICE_CAP[m.instrument] ?? 8, m.instrument !== "drums"),
         serial: old?.serial ?? 0,
+        mallets: m.instrument === "drums" && malletsIn(score),
       };
     });
   }
@@ -1341,13 +1379,33 @@ export class TroopAudio {
     vel *= 1 + jitter(isDrum ? 0.06 : track.feel.humanize, id, note.start, note.pitch, "v");
     vel = clamp(vel, 0.02, 1);
 
+    // a roll on a cymbal leads to its end: the swell peaks there (and a kit with no swell, or
+    // the LinnDrum, strikes the cymbal there instead)
+    // a roll on a cymbal swells up to its end (where the part strikes the next note itself). A kit
+    // with no swell for it, the LinnDrum included, leaves it out
+    const roll = isDrum && note.art === "roll" && isCymbal(note.pitch);
+    const swell =
+      roll && entry.pack !== "lm-2" ? swellFor(Math.max(0, this.noteTime(track, { ...note, start: note.start + note.dur }, swing) - time), (k) => kitHas(inst, k)) : null;
+    // (nor one that would start beyond the scheduler's lookahead, which Stop can't take back)
+    if (roll && (!swell || swell.lead > MAX_SWELL_LEAD_SEC)) return;
+
     try {
       if (isDrum && entry.pack !== "lm-2") {
-        // the acoustic kit is keyed by General MIDI drum note; the hats choke in its own preset
-        track.voices.admit(note.pitch, time);
+        // the acoustic kit is keyed by General MIDI drum note, plus its mallet and swell keys; the
+        // hats choke in its own preset
+        const mallet = MALLET_KEY[note.pitch];
+        let key = track.mallets && mallet !== undefined && kitHas(inst, mallet) ? mallet : note.pitch;
+        let at = time;
+        let ring = drumRing(note.pitch);
+        if (swell) {
+          key = swell.key;
+          at = time + swell.lead;
+          ring = swell.peak + SWELL_RING;
+        }
+        track.voices.admit(key, at);
         const stopId = `${id}#${++track.serial}`;
-        const stop = inst.start({ note: note.pitch, velocity: Math.round(1 + vel * 126), time, stopId });
-        track.voices.add(note.pitch, time, time + drumRing(note.pitch), stop);
+        const stop = inst.start({ note: key, velocity: Math.round(1 + vel * 126), time: at, stopId });
+        track.voices.add(key, at, at + ring, stop);
       } else if (isDrum) {
         const sample = lm2Sample(note.pitch, vel, note.art);
         if (!sample) {

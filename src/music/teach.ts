@@ -45,7 +45,7 @@ const GROOVES: Record<StyleId, Technique> = {
   neworleans: t("street-beat", "street beat", "A marching snare full of rolls, from New Orleans street parades."),
   minimal: t("pulse", "steady pulse", "Shaker 16ths that never change: the grid the patterns turn over."),
   baroque: t("timpani", "low drum on 1 and 3", "A low drum marking the strong beats, the way timpani do in an orchestra."),
-  ambient: t("wash", "cymbal wash", "Soft mallets on the cymbal: colour and air, not time."),
+  ambient: t("swells", "cymbal swells", "Soft mallets roll on a cymbal so it swells up into the next chord: colour and air, not time."),
   postrock: t("swells", "cymbal swells", "Mallets rolled on a cymbal, swelling into the next phrase: no beat yet."),
 };
 /** A post-rock drummer climbs with the band: what they're playing at each stage of the build. */
