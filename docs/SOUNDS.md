@@ -26,6 +26,7 @@ The packs differ by up to 16 dB out of the box, so each one is level-matched. "M
 - Packs that aren't level with their instrument's others carry their own volume (`PackSpec.volume`): the electric pianos (`EPIANO_VOLUME`; at the piano's volume the Wurlitzer runs 9 dB over Salamander, the CP80 7.5 dB) and the Splendid grand (`SPLENDID_VOLUME`, 11 dB over).
 - Musical balance is a separate step: `ROLE_MIX` in `src/music/realize.ts` sets each part's touch by its role (the tune on top, the rhythm section under it, counter-lines and pads further under). `measureTake` in `src/audio/levels.ts` (the dev handle `__jamming.levels()` on the main page) bounces a take and each player alone, section by section, to check it.
 - VCSL records its drum layers at their natural level: a snare's softest tap peaks 27 dB under its hardest. smplr also scales by velocity, so each layer is trimmed onto one curve, from −13 dBFS for the softest layer up to −1 dBFS for the hardest. The peaks were measured from the decoded samples and are written next to each piece in `ACOUSTIC_KIT`.
+- The vibraphone was matched while its sample set still let every note ring for 15 seconds. Once notes let go over half a second (`RELEASE_SEC`), it measured 3 LU under the grand, so it was matched again.
 
 ## Held notes
 

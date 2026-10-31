@@ -606,7 +606,9 @@ export const DEFAULT_VOLUME: Record<InstrumentId, number> = {
   violin: 114,
   cello: 85,
   guitar: 104,
-  vibes: 59,
+  // matched again once its notes let go over 0.5 s instead of ringing out for 15 s (RELEASE_SEC),
+  // which had left it 3 LU under the grand
+  vibes: 70,
   organ: 100,
   pad: 96,
 };
