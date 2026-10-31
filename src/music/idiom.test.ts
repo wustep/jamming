@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DRUM, defaultMembers } from "./instruments";
 import { defaultSettings, generateLocal } from "./local";
+import { STYLES } from "./styles";
 import { harmonyOf } from "./realize";
 import { techniqueAt } from "./teach";
 import { mod } from "./theory";
@@ -142,5 +143,58 @@ describe("each style sounds like itself", () => {
       long += s.parts.frog.filter((n) => n.dur > 4).length;
     }
     expect(long).toBeGreaterThan(50);
+  });
+});
+
+describe("the tune on top", () => {
+  it("a funk rhythm section plays under the tune, and only there", () => {
+    // a funk head's bass plays nearly three times the notes of a swing head's, and the drums twice
+    // the hits, at the same touch: bounced, the tune sat 3 LU under the rest of the band (Stevie
+    // Wonder's 5) where a swing tune sits 4 over. Played 0.8 of the touch, it's 1–2 LU over.
+    const plain = (seed: number) => {
+      const under = STYLES.funk.underTune;
+      delete STYLES.funk.underTune;
+      try {
+        return take("funk", seed);
+      } finally {
+        STYLES.funk.underTune = under;
+      }
+    };
+    for (const seed of [1, 2, 3]) {
+      const s = take("funk", seed);
+      const was = plain(seed);
+      const beats = s.frame.meter.beats;
+      let under = 0;
+      for (const id of ["bear", "frog", "owl", "fox"]) {
+        s.parts[id].forEach((n, i) => {
+          const bar = barOf(s, n);
+          const kind = s.frame.sections.find((x) => bar >= x.start && bar < x.start + x.length)!.kind;
+          const role = s.plan[bar].roles[id];
+          const tuneHere = (kind === "head" || kind === "out") && Object.values(s.plan[bar].roles).includes("lead");
+          const rhythm = role === "bass" || role === "groove" || role === "comp";
+          const ratio = n.vel / was.parts[id][i].vel;
+          expect(was.parts[id][i].start, `${seed} ${id}`).toBeCloseTo(n.start, 6);
+          if (tuneHere && rhythm) {
+            under++;
+            expect(ratio, `${seed} ${id} bar ${bar + 1}`).toBeCloseTo(0.8, 3);
+          } else expect(ratio, `${seed} ${id} bar ${bar + 1} (${kind}, ${role}) at ${n.start - bar * beats}`).toBeCloseTo(1, 3);
+        });
+      }
+      expect(under).toBeGreaterThan(100);
+    }
+  });
+
+  it("an ambient pianist's shimmer is played to be heard under the tune", () => {
+    // its bells were written at 0.42 of the touch, 25 LU under the band in a head: inaudible
+    for (const seed of [1, 2, 3]) {
+      const s = take("ambient", seed);
+      const head = s.frame.sections.find((x) => x.kind === "head")!;
+      const beats = s.frame.meter.beats;
+      const bells = s.parts.bear.filter((n) => n.start >= head.start * beats && n.start < (head.start + head.length) * beats && n.pitch >= 67);
+      const tune = s.parts.fox.filter((n) => n.start >= head.start * beats && n.start < (head.start + head.length) * beats);
+      const mean = (xs: NoteEvent[]) => xs.reduce((x, n) => x + n.vel, 0) / Math.max(1, xs.length);
+      expect(bells.length, `seed ${seed}`).toBeGreaterThan(0);
+      expect(mean(bells) / mean(tune), `seed ${seed}`).toBeGreaterThan(0.45);
+    }
   });
 });

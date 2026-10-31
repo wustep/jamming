@@ -26,6 +26,11 @@ export interface StyleDef {
   fills: number;
   /** The drummer plays soft mallets, not sticks: cymbals bloom and swell, toms thud. */
   mallets?: boolean;
+  /**
+   * The rhythm section's touch while someone plays the tune, for a style whose bass and drums are
+   * busy enough to cover it at the touch everyone else uses (1 when absent).
+   */
+  underTune?: number;
   /** Comp voicing family. */
   voicing: "rootless" | "triad" | "open" | "quartal" | "shell" | "ringing";
   /** Feel label for the sheet. */
@@ -120,6 +125,10 @@ export const STYLES: Record<StyleId, StyleDef> = {
       [0, -1, 0, 3, 4],
     ],
     fills: 0.35,
+    // a funk head's bass plays nearly three times the notes of a swing head's and the drums twice
+    // the hits, at the same touch: the tune measured 3 LU under the rest of the band (Stevie's 5),
+    // where a swing tune sits 4 over. Under the tune they play about 4 dB softer.
+    underTune: 0.8,
     voicing: "shell",
     feelLabel: "Funk (straight 16ths)",
   },
