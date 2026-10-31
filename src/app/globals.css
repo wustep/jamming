@@ -582,19 +582,19 @@ body {
   }
 }
 
-/* on a touch screen, small controls get a finger-sized hit area (unlayered, so it beats a
+/* on a touch screen, small controls get a finger-sized hit area, 44px (unlayered, so it beats a
    utility's smaller min size); form fields get the same height */
 @media (pointer: coarse) {
   .tap {
-    min-height: 2.5rem;
-    min-width: 2.5rem;
+    min-height: 2.75rem;
+    min-width: 2.75rem;
   }
   .sketch-select,
   .sketch-input {
-    min-height: 2.5rem;
+    min-height: 2.75rem;
   }
   .sketch-range {
-    height: 2.5rem;
+    height: 2.75rem;
   }
 }
 

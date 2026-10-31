@@ -101,12 +101,13 @@ export function Transport() {
           <span className="min-w-0 flex-1 truncate text-s text-ink-soft">
             {gen.running ? gen.status : current ? current.title : ""}
           </span>
+          {/* as tall as the play button: a thumb's width */}
           {gen.running ? (
-            <RoughButton seed="dock-cancel" tone="quiet" className="shrink-0 px-s py-xxs font-brand text-l font-heavy" onClick={cancel} aria-label="Stop thinking">
+            <RoughButton seed="dock-cancel" tone="quiet" className="min-h-11 shrink-0 px-s py-xxs font-brand text-l font-heavy" onClick={cancel} aria-label="Stop thinking">
               Stop
             </RoughButton>
           ) : (
-            <RoughButton seed="dock-go" tone="primary" className="shrink-0 px-s py-xxs font-brand text-l font-heavy text-on-accent" onClick={() => void generate()}>
+            <RoughButton seed="dock-go" tone="primary" className="min-h-11 shrink-0 px-s py-xxs font-brand text-l font-heavy text-on-accent" onClick={() => void generate()}>
               {goLabel}
             </RoughButton>
           )}
