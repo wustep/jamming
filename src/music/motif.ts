@@ -146,6 +146,7 @@ export function parseMotifOps(args: string[], unknown?: string[]): MotifOp[] {
     else if (a.startsWith("aug")) ops.push({ op: "augment" });
     else if (a.startsWith("dim")) ops.push({ op: "diminish" });
     else if (a.startsWith("frag")) ops.push({ op: "fragment", n: num(0) });
+    else if (a.startsWith("add")) ops.push({ op: "additive", n: num(2) });
     else if (a.startsWith("disp") || a.startsWith("phase")) ops.push({ op: "displace", n: num(0.5) });
     else if (a.startsWith("orn")) ops.push({ op: "ornament" });
     else if (a.startsWith("rhy")) ops.push({ op: "rhythm" });
@@ -196,6 +197,24 @@ export function transformMotif(motif: Motif, ops: MotifOp[], key: KeySig, rng: R
         notes = notes.slice(0, k);
         const end = notes[notes.length - 1];
         length = Math.ceil(end.start + end.dur);
+        break;
+      }
+      case "additive": {
+        // Glass's additive process: the first k notes on repeat through the statement (k one
+        // more each time it comes round), so a cell of three 8ths turns against a bar of four
+        const k = Math.max(1, Math.min(notes.length, Math.round(n ?? 2)));
+        const cell = notes.slice(0, k);
+        const t0 = cell[0].start;
+        const next = notes[k]?.start;
+        const span = next !== undefined ? next - t0 : Math.max(0.25, cell[k - 1].start + cell[k - 1].dur / 0.95 - t0);
+        const out: NoteEvent[] = [];
+        for (let rep = 0; t0 + rep * span < length - 1e-6; rep++) {
+          for (const x of cell) {
+            const at = x.start + rep * span;
+            if (at < length - 1e-6) out.push({ ...x, start: at, dur: Math.min(x.dur, length - at) });
+          }
+        }
+        notes = out;
         break;
       }
       case "sequence": {

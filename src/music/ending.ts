@@ -31,6 +31,8 @@ export const ENDINGS: Record<StyleId, Ending> = {
   minimal: { kind: "button", slow: 1, ritBars: 0 },
   baroque: { kind: "cadence", slow: 1.35, ritBars: 2 },
   ambient: { kind: "fade", slow: 1.25, ritBars: 2 },
+  // the crest lands on the tonic and rings out under the cymbals, broadening into it
+  postrock: { kind: "ring", slow: 1.15, ritBars: 2 },
 };
 
 /** The ritardando into a chart's final bar, in beats, or undefined when it stays in tempo. */

@@ -1,5 +1,5 @@
 import { DrumMachine, Reverb, Scheduler, type Smplr, type StopFn } from "smplr";
-import type { InstrumentId, Member, NoteEvent, Score } from "@/music/types";
+import type { InstrumentId, Member, NoteEvent, Score, StyleId } from "@/music/types";
 import { INSTRUMENTS, isCymbal } from "@/music/instruments";
 import { STYLES } from "@/music/styles";
 import { applyFeel, beatAt, beatToSeconds, ghostVel, jitter, pocketOf, secAt, spbAt, type TempoMap } from "./feel";
@@ -25,6 +25,7 @@ import {
   type Sounds,
 } from "./packs";
 import { tuneRoom } from "./room";
+import { echoSeconds, echoSend, makeEchoBus, type EchoBus } from "./echo";
 import { bowedOf, planBow, type BowJoin, type BowPlan } from "./bowed";
 import { VOICE_CAP, VoiceBook, drumRing } from "./voices";
 import { articulate, feelOf, metricLift, type PlayingFeel } from "@/music/playing";
@@ -236,6 +237,9 @@ export class TroopAudio {
   private analyser: AnalyserNode | null = null;
   private levelBuf: Float32Array<ArrayBuffer> | null = null;
   private reverb: ReturnType<typeof Reverb> | null = null;
+  /** The tempo-synced delay (echo.ts), and the style whose sends it's set for. */
+  private echo: EchoBus | null = null;
+  private echoStyle: StyleId | undefined = undefined;
   private scheduler: ReturnType<typeof Scheduler> | null = null;
   private entries = new Map<string, InstEntry>();
   private memberEntry = new Map<string, string>();
@@ -340,6 +344,12 @@ export class TroopAudio {
     } catch (err) {
       console.warn("[audio] reverb unavailable", err);
       this.reverb = null;
+    }
+    try {
+      this.echo = makeEchoBus(ctx, master, this.reverb?.input ?? null);
+    } catch (err) {
+      console.warn("[audio] delay unavailable", err);
+      this.echo = null;
     }
     // Large lookahead so every note we hand smplr is dispatched synchronously; we own timing.
     // (Offline, the whole render is the lookahead: its clock only moves once every note is in.)
@@ -565,6 +575,13 @@ export class TroopAudio {
             /* ignore */
           }
         }
+        if (this.echo) {
+          try {
+            inst.output.addEffect("echo", this.echo, echoSend(this.echoStyle, entry.instrument));
+          } catch {
+            /* ignore */
+          }
+        }
         entry.inst = inst;
         entry.ready = true;
         entry.failed = false;
@@ -723,6 +740,7 @@ export class TroopAudio {
     const countIn = opts.countIn ?? fromBar === 0;
     this.spb = beatToSeconds(1, tempoOf(score));
     this.rit = score.rit;
+    this.setEcho(score);
     this.startBeat = fromBar * bpb;
     this.endBeat = endBeatOf(score);
     this.loop = !!opts.loop;
@@ -825,6 +843,7 @@ export class TroopAudio {
     this.score = score;
     this.spb = beatToSeconds(1, tempoOf(score));
     this.rit = score.rit;
+    this.setEcho(score);
     this.t0 = ctx.currentTime - this.sec(beat);
     this.prevT0 = this.t0;
     return true;
@@ -832,6 +851,25 @@ export class TroopAudio {
 
   stop(): void {
     this.halt(false);
+  }
+
+  /** The delay for this score: a dotted 8th at its tempo, and its style's sends (none for most). */
+  private setEcho(score: Score) {
+    const echo = this.echo;
+    if (!echo) return;
+    this.echoStyle = score.frame?.style;
+    try {
+      echo.delay.delayTime.setValueAtTime(echoSeconds(this.spb), echo.delay.context.currentTime);
+    } catch {
+      /* closed */
+    }
+    for (const e of this.entries.values()) {
+      try {
+        e.inst?.output.setEffectMix("echo", echoSend(this.echoStyle, e.instrument));
+      } catch {
+        /* not loaded yet: it picks up the send when it is */
+      }
+    }
   }
 
   /** New sounds: a new room is heard at once (the samples change on the next prepare). */
@@ -1034,6 +1072,7 @@ export class TroopAudio {
     engine.score = score;
     engine.spb = spb;
     engine.rit = score.rit;
+    engine.setEcho(score);
     engine.t0 = engine.prevT0 = START_DELAY_SEC;
     engine.endBeat = end;
     engine.buildTracks(score, 0);

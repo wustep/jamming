@@ -54,8 +54,11 @@ export function motifForFrame(frame: Frame, members: Member[], rng = makeRng(1))
   // the tune sits in the upper middle of the leader's voice, over the band. A melody instrument
   // whose comfortable range starts low sings it where its melodies live: from the bottom of that
   // range, a cello's tune sat under the piano's comping. (A keyboard voices its own hands.)
-  const voice = inst.fn === "melodic" && inst.sweet[0] + 5 < 55 && inst.solo ? inst.solo : inst.sweet;
-  const range: [number, number] = [voice[0] + 5, Math.min(voice[1], voice[0] + 22)];
+  // A post-rock tune sings near the top of the voice, over the guitars' wash (a guitar leads from
+  // its solo register, not where it comps).
+  const high = frame.style === "postrock";
+  const voice = (inst.fn === "melodic" && inst.sweet[0] + 5 < 55) || (high && inst.id === "guitar") ? (inst.solo ?? inst.sweet) : inst.sweet;
+  const range: [number, number] = high ? [voice[0] + 9, Math.min(voice[1], voice[0] + 26)] : [voice[0] + 5, Math.min(voice[1], voice[0] + 22)];
   return generateMotif(STYLES[frame.style], frame.key, firstChord, frame.meter.beats, range, rng);
 }
 

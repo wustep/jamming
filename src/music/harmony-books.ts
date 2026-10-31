@@ -355,6 +355,44 @@ export const HARMONY_BOOKS: Record<BookId, BookDef> = {
       codas: [["bVImaj7", "bVImaj7", "i9", "i9"]],
     },
   },
+  // Post-rock: add9 triads a guitarist rings open, a chord a bar, mostly loops; the iii and vi
+  // that colour a tonic pedal, IV to I instead of V to I, and the borrowed iv for the ache.
+  postrock: {
+    name: "Post-rock",
+    forms: { period: 1, sentence: 2, loop: 4 },
+    major: {
+      heads: [["Iadd9", "Iadd9"], ["Iadd9", "iii7"], ["Iadd9", "IVadd9"], ["vi7", "IVadd9"]],
+      seqs: [["IVadd9", "IVadd9"], ["vi7", "IVadd9"], ["iii7", "IVadd9"], ["IVadd9", "vi7"], ["ii7", "IVadd9"]],
+      tails: {
+        closed: [["IVadd9", "Iadd9"], ["Vsus", "Iadd9"], ["IVmaj7", "Iadd9"]],
+        half: [["IVadd9", "Vsus"], ["vi7", "Vsus"]],
+        open: [["IVadd9", "IVadd9"], ["vi7", "vi7"], ["IVadd9", "iv"]],
+      },
+      phrases: {
+        closed: [["Iadd9", "iii7", "IVadd9", "Iadd9"], ["vi7", "IVadd9", "Vsus", "Iadd9"]],
+        half: [["Iadd9", "iii7", "IVadd9", "Vsus"]],
+        open: [["Iadd9", "Iadd9", "IVadd9", "IVadd9"], ["Iadd9", "vi7", "IVadd9", "IVadd9"]],
+      },
+      loops: [["Iadd9", "iii7", "IVadd9", "IVadd9"], ["vi7", "IVadd9", "Iadd9", "Iadd9"], ["Iadd9", "IVadd9"], ["Iadd9", "Iadd9", "vi7", "IVadd9"]],
+      codas: [["IVadd9", "IVadd9", "Iadd9", "Iadd9"], ["vi7", "IVadd9", "Iadd9", "Iadd9"]],
+    },
+    minor: {
+      heads: [["iadd9", "iadd9"], ["iadd9", "VIadd9"], ["iadd9", "IIIadd9"], ["iadd9", "iv7"]],
+      seqs: [["VIadd9", "VIadd9"], ["VIadd9", "IIIadd9"], ["IIIadd9", "VII"], ["iv7", "VIadd9"]],
+      tails: {
+        closed: [["VIadd9", "iadd9"], ["VII", "iadd9"], ["iv7", "iadd9"]],
+        half: [["VIadd9", "VII"], ["iv7", "Vsus"]],
+        open: [["VIadd9", "VIadd9"], ["IIIadd9", "VII"]],
+      },
+      phrases: {
+        closed: [["iadd9", "VIadd9", "VII", "iadd9"]],
+        half: [["iadd9", "VIadd9", "iv7", "Vsus"]],
+        open: [["iadd9", "VIadd9", "IIIadd9", "VII"], ["iadd9", "iadd9", "VIadd9", "VIadd9"]],
+      },
+      loops: [["iadd9", "VIadd9", "IIIadd9", "VII"], ["iadd9", "VIadd9"], ["VIadd9", "IIIadd9", "VII", "iadd9"]],
+      codas: [["VIadd9", "VII", "iadd9", "iadd9"]],
+    },
+  },
   // ── the artists' books ──
   romantic: {
     name: "Romantic",

@@ -4,7 +4,7 @@ import { DRUM, drumPiece } from "../instruments";
 import { parseDrumGrid } from "../notation";
 import { hashString } from "../rng";
 import { sigGroove } from "./signatures";
-import type { NoteEvent } from "../types";
+import type { NoteEvent, Texture } from "../types";
 
 type Grid = { base: string; light?: string; peak?: string };
 
@@ -31,7 +31,8 @@ export const GROOVES: Record<string, Record<number, Grid>> = {
   },
   funk: {
     4: {
-      base: "hh:x.x.x.x.x.x.x.x. sd:....X..g.g..X..g",
+      // 16ths on the hat, the 8ths leaning in, the 16ths between ghosted (one hand, the funk way)
+      base: "hh:xgxgxgxgxgxgxgxg sd:....X..g.g..X..g",
       light: "hh:x.x.x.x.x.x.x.x. sd:....X.......X...",
       peak: "hh:xxXxxxXxxxXxxxXx sd:....X..g.g..X..g cr:x...............",
     },
@@ -75,22 +76,32 @@ export const GROOVES: Record<string, Record<number, Grid>> = {
 
 export const FUNK_KICKS = ["bd:x.....x.x.x.....", "bd:x..x..x...x...x.", "bd:x.x....x..x.x..."].map((s) => s.slice(0, 19));
 
+/** A 4/4 grid cut down to a shorter bar. */
+function cutToMeter(text: string, beats: number): string {
+  if (beats >= 4) return text;
+  return text
+    .split(/\s+/)
+    .map((lane) => {
+      const [k, v] = lane.split(":");
+      return v ? `${k}:${v.slice(0, beats * 4)}` : lane;
+    })
+    .join(" ");
+}
+
 function gridFor(ctx: BarCtx, which: "base" | "light" | "peak"): string {
   const style = GROOVES[ctx.style.id] ?? GROOVES.swing;
   const g = style[ctx.beats] ?? style[4];
   let text = (which === "light" ? g.light : which === "peak" ? g.peak : undefined) ?? g.base;
-  if (ctx.beats !== 4 && !style[ctx.beats]) {
-    // cut a 4/4 grid down to the meter
-    text = text
-      .split(/\s+/)
-      .map((lane) => {
-        const [k, v] = lane.split(":");
-        return v ? `${k}:${v.slice(0, ctx.beats * 4)}` : lane;
-      })
-      .join(" ");
-  }
+  if (ctx.beats !== 4 && !style[ctx.beats]) text = cutToMeter(text, ctx.beats);
   if (ctx.style.id === "funk" && ctx.beats === 4) {
     text += " " + FUNK_KICKS[hashString(`${ctx.seed}:${ctx.section.start}`) % FUNK_KICKS.length];
+    // every other bar the hat opens on the "and" of 4 and rings into the one
+    if (ctx.bar % 2 === 1 && which === "base") text = text.replace(/hh:(\S{14})\S\S/, "hh:$1o.");
+  }
+  // New Orleans: the bass drum's "Big Four", the accent on beat 4 of every second bar that
+  // Buddy Bolden's drummers swung the parade with (the first bar keeps 1 and the "and" of 2)
+  if (ctx.style.id === "neworleans" && ctx.beats === 4 && which !== "light" && ctx.bar % 2 === 1) {
+    text = text.replace(/bd:\S+/, "bd:x.....x.....X...");
   }
   if (ctx.style.id === "bossa" && ctx.beats === 4) {
     text += ctx.bar % 2 === 0 ? " rim:x.....x.....x..." : " rim:....x.....x.....";
@@ -234,7 +245,34 @@ const FILL_SHAPES: Record<string, FillShape> = {
   },
   // bossa: a quiet cross-stick pickup into the next bar
   rim: (_ctx, start, len) => [hit(DRUM.stick, start + len - 1, 0.55), hit(DRUM.stick, start + len - 0.5, 0.7, "accent")],
+  // post-rock: a snare roll swelling from a whisper, the kick under its last beat
+  roll: (_ctx, start, len) => snareRoll(start, len, 0.25),
 };
+
+/**
+ * A drummer's build into the last chorus: the snare in 8ths through the first half of the bar,
+ * then 16ths, louder all the way, the kick on every beat underneath.
+ */
+function snareBuild(beats: number): NoteEvent[] {
+  const half = Math.floor(beats / 2);
+  const times: number[] = [];
+  for (let t = 0; t < beats - 1e-6; t += t < half - 1e-6 ? 0.5 : 0.25) times.push(t);
+  const out = times.map((t, i) => hit(DRUM.snare, t, 0.35 + 0.6 * (i / Math.max(1, times.length - 1)), i === times.length - 1 ? "accent" : undefined));
+  for (let b = 0; b < beats; b++) out.push(hit(DRUM.kick, b, 0.75));
+  return out;
+}
+
+/** 16ths on the snare from `start` for `len` beats, growing from `from` to an accent at the top. */
+function snareRoll(start: number, len: number, from: number): NoteEvent[] {
+  const out: NoteEvent[] = [];
+  const n = Math.round(len * 4);
+  for (let i = 0; i < n; i++) {
+    const x = n > 1 ? i / (n - 1) : 1;
+    out.push(hit(DRUM.snare, start + i * 0.25, from + (1 - from) * x * x, i === n - 1 ? "accent" : x < 0.4 ? "ghost" : undefined));
+  }
+  out.push(hit(DRUM.kick, start + len - 1, 0.7), hit(DRUM.kick, start + len - 0.5, 0.8));
+  return out;
+}
 
 /** Small fills (a beat) at phrase ends; big ones (two beats) into a new section. */
 const FILL_VOCAB: Record<string, { small: string[]; big: string[] }> = {
@@ -243,6 +281,7 @@ const FILL_VOCAB: Record<string, { small: string[]; big: string[] }> = {
   funk: { small: ["ghosts", "hats", "run"], big: ["ghosts", "toms", "run"] },
   bossa: { small: ["rim", "run"], big: ["rim", "run"] },
   pop: { small: ["setup", "run"], big: ["toms", "run"] },
+  postrock: { small: ["toms", "run"], big: ["roll", "toms"] },
 };
 
 /** Pick a fill shape for this style and length, never the same one twice in a row. */
@@ -291,8 +330,69 @@ function ambientKit(ctx: BarCtx): NoteEvent[] {
   return out;
 }
 
+/**
+ * Where a post-rock drummer is in the climb. Quiet, only cymbal swells; then floor tom and kick;
+ * then half-time on the ride; then a driving backbeat; at the top, crashes on every 8th. The bar
+ * before the crest is a snare roll. "light" holds the drummer back on the toms at most; "peak"
+ * pushes them to the crest once the band is loud enough to be there.
+ */
+export type PostrockStage = "swells" | "toms" | "halftime" | "drive" | "crest" | "roll";
+
+export function postrockStage(energy: number, texture: Texture, args: string[] = []): PostrockStage {
+  if (texture === "build") return "roll";
+  if (args.includes("peak") || texture === "peak") return energy >= 0.7 ? "crest" : "drive";
+  const stage: PostrockStage = energy < 0.4 ? "swells" : energy < 0.55 ? "toms" : energy < 0.7 ? "halftime" : energy < 0.85 ? "drive" : "crest";
+  if (args.includes("light") || texture === "sparse") return stage === "swells" ? "swells" : "toms";
+  return stage;
+}
+
+const POSTROCK_GRIDS: Record<Exclude<PostrockStage, "swells" | "roll">, string> = {
+  toms: "ft:x.g.x.g.x.g.x.g. bd:x.......x.......",
+  halftime: "rd:x.x.x.x.x.x.x.x. sd:........X....... bd:x.....x.........",
+  drive: "rd:x.x.x.x.x.x.x.x. sd:....X.......X... bd:x.....x.x.......",
+  crest: "cr:X.x.X.x.X.x.X.x. sd:....X.......X... bd:x...x...x...x...",
+};
+
+/**
+ * Post-rock drums climb with the band (see postrockStage). Quiet, a soft cymbal bloom opens each
+ * phrase and a mallet roll swells into the next; past that, the stage's grid, a crash at the top
+ * of each section once there's a beat, and fills only once the band is moving.
+ */
+function postrockKit(ctx: BarCtx): NoteEvent[] {
+  const stage = postrockStage(ctx.energy, ctx.texture, ctx.args);
+  let notes: NoteEvent[];
+  if (stage === "roll") {
+    // the whole bar rolls up into the crest
+    notes = snareRoll(0, ctx.beats, 0.15);
+  } else if (stage === "swells") {
+    notes = [];
+    const opens = !ctx.firstBar && ctx.barInSection % 4 === 0;
+    if (opens) notes.push({ pitch: DRUM.crash, start: 0, dur: ctx.beats, vel: 0.25 + ctx.energy * 0.2 });
+    if (ctx.phraseEnd && !ctx.lastBar) {
+      const from = Math.max(0, ctx.beats - 2);
+      for (let t = from; t < ctx.beats - 1e-6; t += 0.25) notes.push({ pitch: DRUM.ride, start: t, dur: 0.25, vel: 0.05 + ((t - from) / (ctx.beats - from)) * 0.3 });
+    }
+    return scale(notes, ctx);
+  } else {
+    notes = parseDrumGrid(cutToMeter(POSTROCK_GRIDS[stage], ctx.beats), ctx.beats).notes;
+    if (ctx.sectionStart && !ctx.firstBar && stage !== "toms") {
+      notes = notes.filter((n) => !(n.start === 0 && (n.pitch === DRUM.ride || n.pitch === DRUM.crash)));
+      notes.push({ pitch: DRUM.crash, start: 0, dur: 1, vel: 0.9, art: "accent" });
+    }
+    const wantsFill = !ctx.lastBar && (ctx.sectionEnd ? ctx.rng.chance(0.85) : ctx.phraseEnd && ctx.rng.chance(ctx.style.fills * (0.5 + ctx.energy)));
+    if (wantsFill) {
+      const len = ctx.sectionEnd && ctx.energy > 0.6 ? 2 : 1;
+      notes = notes.filter((n) => n.start < ctx.beats - len);
+      notes.push(...pickFill(ctx, len));
+    }
+  }
+  return scale(notes, ctx);
+}
+
 export function groove(ctx: BarCtx): NoteEvent[] {
   if (ctx.style.id === "ambient") return scale(ambientKit(ctx), ctx);
+  if (ctx.style.id === "postrock") return postrockKit(ctx);
+  if (ctx.args.includes("build")) return scale(snareBuild(ctx.beats), ctx);
   const which = ctx.args.includes("light") || ctx.texture === "sparse" || ctx.texture === "breakdown"
     ? "light"
     : ctx.args.includes("peak") || ctx.texture === "peak"

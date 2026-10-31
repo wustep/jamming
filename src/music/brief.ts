@@ -91,6 +91,7 @@ const ARTIST_WORDS: Record<PresetId, string[]> = {
   debussy: ["debussy", "clair de lune", "impressionist", "impressionism", "paris", "parisian"],
   glass: ["philip glass", "glassworks"],
   zimmer: ["hans zimmer", "zimmer", "interstellar", "inception", "film score", "cinematic", "epic", "movie", "soundtrack", "trailer", "blockbuster"],
+  eits: ["explosions in the sky", "explosions", "friday night lights", "your hand in mine", "first breath after coma", "the earth is not a cold dead place"],
   fox: ["elijah fox"],
   evans: ["bill evans", "evans", "waltz for debby"],
   monk: ["thelonious monk", "thelonious", "monk", "monkish"],
@@ -116,6 +117,7 @@ const STYLE_WORDS: Record<StyleId, string[]> = {
   minimal: ["minimal", "minimalist", "minimalism", "phasing", "steve reich", "reich", "ostinato", "arpeggios", "video game", "8 bit", "chiptune", "arcade", "electronic", "electronica"],
   baroque: ["baroque", "counterpoint", "harpsichord", "vivaldi", "handel", "renaissance", "medieval", "telemann", "scarlatti"],
   ambient: ["ambient", "dreamy", "drone", "meditative", "meditation", "ethereal", "sleep", "sleepy", "calm", "spa", "floating", "romantic", "peaceful", "tranquil", "serene", "yoga", "zen", "study", "studying", "focus", "snow", "snowy", "winter", "outer space", "starry"],
+  postrock: ["post rock", "postrock", "mogwai", "sigur ros", "godspeed", "this will destroy you", "shoegaze", "slow build", "slow burn", "crescendo", "crescendos", "swelling", "soaring", "delay pedal", "delayed guitar", "guitar wash", "wall of sound"],
 };
 
 /** A loose word that only counts when nothing more specific names a style. */
@@ -531,6 +533,8 @@ function dedupeKeepOrder(list: InstrumentId[]): InstrumentId[] {
 }
 
 const QUIET_STYLES: StyleId[] = ["ambient", "baroque", "minimal"];
+/** Styles that want a big room when they're asked for by name (post-rock rings into a hall). */
+const HALL_STYLES: StyleId[] = [...QUIET_STYLES, "postrock"];
 
 /**
  * Round out a band from the instruments named: melodic voices lead, then a chord instrument, a
@@ -816,7 +820,7 @@ export function resolveBrief(brief: Brief, cur: { settings: TroopSettings; membe
     leaderId: members.find((m) => m.instrument !== "drums")?.id ?? members[0]?.id ?? "",
     soloists,
   };
-  const room = brief.room ?? preset?.sounds.room ?? (QUIET_STYLES.includes(style) && brief.style ? "hall" : cur.sounds.room);
+  const room = brief.room ?? preset?.sounds.room ?? (HALL_STYLES.includes(style) && brief.style ? "hall" : cur.sounds.room);
   return { settings, members, sounds: { ...(preset ? preset.sounds : {}), room } };
 }
 

@@ -13,7 +13,7 @@ import type { ChordChange, Frame, Member, Role, Section, TroopSettings } from ".
 export const FREE_LENGTHS = [8, 16, 24, 32, 48, 64];
 
 /** Styles whose bands count off into a rhythm-section intro before the head. */
-const INTRO_STYLES = new Set<string>(["swing", "bossa", "neworleans", "pop", "funk"]);
+const INTRO_STYLES = new Set<string>(["swing", "bossa", "neworleans", "pop", "funk", "postrock"]);
 /** Styles that end a standard with a tag (the turnaround played again before the last chord). */
 const TAG_STYLES = new Set<string>(["swing", "neworleans"]);
 const SHARP_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -86,6 +86,7 @@ function tonicChord(settings: TroopSettings): string {
   if (style === "bossa") return minor ? `${t}m7` : `${t}maj7`;
   if (style === "funk") return minor ? `${t}m7` : `${t}7`;
   if (style === "ambient") return minor ? `${t}m9` : `${t}maj7`;
+  if (style === "postrock") return minor ? `${t}madd9` : `${t}add9`;
   // a baroque piece in minor ends on the major tonic (a Picardy third)
   if (style === "baroque") return t;
   return minor ? `${t}m` : t;
@@ -242,10 +243,18 @@ export function buildFrame(input: TroopSettings, members: Member[]): Frame {
     }
     // cadence: the dominant into the tonic at the very end (keeping the bar's own first chord),
     // in the style's own color: a suspended V floats an ambient piece home, a plain triad ends a
-    // pop song or a minimalist piece, everyone else leans on the V7
+    // pop song or a minimalist piece, post-rock comes home from IV (the bVI in minor), everyone
+    // else leans on the V7
     if (total >= 4) {
       const first = barTexts[total - 2].split(/\s+/)[0];
-      const plainV = settings.style === "ambient" ? romanToChord("Vsus", settings.key) : settings.style === "minimal" || settings.style === "pop" ? romanToChord("V", { ...settings.key, mode: "major" }) : null;
+      const plainV =
+        settings.style === "ambient"
+          ? romanToChord("Vsus", settings.key)
+          : settings.style === "postrock"
+            ? romanToChord(settings.key.mode === "minor" ? "VIadd9" : "IVadd9", settings.key)
+            : settings.style === "minimal" || settings.style === "pop"
+              ? romanToChord("V", { ...settings.key, mode: "major" })
+              : null;
       const v7 = plainV ?? dominantOf(settings);
       barTexts[total - 2] = first === v7 ? v7 : `${first} ${v7}`;
     }
@@ -368,11 +377,12 @@ export function buildFrame(input: TroopSettings, members: Member[]): Frame {
   // before the head comes in.
   if (intro) {
     const introBars = std ? barTexts.slice(std.bars.length - intro, std.bars.length) : tuneTail.slice(-intro);
-    // the last intro bar leads into the head's first chord with its dominant
+    // the last intro bar leads into the head's first chord with its dominant (post-rock just
+    // rings its own chords: a V7 there is a jazz turnaround)
     const target = parseChord(barTexts[0].split(/\s+/)[0]);
     const lastBar = introBars[intro - 1].split(/\s+/);
     const lead = parseChord(lastBar[lastBar.length - 1]);
-    if (mod(lead.root - target.root, 12) !== 7 || (lead.quality !== "dom" && lead.quality !== "maj")) {
+    if (settings.style !== "postrock" && (mod(lead.root - target.root, 12) !== 7 || (lead.quality !== "dom" && lead.quality !== "maj"))) {
       const v7 = `${(flats ? FLAT_NAMES : SHARP_NAMES)[mod(target.root + 7, 12)]}7`;
       introBars[intro - 1] = lastBar[0] === v7 ? v7 : `${lastBar[0]} ${v7}`;
     }

@@ -43,7 +43,7 @@ export interface BowPlan {
 }
 
 /** Vibrato depth (cents) at full width, by style: barely there in baroque, wide in a ballad. */
-const VIB_CENTS: Record<StyleId, number> = { baroque: 7, minimal: 9, funk: 8, swing: 13, neworleans: 14, bossa: 12, pop: 13, ambient: 15 };
+const VIB_CENTS: Record<StyleId, number> = { baroque: 7, minimal: 9, funk: 8, swing: 13, neworleans: 14, bossa: 12, pop: 13, ambient: 15, postrock: 11 };
 /** Styles that slide between notes (portamento) now and then. */
 const SLIDES: Partial<Record<StyleId, number>> = { swing: 0.35, neworleans: 0.4, bossa: 0.35, pop: 0.4, ambient: 0.5 };
 

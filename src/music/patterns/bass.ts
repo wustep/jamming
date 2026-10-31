@@ -43,12 +43,35 @@ function approach(ctx: BarCtx, from: number, target: number, nextScale: number[]
   return p;
 }
 
+/**
+ * The chord tone a walking line heads for on beat 3 of a bar on one chord: its 3rd, 5th or the
+ * root an octave away, a 3rd to a 5th from where beat 1 was, in the way the line is going.
+ */
+function walkTarget(ctx: BarCtx, c: Chord, from: number, dir: 1 | -1, lo: number, hi: number): number {
+  const tones = chordPcs(c);
+  let best = from + dir * 4;
+  let cost = Infinity;
+  for (let p = Math.max(lo, from - 9); p <= Math.min(hi, from + 9); p++) {
+    if (!tones.includes(mod(p, 12)) || p === from) continue;
+    const iv = (p - from) * dir;
+    // ahead of the line by a 3rd to a 5th is the walk; behind it, or a leap, is a lurch
+    const k = Math.abs(Math.abs(p - from) - 4) + (iv < 0 ? 3 : 0) + (Math.abs(p - from) > 7 ? 4 : 0) + ctx.rng.next() * 1.5;
+    if (k < cost) {
+      cost = k;
+      best = p;
+    }
+  }
+  return best;
+}
+
 /** Swing walking bass: chord tone on 1, scale/chord motion, approach note into the next chord. */
 export function walk(ctx: BarCtx): NoteEvent[] {
   const out: NoteEvent[] = [];
   const [lo, hi] = range(ctx);
   let prev = ctx.mem.lastPitch ?? lo + 10;
   const vel = velFor(ctx, 0.78);
+  // a bar on one chord walks root, passing note, chord tone, approach: beat 3 is planned from beat 1
+  let onThree: number | null = null;
   for (let b = 0; b < ctx.beats; b++) {
     const c = chordAt(ctx, b);
     const changeHere = ctx.chords.some((x) => Math.abs(x.beat - b) < 1e-6);
@@ -56,7 +79,18 @@ export function walk(ctx: BarCtx): NoteEvent[] {
       b === ctx.beats - 1 || ctx.chords.some((x) => Math.abs(x.beat - (b + 1)) < 1e-6);
     let p: number;
     const hm = harmAt(ctx, b);
-    if (changeHere) {
+    const plansThree = ctx.beats === 4 && b === 1 && !changeHere && !lastBeatBeforeChange && chordAt(ctx, 2) === c;
+    if (b === 2 && onThree !== null) {
+      p = onThree;
+    } else if (plansThree) {
+      const dir = (prev > (lo + hi) / 2 + 5 ? -1 : prev < lo + 5 ? 1 : ctx.mem.direction) as 1 | -1;
+      onThree = fold(walkTarget(ctx, c, prev, dir, lo, hi), lo, hi);
+      const gap = onThree - prev;
+      // a step through the scale toward it; a whole step apart, the chromatic note between
+      p = Math.abs(gap) === 2 ? prev + Math.sign(gap) : scaleStep(prev, (Math.sign(gap) || dir) as 1 | -1, hm.scale);
+      if (p === onThree || p === prev) p = prev + (Math.sign(gap) || dir);
+      ctx.mem.direction = (Math.sign(gap) || dir) as 1 | -1;
+    } else if (changeHere) {
       p = root(ctx, c, prev);
       if (b === 0 && !ctx.firstBar && ctx.prev.symbol === c.symbol && ctx.rng.chance(0.35)) {
         // same chord as last bar: start on 3rd or 5th instead
@@ -279,8 +313,36 @@ function pedalPc(tonic: string, c: Chord): number {
   return rubs ? c.bass : t;
 }
 
+/** Past this energy a post-rock bassist stops holding the pedal and drives it in 8ths. */
+export const PEDAL_DRIVE = 0.7;
+/** Past this one (but under the drive) the pedal is struck on 1 and 3. */
+const PEDAL_HALVES = 0.45;
+
+/**
+ * Post-rock pedal: the tonic under the moving chords (the chord's own bass where it would grind),
+ * held a whole bar while the band is quiet, struck on 1 and 3 as it builds, and driven in 8ths
+ * at the crest, the beat louder than the "and".
+ */
+function postrockPedal(ctx: BarCtx): NoteEvent[] {
+  const [lo, hi] = range(ctx);
+  const vel = velFor(ctx, 0.7);
+  const step = ctx.energy >= PEDAL_DRIVE ? 0.5 : ctx.energy >= PEDAL_HALVES ? 2 : ctx.beats;
+  const out: NoteEvent[] = [];
+  let p = ctx.mem.lastPitch ?? lo + 7;
+  for (const s of chordSpans(ctx)) {
+    p = fold(nearestPc(pedalPc(ctx.key.tonic, s.chord), Math.min(p, lo + 10)), lo, hi);
+    for (let t = s.start; t < s.end - 1e-6; t += step) {
+      const dur = Math.min(step, s.end - t);
+      out.push({ pitch: p, start: t, dur: step < 1 ? dur * 0.9 : dur, vel: vel * (t === 0 ? 1.05 : Math.abs(t - Math.round(t)) < 1e-6 ? 1 : 0.84) });
+    }
+  }
+  ctx.mem.lastPitch = p;
+  return out;
+}
+
 /** Pedal / drone: tonic (or root) held, optionally pulsing for minimalism. */
 export function pedal(ctx: BarCtx): NoteEvent[] {
+  if (ctx.style.id === "postrock") return postrockPedal(ctx);
   const [lo, hi] = range(ctx);
   const vel = velFor(ctx, 0.65);
   const pulse = ctx.style.id === "minimal";
@@ -300,13 +362,19 @@ export function pedal(ctx: BarCtx): NoteEvent[] {
     }
     return out;
   }
-  // ambient: tie across the bar, re-strike on chord changes
-  return chordSpans(ctx).map((s) => ({
-    pitch: fold(nearestPc(s.chord.bass, p), lo, hi),
-    start: s.start,
-    dur: s.end - s.start,
-    vel,
-  }));
+  // ambient: one low note per chord, and a chord that holds over the barline isn't struck again:
+  // the note rings on through the next bar (two bars at most), the way a held drone does (a
+  // cellist changes bow there instead: one stroke can't last two slow bars)
+  const out: NoteEvent[] = [];
+  const still = ctx.mem.padHeldUntil > ctx.start + 1e-6;
+  ctx.mem.padHeldUntil = -1;
+  for (const s of chordSpans(ctx)) {
+    if (s.start === 0 && still && s.chord.symbol === ctx.prev.symbol) continue;
+    const holds = !ctx.inst.bowed && s.end >= ctx.beats - 1e-6 && !ctx.lastBar && !still && ctx.next.symbol === s.chord.symbol;
+    out.push({ pitch: fold(nearestPc(s.chord.bass, p), lo, hi), start: s.start, dur: s.end - s.start + (holds ? ctx.beats : 0), vel });
+    if (holds) ctx.mem.padHeldUntil = ctx.start + ctx.beats * 2;
+  }
+  return out;
 }
 
 /**

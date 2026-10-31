@@ -3,6 +3,8 @@ import { feelOf, playLine } from "./playing";
 import { colorLine } from "./patterns/signatures";
 import { DYNAMIC_ENERGY, newMemory, type BarCtx, type PlayerMemory } from "./context";
 import { realizeDirective } from "./directives";
+import { WASH_CREST } from "./patterns/comp";
+import { tremolo, trill } from "./patterns/lines";
 import { styleDynamic } from "./ending";
 import { ensemble } from "./ensemble";
 import { sectionAt } from "./form";
@@ -10,7 +12,7 @@ import { buildHarmony, type Harmony } from "./harmony";
 import { DRUM, INSTRUMENTS } from "./instruments";
 import { makeRng } from "./rng";
 import { STYLES } from "./styles";
-import { keyScale, parseChord } from "./theory";
+import { keyScale, mod, parseChord, pcOf } from "./theory";
 import type { BarPlan, Frame, Member, Motif, NoteEvent, Role } from "./types";
 
 export interface RealizeIssue {
@@ -377,6 +379,44 @@ export function realize(o: RealizeOptions): RealizeResult {
       bar,
       parts[id].filter((n) => Math.floor(n.start / beats + 1e-9) === bar).map((n) => ({ ...n, start: n.start - bar * beats })),
     );
+  }
+  // a post-rock guitar carrying the tune at the crest tremolo-picks its long notes
+  if (frame.style === "postrock") {
+    for (const m of members) {
+      if (m.instrument !== "guitar") continue;
+      parts[m.id] = parts[m.id].flatMap((n) => {
+        const bar = Math.floor(n.start / beats + 1e-9);
+        const bp = plan[bar];
+        const loud = DYNAMIC_ENERGY[styleDynamic(frame.style, bp?.dynamic ?? "mf", bar === frame.bars - 1)] >= WASH_CREST;
+        return barSet.has(bar) && loud && bar < frame.bars - 1 && isFeaturedRole(bp?.roles[m.id]) ? tremolo(n) : [n];
+      });
+    }
+  }
+  // baroque cadences are trilled: the featured line's last long note over the dominant, at the end
+  // of a section and before the final chord, shakes from the note above
+  if (frame.style === "baroque") {
+    const dominant = mod(pcOf(frame.key.tonic) + 7, 12);
+    const H = harmonyOf(frame, plan);
+    for (const m of members) {
+      if (m.instrument === "drums") continue;
+      for (const bar of bars) {
+        const bp = plan[bar];
+        const sec = sectionAt(frame, bar);
+        const cadence = bar === frame.bars - 2 || (bar === sec.start + sec.length - 1 && bar < frame.bars - 1);
+        if (!cadence || !isFeaturedRole(bp?.roles[m.id])) continue;
+        // (a tune's written melody stays as written)
+        const mine = parts[m.id].filter((n) => Math.floor(n.start / beats + 1e-9) === bar && n.dur >= 0.9 && !n.written);
+        const target = mine.filter((n) => {
+          const c = H.at(n.start + 1e-6).chord;
+          return c.root === dominant && (c.quality === "dom" || c.quality === "maj");
+        }).at(-1);
+        if (!target) continue;
+        const h = H.at(target.start + 1e-6);
+        let upper = target.pitch + 1;
+        while (!h.scale.includes(mod(upper, 12)) && upper < target.pitch + 3) upper++;
+        parts[m.id] = parts[m.id].flatMap((n) => (n === target ? trill(n, upper) : [n]));
+      }
+    }
   }
   // hold the last chord a little longer than written (a fermata) so endings breathe; a roll that
   // runs to the bar line runs on to the cut-off with it

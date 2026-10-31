@@ -128,7 +128,8 @@ describe("local engine", () => {
       }
       // the leader actually plays and the bass/drums keep time
       expect(score.parts[score.frame.leaderId].length).toBeGreaterThan(4);
-      expect(score.parts.frog.length).toBeGreaterThan(10);
+      // (an ambient bass holds a chord that holds, two bars to a note)
+      expect(score.parts.frog.length).toBeGreaterThan(style === "ambient" ? 6 : 10);
       if (style !== "baroque") expect(score.parts.owl.length).toBeGreaterThan(10);
       expect(issues.filter((i) => i.detail.startsWith("engine error"))).toEqual([]);
     });

@@ -350,4 +350,39 @@ export function endNote(ctx: BarCtx): NoteEvent[] {
   return [{ pitch: p, start: 0, dur: ctx.beats, vel: velFor(ctx, 0.75), art: "legato" }];
 }
 
+/**
+ * Tremolo picking: a held note struck again in 16ths for as long as it lasts, the beats a little
+ * louder (how a post-rock guitar plays the tune at the crest). Short notes are left alone.
+ */
+export function tremolo(n: NoteEvent): NoteEvent[] {
+  if (n.dur < 0.75 - 1e-6) return [n];
+  const out: NoteEvent[] = [];
+  for (let t = 0; t < n.dur - 1e-6; t += 0.25) {
+    const at = n.start + t;
+    const onBeat = Math.abs(at - Math.round(at)) < 1e-6;
+    out.push({ ...n, start: at, dur: Math.min(0.25, n.dur - t), vel: n.vel * (t === 0 ? 1 : onBeat ? 0.92 : 0.8), art: t === 0 ? n.art : undefined });
+  }
+  return out;
+}
+
+/**
+ * A cadential trill: the note above and the note itself in 16ths, starting from above as baroque
+ * players did and ending on the note (held through the last half beat of a long one). Notes
+ * under a beat are left alone.
+ */
+export function trill(n: NoteEvent, upper: number): NoteEvent[] {
+  if (n.dur < 0.9 || upper <= n.pitch) return [n];
+  const tail = n.dur >= 1.5 ? 0.5 : 0;
+  // an even number of strokes, so the shake lands on the note itself
+  const strokes = Math.max(2, Math.floor((n.dur - tail + 0.05) / 0.25 / 2) * 2);
+  const out: NoteEvent[] = [];
+  for (let k = 0; k < strokes; k++) {
+    const t = n.start + k * 0.25;
+    const last = k === strokes - 1 && !tail;
+    out.push({ ...n, pitch: k % 2 === 0 ? upper : n.pitch, start: t, dur: last ? n.start + n.dur - t : 0.25, vel: n.vel * (k === 0 ? 1 : 0.86), art: undefined });
+  }
+  if (tail) out.push({ ...n, start: n.start + strokes * 0.25, dur: n.dur - strokes * 0.25, vel: n.vel * 0.92 });
+  return out;
+}
+
 export { realizeMotifBar };

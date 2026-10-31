@@ -4,7 +4,10 @@
 // the words always match the music.
 
 import { sectionAt } from "./form";
+import { DYNAMIC_ENERGY } from "./context";
 import { INSTRUMENTS } from "./instruments";
+import { PEDAL_DRIVE } from "./patterns/bass";
+import { postrockStage, type PostrockStage } from "./patterns/drums";
 import { feelOf } from "./playing";
 import type { Role, Score, Section, StyleId } from "./types";
 
@@ -43,7 +46,18 @@ const GROOVES: Record<StyleId, Technique> = {
   minimal: t("pulse", "steady pulse", "Shaker 16ths that never change: the grid the patterns turn over."),
   baroque: t("timpani", "low drum on 1 and 3", "A low drum marking the strong beats, the way timpani do in an orchestra."),
   ambient: t("swells", "cymbal swells", "Soft mallets roll on a cymbal so it swells up into the next chord: colour and air, not time."),
+  postrock: t("swells", "cymbal swells", "Mallets rolled on a cymbal, swelling into the next phrase: no beat yet."),
 };
+/** A post-rock drummer climbs with the band: what they're playing at each stage of the build. */
+const POSTROCK_DRUMS: Record<PostrockStage, Technique> = {
+  swells: GROOVES.postrock,
+  toms: t("tom-build", "tom build", "Floor tom and kick, a pulse rather than a beat: the band is starting to climb."),
+  halftime: t("half-time", "half-time", "Ride 8ths and the snare on 3: the beat arrives, held back."),
+  drive: t("drive", "driving beat", "Ride 8ths and a backbeat, the kick pushing: the band in full flight."),
+  crest: t("crest", "the crest", "Crashes on every 8th and the kick on every beat: the top of the climb."),
+  roll: t("snare-roll", "snare roll", "A snare roll swelling from a whisper into the crest."),
+};
+const SNARE_BUILD = t("snare-build", "snare build", "The snare in 8ths, then 16ths, louder and louder: the drummer lifting the band into the last chorus.");
 /** A swing drummer keeps the head on the closed hi-hat and moves to the ride for the solos. */
 const HAT_TIME = t("hat-time", "hi-hat time", "Swung time on the closed hi-hat, tighter and quieter than the ride the drummer saves for the solos.");
 
@@ -63,6 +77,8 @@ const BASS: Record<string, Technique> = {
   pump: t("pump", "pumping 8ths", "Steady 8th notes on the root, driving the song forward."),
 };
 
+const PEDAL_8THS = t("pedal-8ths", "driving pedal", "The tonic struck again and again in 8ths under the moving chords: the engine of the crest.");
+
 const ARTIST_BASS: Record<string, Technique> = {
   sowhat: t("sowhat-bass", "the riff", "The bass states the riff; the piano answers it with two chords."),
   tumbao: t("tumbao", "tumbao", "The Cuban bass pattern: it pushes ahead on the “and” of 2 and on 4, and skips the one."),
@@ -81,6 +97,7 @@ const COMP: Record<StyleId, Technique> = {
   minimal: t("arp", "arpeggio pattern", "One broken-chord pattern on repeat while the harmony shifts slowly under it."),
   baroque: t("prelude", "broken chords", "A broken-chord figure repeated bar after bar, like a Bach prelude."),
   ambient: t("pad", "pad", "Long, soft chords that hold the harmony like a cloud."),
+  postrock: t("wash", "delay wash", "Open chords picked a string at a time through a delay, so the notes blur into a shimmering wash."),
 };
 
 const CHORDAL: Record<string, Technique> = {
@@ -90,6 +107,7 @@ const CHORDAL: Record<string, Technique> = {
   prelude: COMP.baroque,
   continuo: t("continuo", "continuo", "Chords filled in over the bass line, the way a harpsichord accompanies."),
   pad: COMP.ambient,
+  wash: COMP.postrock,
   shimmer: t("shimmer", "shimmer", "High, soft repeated notes that make the chord glow."),
   hits: t("hits", "hits", "Short accented chords together with the drums."),
   pizz: t("pizz", "pizzicato", "Plucked strings: short, dry chords under the music."),
@@ -132,6 +150,7 @@ const MOTIF: Record<string, Technique> = {
   down: t("sequence", "sequence", "The motif's shape again, starting lower."),
   seq: t("sequence", "sequence", "The motif repeated a step lower each time."),
   frag: t("fragment", "fragment", "Just the first few notes of the motif, worked over."),
+  add: t("additive", "additive process", "The motif built up a note at a time: its first notes on repeat, one more each time round."),
   aug: t("augment", "augmentation", "The motif stretched out to twice as slow."),
   dim: t("diminish", "diminution", "The motif at double speed."),
   displace: t("displace", "displacement", "The same notes, shifted off the beat."),
@@ -204,7 +223,7 @@ function parse(d: string): { name: string; args: string[] } {
 }
 
 /** Comping that falls through to the style's own: what a directive name means for a chordal player. */
-const COMP_NAMES = new Set(["comp", "pulse", "pump", "stride", "arp", "prelude", "continuo", "pad", "shimmer", "bossa", "funk", "groove"]);
+const COMP_NAMES = new Set(["comp", "pulse", "pump", "stride", "arp", "prelude", "continuo", "pad", "shimmer", "wash", "bossa", "funk", "groove"]);
 const BASS_NAMES = new Set(["walk", "two", "bossa", "funk", "baroque", "pedal", "pump"]);
 
 /** What a role means when the plan holds written notes (a model's bar) rather than a directive. */
@@ -279,8 +298,10 @@ export function techniqueAt(score: Score, id: string, bar: number): Technique {
     if (name === "fill") return t("drum-fill", "fill", "A short burst that kicks the band into the next phrase.");
     if (name === "solo") return DRUM_SOLO;
     if (name === "hits") return CHORDAL.hits;
+    if (args.includes("build")) return SNARE_BUILD;
     if (sig?.drums && ARTIST_DRUMS[sig.drums]) return ARTIST_DRUMS[sig.drums];
     if (style === "swing" && (sec.kind === "intro" || sec.kind === "head") && !args.includes("peak")) return HAT_TIME;
+    if (style === "postrock" && (name === "groove" || !name)) return POSTROCK_DRUMS[postrockStage(DYNAMIC_ENERGY[bp.dynamic], bp.texture, args)];
     return name === "groove" || !name ? GROOVES[style] : BY_ROLE.groove;
   }
 
@@ -291,6 +312,7 @@ export function techniqueAt(score: Score, id: string, bar: number): Technique {
       if (own && (sig.bass !== "sowhat" || (arranged && frame.meter.beats === 4))) return own;
     }
     if (name === "pizz") return CHORDAL.pizz;
+    if (name === "pedal" && style === "postrock" && DYNAMIC_ENERGY[bp.dynamic] >= PEDAL_DRIVE) return PEDAL_8THS;
     return BASS[name] ?? BY_ROLE.bass;
   }
 

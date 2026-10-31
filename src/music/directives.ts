@@ -20,16 +20,16 @@ export const DIRECTIVE_HELP = `Each bar of each player's part is ONE of:
 - explicit notes: "E4/8 G4/8 Bb4/4 r/4 [C4 E4 G4]/4" (pitch/duration; 1 2 4 8 16; "." dotted; "t" triplet; "r" rest; [..] chord; "~" tie; ">" accent; "'" staccato). Durations must add up to the bar: 4 = 1 beat, 8 = ½, 16 = ¼, 2 = 2. One bar per string, never two bars' worth. Busy 16ths: commas between beats, each group one beat.
 - drum grid (drums only): "rd:x...x.x.x...x.x. ph:....x.......x... sd:..g.......X..... bd:x.......x......." lanes bd sd hh oh ph rd cr t1 t2 ft rim sh tamb cb; x hit, X accent, g ghost, . rest; 16 steps = 16ths in 4/4 (12 in 3/4).
 - a directive the band's engine realizes in style:
-  @motif [up N|down N|seq N|invert|retro|aug|dim|frag N|displace 0.5|ornament|rhythm] [bar2]  — the shared motif or a transform of it (up/down/seq count scale steps: 7 = an octave; "bar2" = 2nd bar of a 2-bar statement)
+  @motif [up N|down N|seq N|invert|retro|aug|dim|frag N|add N|displace 0.5|ornament|rhythm] [bar2]  — the shared motif or a transform of it (up/down/seq count scale steps: 7 = an octave; "add N" = its first N notes on repeat, the additive process; "bar2" = 2nd bar of a 2-bar statement)
   @head N  — play again exactly what the leader played in bar N of the chart (how a tune comes back: repeated A sections, the out head)
   @tune N  — play bar N of the standard's written melody, as written (the tune itself; only on standards that have one)
   @line [dense|sparse|run|long]  — improvise a line over the changes
   @answer  — open a solo by answering the previous soloist's last phrase (its rhythm, your register), then carry on
   @walk @two @bossa @funk @baroque @pedal @pump  — bass patterns (@pump: pop root 8ths)
-  @comp [sparse|busy] @pulse [sparse|busy] @stride @arp @prelude @continuo @pad @shimmer @hits  — chordal patterns (@pulse: pop block triads)
+  @comp [sparse|busy] @pulse [sparse|busy] @stride @arp @prelude @continuo @pad @shimmer @wash [sparse|busy] @hits  — chordal patterns (@pulse: pop block triads; @wash: post-rock open chords picked through a delay, tremolo at the crest)
   @pizz [sparse|busy] @arco  — bowed strings: plucked double-stop comping / sustained bowed tones
   @guide @harmony @canon @riff @counter @fill  — supporting lines (guide tones, 3rds under the lead, imitation, backing riff)
-  @groove [light|peak] @solo @fill  — drums
+  @groove [light|peak|build] @solo @fill  — drums (build: a whole bar of snare into the next section)
   @end  — final chord / last note
   @rest  — tacet`;
 
@@ -101,7 +101,7 @@ function rehearse(ctx: BarCtx, notes: NoteEvent[], issues: string[]): NoteEvent[
 
 /** The directives an artist's bass figure or comping figure stands in for. */
 const BASS_PATTERNS = new Set(["walk", "two", "bossa", "funk", "baroque", "pedal", "pump"]);
-const COMP_PATTERNS = new Set(["comp", "pulse", "pump", "stride", "arp", "prelude", "continuo", "pad", "shimmer", "bossa", "funk", "groove"]);
+const COMP_PATTERNS = new Set(["comp", "pulse", "pump", "stride", "arp", "prelude", "continuo", "pad", "shimmer", "wash", "bossa", "funk", "groove"]);
 
 /** Bowed strings pluck these patterns. */
 const PLUCKED = new Set(["walk", "two", "bossa", "funk", "pizz"]);
@@ -186,7 +186,7 @@ function realizeRaw(ctx: BarCtx, text: string): DirectiveResult {
   }
 
   // the string machine holds the harmony whatever the comping figure would have been
-  if (ctx.inst.id === "pad" && ["comp", "stride", "arp", "prelude", "continuo", "shimmer", "pizz", "arco", "bossa", "funk", "riff"].includes(name)) return done(comp.pad(c));
+  if (ctx.inst.id === "pad" && ["comp", "stride", "arp", "prelude", "continuo", "shimmer", "wash", "pizz", "arco", "bossa", "funk", "riff"].includes(name)) return done(comp.pad(c));
 
   // an artist's own figures, where the style's bass line or comping would have been
   const sig = ctx.feel.sig;
@@ -319,6 +319,9 @@ function realizeRaw(ctx: BarCtx, text: string): DirectiveResult {
       return done(lines.melodicPad(c));
     case "shimmer":
       return done(fn === "chordal" ? comp.shimmer(c) : lines.melodicPad(c));
+    case "wash":
+      if (fn === "bass") return done(bass.pedal(c));
+      return done(fn === "chordal" ? comp.wash(c) : ctx.inst.id === "cello" ? lines.celloPad(c) : lines.melodicPad(c));
     case "hits":
       if (fn === "chordal") return done(comp.hits(c));
       return done(lines.guide(c).slice(0, 1).map((n) => ({ ...n, dur: 0.35, art: "accent" as const })));
