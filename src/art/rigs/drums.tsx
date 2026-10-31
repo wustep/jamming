@@ -293,6 +293,8 @@ export const drums: Rig = {
       c.bag.set("stick" + arm, "y2", tip.y);
       c.bag.set("tip" + arm, "cx", tip.x);
       c.bag.set("tip" + arm, "cy", tip.y);
+      // soft mallets have round felt heads, where a stick has a small bead
+      c.bag.set("tip" + arm, "r", s.mallets ? 5 : 2.4);
       // the elbow follows the stick round to a new drum at the arm's own pace; the fist turns with
       // the stick (it's gripped, not stuck on at a fixed angle)
       const elbow = { x: damp(m, "ex" + arm, target.elbow.x, f.dt, 0.12), y: damp(m, "ey" + arm, target.elbow.y, f.dt, 0.12) };

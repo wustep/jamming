@@ -11,8 +11,8 @@ import {
   type SmplrPreset,
   type Storage,
 } from "smplr";
-import type { InstrumentId } from "@/music/types";
-import { DRUM, INSTRUMENTS } from "@/music/instruments";
+import type { InstrumentId, NoteEvent } from "@/music/types";
+import { DRUM, INSTRUMENTS, isCymbal } from "@/music/instruments";
 import { BowedVoice, loadBowedSamples, setBowed } from "./bowed";
 import { CountingStorage } from "./storage";
 
@@ -455,8 +455,10 @@ function layers(peaks: number[], file: (layer: number, rr: number) => string, rr
 }
 
 const HAT = `${IDIO}/Hi-Hat Cymbal`;
-const RIDE = `${IDIO}/Suspended Cymbal 2/susCymb2_hit`;
-const CRASH = `${IDIO}/Suspended Cymbal 1/susCymb1_hit`;
+const RIDE_DIR = `${IDIO}/Suspended Cymbal 2/susCymb2`;
+const CRASH_DIR = `${IDIO}/Suspended Cymbal 1/susCymb1`;
+const RIDE = `${RIDE_DIR}_hit`;
+const CRASH = `${CRASH_DIR}_hit`;
 const HIGH_TOM = (i: number, k: number) => `${MEMB}/Tom 1/Stick/TomH_HitS_v${i + 2}_rr${k}_Mid`;
 const LOW_TOM = (i: number, k: number) => `${MEMB}/Tom 2/Stick/TomL_HitS_v${i + 2}_rr${k}_Mid`;
 
@@ -486,9 +488,79 @@ export const ACOUSTIC_KIT: KitPiece[] = [
   { keys: [64], layers: layers([-58, -30.2, -24.8], (i) => `${MEMB}/Conga/Tumba_HitN_v${i + 1}_rr1_Sum`, 1) },
 ];
 
-export function acousticKitPreset(): SmplrPreset {
+// ─── Soft mallets ────────────────────────────────────────────────────────────
+// A drummer playing colour rather than time (an ambient one) puts the sticks down for soft
+// mallets: a cymbal blooms instead of pinging, a tom gives a round thud, and a cymbal roll swells
+// up into the chord it lands on. VCSL recorded both suspended cymbals and both toms with mallets,
+// and mallet rolls on the cymbals that crescendo and then ring away. These sit on kit keys above
+// General MIDI's (no part writes them; the engine picks them), and load only for a chart that
+// plays them (kitKeys).
+
+/** The kit key a soft mallet plays for a General MIDI cymbal or tom. */
+export const MALLET_KEY: Readonly<Record<number, number>> = { 49: 100, 57: 100, 51: 101, 59: 101, 53: 101, 41: 102, 43: 103, 45: 104, 47: 105, 48: 106, 50: 107 };
+
+/**
+ * Cymbal swells: a mallet roll from nothing up to a peak `peak` seconds in (measured, smoothed
+ * over 100 ms), then the cymbal ringing away. `rms` is the level at the peak (dB), which each is
+ * trimmed from so all four peak at the same level. Rolls of any length land on one of them.
+ */
+export const SWELLS: readonly { key: number; peak: number; rms: number; file: string }[] = [
+  { key: 110, peak: 1.24, rms: -17.7, file: `${CRASH_DIR}_cresc_1.5s` },
+  { key: 111, peak: 2.26, rms: -20.2, file: `${RIDE_DIR}_cresc_2.5s2` },
+  { key: 112, peak: 3.73, rms: -18.3, file: `${RIDE_DIR}_cresc_4s` },
+  { key: 113, peak: 6.52, rms: -18.9, file: `${RIDE_DIR}_cresc_7s` },
+];
+/** How long a swell rings on after its peak (s), for counting voices. */
+export const SWELL_RING = 6;
+const SWELL_LEVEL = -14;
+
+const LOW_TOM_MALLET = layers([-25.8, -13.3, -5], (i, k) => `${MEMB}/Tom 2/Mallet/TomL_HitM_v${i + 2}_rr${k}_Mid`);
+const HIGH_TOM_MALLET = layers([-21.7, -13.5, -5.2], (i, k) => `${MEMB}/Tom 1/Mallet/TomH_HitM_v${i + 2}_rr${k}_Mid`);
+
+const MALLET_KIT: KitPiece[] = [
+  { keys: [100], release: 1.5, layers: layers([-35.2, -22.4, -13.4], (i) => `${CRASH}_${["pp1", "mp1", "f1"][i]}`, 1) },
+  { keys: [101], release: 1.5, layers: layers([-42.4, -29.6, -22.4], (i) => `${RIDE}_${["pp1", "mp1", "mf1"][i]}`, 1) },
+  // each tom tuned as the stick kit tunes it (its pitch sits as far from its key as there)
+  ...ACOUSTIC_KIT.filter((p) => p.layers[0].file.includes("/Tom ")).flatMap((p) =>
+    p.keys.map((gm) => ({ keys: [MALLET_KEY[gm]], pitch: MALLET_KEY[gm] - gm + (p.pitch ?? gm), layers: p.layers[0].file.includes("TomL") ? LOW_TOM_MALLET : HIGH_TOM_MALLET })),
+  ),
+  ...SWELLS.map((s) => ({ keys: [s.key], release: 1.5, layers: [{ file: s.file, trim: Math.round((SWELL_LEVEL - s.rms) * 10) / 10 }] })),
+];
+
+/**
+ * The swell a roll of `span` seconds plays (of those `has` loaded), and how far into the roll it
+ * starts: the longest one that peaks by the roll's end, so it lands on the beat the roll leads to
+ * (a roll shorter than any starts the shortest at once, and it peaks a little late).
+ */
+export function swellFor(span: number, has: (key: number) => boolean = () => true): { key: number; peak: number; lead: number } | null {
+  const ready = SWELLS.filter((s) => has(s.key));
+  if (!ready.length) return null;
+  const fits = ready.filter((s) => s.peak <= span + 0.02);
+  const s = fits.length ? fits[fits.length - 1] : ready[0];
+  return { key: s.key, peak: s.peak, lead: Math.max(0, span - s.peak) };
+}
+
+/**
+ * The kit keys a drum part needs beyond General MIDI's: the mallet keys for its cymbals and toms
+ * when it's played with mallets, and the swells its cymbal rolls fit. With the beat's length (s),
+ * just those swells, with room for the time to stretch (rubato, a ritardando into the last bar);
+ * without it, all of them.
+ */
+export function kitKeys(notes: Pick<NoteEvent, "pitch" | "art" | "dur">[], mallets: boolean, secPerBeat?: number): number[] {
+  const out = new Set<number>();
+  for (const n of notes) {
+    if (n.art === "roll" && isCymbal(n.pitch)) {
+      if (!secPerBeat) for (const s of SWELLS) out.add(s.key);
+      else for (const stretch of [0.9, 1.4]) out.add(swellFor(n.dur * secPerBeat * stretch)!.key);
+    } else if (mallets && MALLET_KEY[n.pitch] !== undefined) out.add(MALLET_KEY[n.pitch]);
+  }
+  return [...out];
+}
+
+export function acousticKitPreset(extra: number[] = []): SmplrPreset {
   const groups: SmplrPreset["groups"] = [];
-  for (const piece of ACOUSTIC_KIT) {
+  const want = new Set(extra);
+  for (const piece of [...ACOUSTIC_KIT, ...MALLET_KIT.filter((p) => p.keys.some((k) => want.has(k)))]) {
     const seq = piece.layers.some((l) => l.rr !== undefined);
     for (const key of piece.keys) {
       groups.push({
@@ -515,11 +587,32 @@ export function acousticKitPreset(): SmplrPreset {
   };
 }
 
+const EXTRA_FROM = 100;
+const kitExtras = new WeakMap<Smplr, Set<number>>();
+/** The kit's own record of the sample files that wouldn't load. */
+const kitFailed = new WeakMap<Smplr, Set<string>>();
+const EXTRA_FILES = new Map(MALLET_KIT.flatMap((p) => p.keys.map((k) => [k, p.layers.map((l) => encodeURI(l.file))] as const)));
+
+/**
+ * Whether this kit has a key above General MIDI's (a mallet or a swell) loaded: asked for, and
+ * none of its samples failed (a key with a missing sample would play silence, not sticks).
+ */
+export function kitHas(inst: Smplr, key: number): boolean {
+  return !!kitExtras.get(inst)?.has(key) && !kitKeyFailed(key, kitFailed.get(inst));
+}
+
+/** Whether any of a mallet or swell key's samples is among the URLs that failed to load. */
+export function kitKeyFailed(key: number, failedUrls: ReadonlySet<string> | undefined): boolean {
+  if (!failedUrls?.size) return false;
+  return EXTRA_FILES.get(key)?.some((f) => [...failedUrls].some((u) => u.includes(`/${f}.`))) ?? false;
+}
+
 const acousticKit: PackSpec = {
   pack: "vcsl:acoustic-kit",
   create(p) {
-    return Sampler(p.ctx, {
-      preset: acousticKitPreset(),
+    const extra = (p.notes ?? []).filter((n) => n >= EXTRA_FROM);
+    const inst = Sampler(p.ctx, {
+      preset: acousticKitPreset(extra),
       destination: p.destination,
       scheduler: p.scheduler,
       storage: p.storage,
@@ -527,6 +620,20 @@ const acousticKit: PackSpec = {
       pan: p.pan,
       onLoadProgress: ({ loaded, total }) => p.onProgress(loaded, total),
     });
+    kitExtras.set(inst, new Set(extra));
+    kitFailed.set(inst, p.storage.failedUrls);
+    return inst;
+  },
+  // a chart that brings out the mallets loads them into the kit already playing (the engine runs
+  // one extend at a time per instrument)
+  async extend(inst, notes) {
+    const have = kitExtras.get(inst) ?? new Set<number>();
+    const want = notes.filter((n) => n >= EXTRA_FROM && !have.has(n));
+    const sampler = inst as Smplr & { reload?: (p: SmplrPreset) => Promise<void> };
+    if (!want.length || typeof sampler.reload !== "function") return;
+    const all = [...have, ...want];
+    await sampler.reload(acousticKitPreset(all));
+    kitExtras.set(inst, new Set(all));
   },
 };
 
@@ -606,7 +713,9 @@ export const DEFAULT_VOLUME: Record<InstrumentId, number> = {
   violin: 114,
   cello: 85,
   guitar: 104,
-  vibes: 59,
+  // matched again once its notes let go over 0.5 s instead of ringing out for 15 s (RELEASE_SEC),
+  // which had left it 3 LU under the grand
+  vibes: 70,
   organ: 100,
   pad: 96,
 };

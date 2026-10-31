@@ -37,6 +37,17 @@ describe("expandPart", () => {
     expect(first.ticks).toBe(TPB);
   });
 
+  it("writes a cymbal roll through every note it's tied across (an accent only on the first)", () => {
+    // the big band ending: crash on one, then the ride rolled from beat 2 under the held chord
+    const roll: NoteEvent = { pitch: 51, start: 1, dur: 5.4, vel: 0.6, art: "roll" };
+    const [bar] = expandPart([{ pitch: 49, start: 0, dur: 1, vel: 0.9, art: "accent" }, roll], { bars: 1, beatsPerBar: 4, percussion: true });
+    const rolled = bar.tokens.filter((t) => t.kind === "note" && t.start >= TPB);
+    expect(rolled.length).toBeGreaterThan(1);
+    for (const t of rolled) expect(t.art).toBe("roll");
+    const tied = expandPart([n(60, 0, 3, 0.8)].map((x) => ({ ...x, art: "accent" as const })), { bars: 1, beatsPerBar: 4 })[0].tokens.filter((t) => t.kind === "note");
+    expect(tied.map((t) => t.art)).toEqual(["accent", ...tied.slice(1).map(() => undefined)]);
+  });
+
   it("does not hide beat 3 in 4/4", () => {
     // Half note starting on beat 2 → quarter tied to quarter.
     const [bar] = expandPart([n(60, 1, 2)], { bars: 1, beatsPerBar: 4 });

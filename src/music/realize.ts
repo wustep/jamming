@@ -378,12 +378,16 @@ export function realize(o: RealizeOptions): RealizeResult {
       parts[id].filter((n) => Math.floor(n.start / beats + 1e-9) === bar).map((n) => ({ ...n, start: n.start - bar * beats })),
     );
   }
-  // hold the last chord a little longer than written (a fermata) so endings breathe
+  // hold the last chord a little longer than written (a fermata) so endings breathe; a roll that
+  // runs to the bar line runs on to the cut-off with it
   const lastStart = (frame.bars - 1) * beats;
   if (bars.includes(frame.bars - 1)) {
+    const release = lastStart + beats * 1.6;
     for (const m of members) {
       for (const n of parts[m.id]) {
-        if (n.start >= lastStart - 1e-6 && n.dur >= beats * 0.9) n.dur = beats * 1.6;
+        if (n.start < lastStart - 1e-6) continue;
+        if (n.dur >= beats * 0.9) n.dur = beats * 1.6;
+        else if (n.art === "roll" && n.start + n.dur >= lastStart + beats - 1e-6) n.dur = release - n.start;
       }
     }
   }

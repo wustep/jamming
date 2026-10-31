@@ -70,15 +70,7 @@ export const GROOVES: Record<string, Record<number, Grid>> = {
     },
     3: { base: "lt:x..........." },
   },
-  ambient: {
-    4: {
-      base: "rd:g.g.g.g.g.g.g.g.",
-      // a soft mallet swell into the next bar rather than silence
-      light: "rd:........g.g.g.g.",
-      peak: "rd:g.g.g.g.x.x.x.x. ft:x...............",
-    },
-    3: { base: "rd:g.g.g.g.g.g." },
-  },
+  // (ambient drums don't keep a groove: see ambientKit)
 };
 
 export const FUNK_KICKS = ["bd:x.....x.x.x.....", "bd:x..x..x...x...x.", "bd:x.x....x..x.x..."].map((s) => s.slice(0, 19));
@@ -265,23 +257,37 @@ function pickFill(ctx: BarCtx, len: number): NoteEvent[] {
   return FILL_SHAPES[name](ctx, start, len, step).filter((n) => n.start >= start - 1e-6 && n.start < ctx.beats - 1e-6);
 }
 
+/** A cymbal roll in the bar before swelled up to this bar's downbeat. */
+const rolledIn = (ctx: BarCtx) => Math.abs(ctx.mem.rollInto - ctx.start) < 1e-6;
+
 /**
- * Ambient drums don't keep time, they breathe: a soft cymbal bloom where the harmony moves (or
- * every other bar), a mallet roll swelling into it from the bar before, and now and then a
- * low mallet tom. Never the same tick every bar.
+ * Ambient drums don't keep time, they breathe, and with soft mallets (the style's): where the
+ * harmony moves (or every other bar) the cymbal blooms, often out of a roll that swells up to it
+ * from the bar before, and now and then a low tom thuds. Never the same tick every bar.
  */
 function ambientKit(ctx: BarCtx): NoteEvent[] {
   const out: NoteEvent[] = [];
   const changes = ctx.chords[0].chord.symbol !== ctx.prev.symbol;
-  const bloomHere = ctx.firstBar ? false : changes || ctx.barInSection % 2 === 0;
-  const bloomNext = !ctx.lastBar && (ctx.next.symbol !== ctx.chords[ctx.chords.length - 1].chord.symbol || ctx.barInSection % 2 === 1);
-  if (bloomHere) out.push({ pitch: DRUM.crash, start: 0, dur: ctx.beats, vel: 0.22 + ctx.energy * 0.12 });
-  if (bloomNext && ctx.rng.chance(ctx.texture === "sparse" ? 0.5 : 0.8)) {
-    // a mallet roll on the ride, swelling over the last beats into the bloom
-    const from = ctx.beats - (ctx.energy > 0.5 ? 2 : 1);
-    for (let t = from; t < ctx.beats - 1e-6; t += 0.25) out.push({ pitch: DRUM.ride, start: t, dur: 0.25, vel: 0.06 + ((t - from) / (ctx.beats - from)) * 0.24 });
+  const bloomHere = !ctx.firstBar && (changes || ctx.barInSection % 2 === 0);
+  // the bloom; a roll that swelled up to it ends in a softer stroke on it, the way a percussionist
+  // ends a roll (and the bar keeps its cymbal when the roll isn't heard: played from here, say)
+  if (bloomHere) out.push({ pitch: DRUM.crash, start: 0, dur: ctx.beats, vel: (0.6 + ctx.energy * 0.2) * (rolledIn(ctx) ? 0.5 : 1) });
+  // the next bar blooms if its chord is new, it starts a section, or it's an even bar
+  const bloomNext = !ctx.lastBar && (ctx.next.symbol !== ctx.chords[ctx.chords.length - 1].chord.symbol || ctx.sectionEnd || ctx.barInSection % 2 === 1);
+  // a cymbal struck on this downbeat (or swelled to) rings a while before the next roll
+  const breathe = bloomHere || rolledIn(ctx);
+  ctx.mem.rollInto = -1;
+  let rollFrom = ctx.beats;
+  if (bloomNext && ctx.rng.chance(ctx.sectionEnd ? 0.85 : ctx.texture === "sparse" ? 0.45 : 0.6)) {
+    // the roll: two beats, or the whole bar into a new section (the swell peaks on the next one),
+    // but never straight on from a bloom
+    rollFrom = (ctx.sectionEnd || ctx.energy > 0.5) && !breathe ? 0 : Math.max(0, ctx.beats - 2);
+    out.push({ pitch: DRUM.crash, start: rollFrom, dur: ctx.beats - rollFrom, vel: 0.65 + ctx.energy * 0.2, art: "roll" });
+    ctx.mem.rollInto = ctx.start + ctx.beats;
   }
-  if (ctx.rng.chance(0.25)) out.push({ pitch: DRUM.floorTom, start: ctx.rng.pick([1, 1.5, 2].filter((x) => x < ctx.beats)), dur: 1, vel: 0.2 });
+  // a low tom under the cymbal, while the mallets aren't busy rolling
+  const tomAt = [1, 1.5, 2].filter((x) => x < rollFrom);
+  if (tomAt.length && ctx.rng.chance(0.25)) out.push({ pitch: DRUM.floorTom, start: ctx.rng.pick(tomAt), dur: 1, vel: 0.65 });
   return out;
 }
 
@@ -360,6 +366,9 @@ export function endDrums(ctx: BarCtx): NoteEvent[] {
         { pitch: DRUM.snare, start: 0, dur: 0.5, vel: v, art: "accent" },
       ];
     case "fade": {
+      // with mallets, the last chord gets the cymbal's bloom, left to ring away (softer when a roll
+      // has just swelled up to it)
+      if (ctx.style.mallets) return [{ pitch: DRUM.crash, start: 0, dur: ctx.beats, vel: v * (rolledIn(ctx) ? 0.5 : 1) }];
       // no crash: a soft cymbal touch on the chord, then a whisper of a roll as it dies away
       const out: NoteEvent[] = [
         { pitch: DRUM.ride, start: 0, dur: 1, vel: v * 0.45 },
@@ -371,15 +380,14 @@ export function endDrums(ctx: BarCtx): NoteEvent[] {
     case "cadence":
       // a single low drum under the final chord
       return [{ pitch: DRUM.lowTom, start: 0, dur: 0.5, vel: v }];
-    default: {
-      // a big ending: crash and kick, cymbal roll swelling under the held chord
-      const out: NoteEvent[] = [
+    default:
+      // a big ending: crash and kick on the chord, then a cymbal roll swelling under it, held with
+      // the chord (realize's fermata) so it peaks on the cut-off
+      return [
         { pitch: DRUM.crash, start: 0, dur: ctx.beats, vel: v, art: "accent" },
         { pitch: DRUM.kick, start: 0, dur: 0.5, vel: v },
+        { pitch: DRUM.ride, start: 1, dur: ctx.beats - 1, vel: v * 0.8, art: "roll" },
       ];
-      for (let t = 1; t < ctx.beats - 0.5; t += 0.25) out.push({ pitch: DRUM.ride, start: t, dur: 0.25, vel: 0.15 + (t / ctx.beats) * 0.3, art: "ghost" });
-      return out;
-    }
   }
 }
 

@@ -56,9 +56,12 @@ function makeNote(vf: VF, t: Token, staff: StaffSpec, model: SheetModel, clef: C
 
 /** Articulations go on the notehead side, after beaming has settled stem directions. */
 function addArticulations(vf: VF, notes: StaveNoteT[], tokens: Token[]) {
-  const { Articulation, Modifier } = vf;
+  const { Articulation, Modifier, Tremolo } = vf;
   tokens.forEach((t, k) => {
-    if (t.kind !== "note" || !t.art || t.tiedFrom) return;
+    if (t.kind !== "note" || !t.art) return;
+    // a roll is written as three slashes through each note it's tied across
+    if (t.art === "roll") return void notes[k].addModifier(new Tremolo(3), 0);
+    if (t.tiedFrom) return;
     const code = t.art === "accent" ? "a>" : t.art === "staccato" ? "a." : null;
     if (!code) return;
     const n = notes[k];
